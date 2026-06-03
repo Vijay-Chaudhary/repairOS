@@ -36,6 +36,24 @@ from .serializers import (
 
 logger = logging.getLogger(__name__)
 
+
+class DevOTPView(APIView):
+    """DEV/E2E ONLY — returns the cached OTP for a phone number.
+    Only active when DEBUG=True. NEVER exposed in production."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        if not settings.DEBUG:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Not available in production.")
+        phone = request.query_params.get("phone", "")
+        otp_key = f"otp:{phone}"
+        cached = cache.get(otp_key)
+        if not cached:
+            return Response({"error": "No OTP found for this phone"}, status=404)
+        return Response({"otp": cached["otp"]})
+
 _REFRESH_COOKIE = "refresh_token"
 _COOKIE_PARAMS = {
     "httponly": True,

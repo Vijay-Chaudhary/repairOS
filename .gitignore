@@ -53,3 +53,5 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
+e2e_test.sqlite3
+create_test_users.py

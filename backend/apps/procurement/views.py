@@ -116,7 +116,33 @@ class SupplierLedgerView(APIView):
 
 class PurchaseOrderView(APIView):
     def get_permissions(self):
+        if self.request.method == "GET":
+            return [require_permission("erp.purchase_orders.create")()]
         return [require_permission("erp.purchase_orders.create")()]
+
+    def get(self, request):
+        """List purchase orders for the user's shops."""
+        from django.db.models import Q
+        token = getattr(request, "auth", None)
+        shop_ids = token.get("shop_ids", []) if token else []
+        base = PurchaseOrder.objects.select_related("supplier", "shop").order_by("-created_at")
+        qs = base.filter(shop_id__in=shop_ids) if shop_ids else base
+
+        if s := request.query_params.get("status"):
+            qs = qs.filter(status=s)
+        if supplier_id := request.query_params.get("supplier_id"):
+            qs = qs.filter(supplier_id=supplier_id)
+        if search := request.query_params.get("search", "").strip():
+            qs = qs.filter(
+                Q(po_number__icontains=search) | Q(supplier__name__icontains=search)
+            )
+
+        paginator = RepairOSCursorPagination()
+        page = paginator.paginate_queryset(qs, request)
+        data = PurchaseOrderSerializer(page if page is not None else qs, many=True).data
+        if page is not None:
+            return paginator.get_paginated_response(data)
+        return Response(data)
 
     def post(self, request):
         from core.models import Shop
