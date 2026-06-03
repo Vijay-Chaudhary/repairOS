@@ -89,6 +89,12 @@ class Command(BaseCommand):
             "USER": db_user,
             "PASSWORD": db_password,
             "CONN_MAX_AGE": 0,
+            "CONN_HEALTH_CHECKS": False,
+            "OPTIONS": {},
+            "TIME_ZONE": None,
+            "ATOMIC_REQUESTS": False,
+            "AUTOCOMMIT": True,
+            "TEST": {},
         }
         call_command("migrate", database=alias, verbosity=1)
         self.stdout.write(f"  ✓ Migrations applied to '{db_name}'.")
@@ -122,7 +128,7 @@ class Command(BaseCommand):
             cursor.execute(f"SELECT 1 FROM pg_database WHERE datname = %s", [db_name])
             if not cursor.fetchone():
                 cursor.execute(
-                    f'CREATE DATABASE "{db_name}" ENCODING \'UTF8\' LC_COLLATE \'en_US.UTF-8\' LC_CTYPE \'en_US.UTF-8\' TEMPLATE template0'
+                    f'CREATE DATABASE "{db_name}" ENCODING \'UTF8\' LC_COLLATE \'en_US.utf8\' LC_CTYPE \'en_US.utf8\' TEMPLATE template0'
                 )
 
             cursor.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", [db_user])

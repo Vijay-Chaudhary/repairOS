@@ -95,7 +95,7 @@ class Payment(BaseModel):
         settings.AUTH_USER_MODEL,
         null=True, blank=True,
         on_delete=models.SET_NULL,
-        related_name="recorded_payments",
+        related_name="billing_payments",
     )
     notes = models.TextField(blank=True, default="")
 
