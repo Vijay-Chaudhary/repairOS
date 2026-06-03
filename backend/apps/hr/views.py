@@ -37,8 +37,20 @@ class EmployeeListCreateView(APIView):
         return [IsAuthenticated(), require_permission("hr.employees.view")()]
 
     def get(self, request: Request) -> Response:
-        employees = Employee.objects.filter(deleted_at__isnull=True).select_related("shop")
-        return Response(EmployeeSerializer(employees, many=True).data)
+        token = getattr(request, "auth", None)
+        shop_ids = token.get("shop_ids", []) if token else []
+        base = Employee.objects.filter(deleted_at__isnull=True).select_related("shop")
+        qs = base.filter(shop_id__in=shop_ids) if shop_ids else base
+        qs = qs.order_by("full_name")
+
+        if q := request.query_params.get("q"):
+            from django.db.models import Q as DQ
+            qs = qs.filter(DQ(full_name__icontains=q) | DQ(employee_code__icontains=q))
+
+        if et := request.query_params.get("employment_type"):
+            qs = qs.filter(employment_type=et)
+
+        return Response(EmployeeSerializer(qs, many=True).data)
 
     def post(self, request: Request) -> Response:
         serializer = CreateEmployeeSerializer(data=request.data)
@@ -51,7 +63,6 @@ class EmployeeListCreateView(APIView):
         except Shop.DoesNotExist:
             return Response({"detail": "Shop not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Unique employee_code check
         if Employee.objects.filter(employee_code=data["employee_code"]).exists():
             return Response(
                 {"detail": "Employee with this code already exists."},
@@ -112,6 +123,20 @@ class BulkAttendanceView(APIView):
 class LeaveRequestListCreateView(APIView):
     permission_classes = [IsAuthenticated, require_permission("hr.leaves.manage")]
 
+    def get(self, request: Request) -> Response:
+        """List leave requests, optionally filtered by status or employee."""
+        token = getattr(request, "auth", None)
+        shop_ids = token.get("shop_ids", []) if token else []
+        base = LeaveRequest.objects.select_related("employee").order_by("-from_date")
+        qs = base.filter(employee__shop_id__in=shop_ids) if shop_ids else base
+
+        if s := request.query_params.get("status"):
+            qs = qs.filter(status=s)
+        if emp_id := request.query_params.get("employee_id"):
+            qs = qs.filter(employee_id=emp_id)
+
+        return Response(LeaveRequestSerializer(qs, many=True).data)
+
     def post(self, request: Request) -> Response:
         serializer = CreateLeaveRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -151,6 +176,30 @@ class LeaveRequestDetailView(APIView):
         return Response(LeaveRequestSerializer(leave).data)
 
 
+class SalarySlipListView(APIView):
+    """List salary slips filtered by month + year."""
+
+    def get_permissions(self):
+        return [IsAuthenticated(), require_permission("hr.salary.view")()]
+
+    def get(self, request: Request) -> Response:
+        token = getattr(request, "auth", None)
+        shop_ids = token.get("shop_ids", []) if token else []
+        base = SalarySlip.objects.select_related("employee").order_by("-year", "-month", "employee__full_name")
+        qs = base.filter(employee__shop_id__in=shop_ids) if shop_ids else base
+
+        if month := request.query_params.get("month"):
+            qs = qs.filter(month=month)
+        if year := request.query_params.get("year"):
+            qs = qs.filter(year=year)
+        if emp_id := request.query_params.get("employee_id"):
+            qs = qs.filter(employee_id=emp_id)
+        if s := request.query_params.get("status"):
+            qs = qs.filter(status=s)
+
+        return Response(SalarySlipSerializer(qs, many=True).data)
+
+
 class GenerateSalarySlipsView(APIView):
     permission_classes = [IsAuthenticated, require_permission("hr.salary.generate")]
 
@@ -180,6 +229,13 @@ class SalarySlipDetailView(APIView):
         if self.request.method == "PATCH":
             return [IsAuthenticated(), require_permission("hr.salary.generate")()]
         return [IsAuthenticated(), require_permission("hr.salary.view")()]
+
+    def get(self, request: Request, slip_id) -> Response:
+        try:
+            slip = SalarySlip.objects.select_related("employee").get(id=slip_id)
+        except SalarySlip.DoesNotExist:
+            return Response({"detail": "Salary slip not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(SalarySlipSerializer(slip).data)
 
     def patch(self, request: Request, slip_id) -> Response:
         serializer = UpdateSlipStatusSerializer(data=request.data)
