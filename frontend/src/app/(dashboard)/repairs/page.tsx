@@ -7,6 +7,8 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { formatDate, formatCurrency, cn } from "@/lib/utils";
 import type { CursorPage } from "@/types/api";
+import { PermissionGate } from "@/components/ui/permission-gate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 interface RepairJob {
   id: string;
@@ -91,13 +93,15 @@ export default function RepairsPage() {
           <h1 className="text-xl font-semibold text-gray-900">Repairs</h1>
           <p className="text-sm text-gray-500">{data?.data?.length ?? 0} shown</p>
         </div>
-        <Link
-          href="/repairs/new"
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition min-h-[44px]"
-        >
-          <Plus className="w-4 h-4" />
-          New Job
-        </Link>
+        <PermissionGate perm={PERMISSIONS.REPAIR_JOBS_CREATE}>
+          <Link
+            href="/repairs/new"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition min-h-[44px]"
+          >
+            <Plus className="w-4 h-4" />
+            New Job
+          </Link>
+        </PermissionGate>
       </div>
 
       {/* Filters */}

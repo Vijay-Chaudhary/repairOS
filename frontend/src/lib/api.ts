@@ -1,10 +1,12 @@
 import axios, { AxiosError, type AxiosRequestConfig } from "axios";
 
-// In the browser we use the Next.js rewrite proxy (/api/*) so no CORS.
-// On the server (SSR) we hit the backend directly.
+// In production browser: empty string → Next.js rewrite proxy handles /api/*
+// In test (jsdom) or SSR: use NEXT_PUBLIC_API_URL so MSW / backend can be reached
 const BASE_URL =
-  typeof window === "undefined"
-    ? (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000")
+  process.env.NEXT_PUBLIC_API_URL
+    ? process.env.NEXT_PUBLIC_API_URL
+    : typeof window === "undefined"
+    ? "http://localhost:8000"
     : "";
 
 // Access token stored in memory (not localStorage — no XSS risk)

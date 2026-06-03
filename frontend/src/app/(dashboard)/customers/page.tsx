@@ -8,6 +8,8 @@ import { api } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 import type { Customer } from "@/types/crm";
 import type { CursorPage } from "@/types/api";
+import { PermissionGate } from "@/components/ui/permission-gate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 async function fetchCustomers(search: string, cursor: string): Promise<CursorPage<Customer>> {
   const params = new URLSearchParams();
@@ -55,13 +57,15 @@ export default function CustomersPage() {
           <h1 className="text-xl font-semibold text-gray-900">Customers</h1>
           <p className="text-sm text-gray-500">{data?.data?.length ?? 0} shown</p>
         </div>
-        <Link
-          href="/customers/new"
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition min-h-[44px]"
-        >
-          <Plus className="w-4 h-4" />
-          Add Customer
-        </Link>
+        <PermissionGate perm={PERMISSIONS.CRM_CUSTOMERS_CREATE}>
+          <Link
+            href="/customers/new"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition min-h-[44px]"
+          >
+            <Plus className="w-4 h-4" />
+            Add Customer
+          </Link>
+        </PermissionGate>
       </div>
 
       {/* Search */}

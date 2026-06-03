@@ -11,6 +11,9 @@ import { api } from "@/lib/api";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth.store";
 import type { Employee, LeaveRequest, SalarySlip, LeaveStatus, SlipStatus } from "@/types/hr";
+import { PermissionGate } from "@/components/ui/permission-gate";
+import { PERMISSIONS } from "@/lib/permissions";
+import { usePermission } from "@/hooks/use-permission";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -120,13 +123,15 @@ function EmployeesTab() {
             className="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
-        <Link
-          href="/hr/new"
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition min-h-[44px]"
-        >
-          <Plus className="w-4 h-4" />
-          Add
-        </Link>
+        <PermissionGate perm={PERMISSIONS.HR_EMPLOYEES_MANAGE}>
+          <Link
+            href="/hr/new"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition min-h-[44px]"
+          >
+            <Plus className="w-4 h-4" />
+            Add
+          </Link>
+        </PermissionGate>
       </div>
 
       {isLoading ? (
@@ -179,6 +184,7 @@ const STATUS_OPTIONS = [
 
 function AttendanceTab() {
   const qc = useQueryClient();
+  const canMark = usePermission(PERMISSIONS.HR_ATTENDANCE_MARK);
   const today = new Date().toISOString().split("T")[0];
   const [date, setDate] = useState(today);
   const [attendance, setAttendance] = useState<Record<string, string>>({});
@@ -262,7 +268,7 @@ function AttendanceTab() {
       </div>
 
       {/* Submit */}
-      {pending > 0 && (
+      {pending > 0 && canMark && (
         <div className="sticky bottom-4">
           <button
             onClick={() => bulkMutation.mutate()}

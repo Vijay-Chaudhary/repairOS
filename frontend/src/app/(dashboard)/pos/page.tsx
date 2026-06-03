@@ -25,7 +25,8 @@ interface ProductVariant {
 async function searchProducts(q: string): Promise<ProductVariant[]> {
   if (q.length < 2) return [];
   const res = await api.get(`/inventory/variants/?search=${encodeURIComponent(q)}&page_size=10`);
-  return res.data.data?.results ?? [];
+  // Cursor-paginated: renderer flattens to { data: [...], meta: {...} }
+  return Array.isArray(res.data.data) ? res.data.data : (res.data.data?.results ?? []);
 }
 
 // ── POS Page ───────────────────────────────────────────────────────────────

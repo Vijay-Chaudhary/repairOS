@@ -13,6 +13,8 @@ import { z } from "zod";
 import { api } from "@/lib/api";
 import { formatCurrency, formatDate, formatDateTime, cn } from "@/lib/utils";
 import type { RepairInvoiceDetail, InvoicePayment } from "@/types/billing";
+import { PermissionGate } from "@/components/ui/permission-gate";
+import { PERMISSIONS } from "@/lib/permissions";
 
 // ── Data fetcher ──────────────────────────────────────────────────────────────
 
@@ -157,13 +159,15 @@ export default function InvoiceDetailPage({ params }: { params: { id: string } }
             </a>
           )}
           {canPay && (
-            <button
-              onClick={prefillAmount}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition min-h-[44px]"
-            >
-              <CreditCard className="w-4 h-4" />
-              Record Payment
-            </button>
+            <PermissionGate perm={PERMISSIONS.BILLING_PAYMENTS_RECORD}>
+              <button
+                onClick={prefillAmount}
+                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition min-h-[44px]"
+              >
+                <CreditCard className="w-4 h-4" />
+                Record Payment
+              </button>
+            </PermissionGate>
           )}
           {invoice.status === "paid" && (
             <div className="flex items-center gap-2 px-4 py-2.5 bg-green-50 text-green-700 rounded-lg text-sm font-medium">

@@ -3,39 +3,60 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard,
-  Wrench,
-  Users,
-  ShoppingCart,
-  Package,
-  TruckIcon,
-  Receipt,
-  UserCheck,
-  BarChart2,
-  Shield,
-  LogOut,
-  Menu,
-  X,
+  LayoutDashboard, Wrench, Users, ShoppingCart,
+  Package, TruckIcon, Receipt, UserCheck,
+  BarChart2, Shield, LogOut, Menu, X,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth.store";
+import { useAnyPermission } from "@/hooks/use-permission";
+import { PERMISSIONS } from "@/lib/permissions";
 
-const navItems = [
-  { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { href: "/repairs", icon: Wrench, label: "Repairs" },
-  { href: "/customers", icon: Users, label: "Customers" },
-  { href: "/pos", icon: ShoppingCart, label: "POS" },
-  { href: "/inventory", icon: Package, label: "Inventory" },
-  { href: "/procurement", icon: TruckIcon, label: "Procurement" },
-  { href: "/billing", icon: Receipt, label: "Billing" },
-  { href: "/hr", icon: UserCheck, label: "HR" },
-  { href: "/amc", icon: Shield, label: "AMC" },
-  { href: "/reports", icon: BarChart2, label: "Reports" },
+interface NavItem {
+  href: string;
+  icon: React.ElementType;
+  label: string;
+  perms?: (keyof typeof PERMISSIONS)[];
+}
+
+const NAV: NavItem[] = [
+  { href: "/dashboard",   icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/repairs",     icon: Wrench,          label: "Repairs",      perms: ["REPAIR_JOBS_VIEW"] },
+  { href: "/customers",   icon: Users,           label: "Customers",    perms: ["CRM_CUSTOMERS_VIEW"] },
+  { href: "/pos",         icon: ShoppingCart,    label: "POS",          perms: ["POS_COUNTER_SALE", "POS_WHOLESALE_SALE"] },
+  { href: "/inventory",   icon: Package,         label: "Inventory",    perms: ["ERP_INVENTORY_VIEW"] },
+  { href: "/procurement", icon: TruckIcon,       label: "Procurement",  perms: ["ERP_PROCUREMENT_VIEW"] },
+  { href: "/billing",     icon: Receipt,         label: "Billing",      perms: ["BILLING_INVOICES_VIEW", "BILLING_SALES_VIEW"] },
+  { href: "/hr",          icon: UserCheck,       label: "HR",           perms: ["HR_EMPLOYEES_VIEW"] },
+  { href: "/amc",         icon: Shield,          label: "AMC",          perms: ["AMC_CONTRACTS_VIEW"] },
+  { href: "/reports",     icon: BarChart2,       label: "Reports",      perms: ["REPORTS_BILLING", "REPORTS_REPAIR", "REPORTS_ERP", "REPORTS_HR", "REPORTS_CRM", "REPORTS_AMC"] },
 ];
 
-export function Sidebar() {
+function NavLink({ item }: { item: NavItem }) {
   const pathname = usePathname();
+  const permKeys = (item.perms ?? []).map((k) => PERMISSIONS[k]);
+  const allowed = useAnyPermission(...(permKeys as Parameters<typeof useAnyPermission>));
+  if (item.perms && !allowed) return null;
+
+  const active = pathname === item.href || pathname.startsWith(item.href + "/");
+  return (
+    <Link
+      href={item.href}
+      className={cn(
+        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition min-h-[44px]",
+        active
+          ? "bg-blue-50 text-blue-700"
+          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+      )}
+    >
+      <item.icon className="w-4 h-4 flex-shrink-0" />
+      {item.label}
+    </Link>
+  );
+}
+
+export function Sidebar() {
   const { user, logout } = useAuthStore();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -52,10 +73,7 @@ export function Sidebar() {
 
       {/* Overlay */}
       {mobileOpen && (
-        <div
-          className="md:hidden fixed inset-0 bg-black/40 z-40"
-          onClick={() => setMobileOpen(false)}
-        />
+        <div className="md:hidden fixed inset-0 bg-black/40 z-40" onClick={() => setMobileOpen(false)} />
       )}
 
       {/* Sidebar panel */}
@@ -78,26 +96,8 @@ export function Sidebar() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-          {navItems.map(({ href, icon: Icon, label }) => {
-            const active = pathname === href || pathname.startsWith(href + "/");
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => setMobileOpen(false)}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition min-h-[44px]",
-                  active
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                )}
-              >
-                <Icon className="w-4 h-4 flex-shrink-0" />
-                {label}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5" onClick={() => setMobileOpen(false)}>
+          {NAV.map((item) => <NavLink key={item.href} item={item} />)}
         </nav>
 
         {/* User / Logout */}
