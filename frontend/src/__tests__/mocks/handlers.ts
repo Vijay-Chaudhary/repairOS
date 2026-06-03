@@ -35,7 +35,8 @@ export const handlers = [
           "hr.leaves.manage", "hr.salary.view", "hr.salary.generate",
           "reports.billing.view", "reports.repair.view", "reports.erp.view",
           "reports.hr.view", "reports.crm.view", "reports.amc.view",
-          "amc.contracts.view",
+          "amc.contracts.view", "amc.contracts.create", "amc.contracts.edit",
+          "amc.visits.schedule", "amc.visits.complete", "amc.renewals.manage",
         ],
         is_platform_admin: false,
       },
@@ -320,6 +321,109 @@ export const handlers = [
 
   http.patch(`${API}/hr/salary-slips/:id/`, () =>
     HttpResponse.json({ success: true, data: { id: "slip-1", status: "approved" } })
+  ),
+
+  // ── AMC ────────────────────────────────────────────────────────────────────
+
+  http.get(`${API}/amc/contracts/`, () =>
+    HttpResponse.json({
+      success: true,
+      data: [
+        {
+          id: "amc-1", contract_number: "AMC-2025-001", title: "Annual AC Service",
+          status: "active", customer_name: "Ravi Kumar",
+          start_date: "2025-01-01", end_date: "2025-12-31",
+          value: "12000.00", visits_per_year: 4,
+        },
+        {
+          id: "amc-2", contract_number: "AMC-2025-002", title: "Quarterly Appliance Check",
+          status: "pending_renewal", customer_name: "Priya Sharma",
+          start_date: "2024-06-01", end_date: "2025-05-31",
+          value: "8000.00", visits_per_year: 4,
+        },
+      ],
+      meta: { next_cursor: null, prev_cursor: null },
+    })
+  ),
+
+  http.get(`${API}/amc/contracts/:id/`, ({ params }) =>
+    HttpResponse.json({
+      success: true,
+      data: {
+        id: params.id, contract_number: "AMC-2025-001", title: "Annual AC Service",
+        status: "active", customer_name: "Ravi Kumar", customer_id: "cust-1",
+        shop_id: "shop-1", description: "Full maintenance of 3 AC units",
+        start_date: "2025-01-01", end_date: "2025-12-31",
+        value: "12000.00", payment_terms: "upfront",
+        visits_per_year: 4, visit_interval_days: 91,
+        auto_renew: true, renewal_reminder_days: 30,
+        location_address: "123 MG Road, Bangalore",
+        location_lat: null, location_lng: null,
+        assigned_technician: null, notes: "",
+        visits_count: 4, renewal_invoices: [],
+        created_at: "2025-01-01T10:00:00Z", updated_at: "2025-01-01T10:00:00Z",
+      },
+    })
+  ),
+
+  http.get(`${API}/amc/contracts/:id/visits/`, () =>
+    HttpResponse.json({
+      success: true,
+      data: [
+        {
+          id: "visit-1", visit_number: 1, scheduled_date: "2025-03-15",
+          actual_date: "2025-03-15", status: "completed",
+          technician: "emp-1", technician_name: "Suresh Kumar",
+          work_done: "Full service and filter cleaning", issues_found: "",
+          next_visit_date: "2025-06-15", customer_signature_url: "",
+          photos: [], job_id: null, created_at: "2025-01-01T10:00:00Z",
+        },
+        {
+          id: "visit-2", visit_number: 2, scheduled_date: "2025-06-15",
+          actual_date: null, status: "scheduled",
+          technician: null, technician_name: "",
+          work_done: "", issues_found: "", next_visit_date: null,
+          customer_signature_url: "", photos: [], job_id: null,
+          created_at: "2025-01-01T10:00:00Z",
+        },
+      ],
+      meta: { next_cursor: null, prev_cursor: null },
+    })
+  ),
+
+  http.post(`${API}/amc/contracts/`, () =>
+    HttpResponse.json(
+      { success: true, data: { id: "amc-new", contract_number: "AMC-2025-003" } },
+      { status: 201 }
+    )
+  ),
+
+  http.post(`${API}/amc/contracts/:id/renew/`, ({ params }) =>
+    HttpResponse.json({
+      success: true,
+      data: { id: params.id, status: "active", contract_number: "AMC-2025-001" },
+    })
+  ),
+
+  http.post(`${API}/amc/visits/:id/complete/`, ({ params }) =>
+    HttpResponse.json({
+      success: true,
+      data: {
+        id: params.id, visit_number: 2, scheduled_date: "2025-06-15",
+        actual_date: "2025-06-15", status: "completed",
+        work_done: "Full service", issues_found: "",
+      },
+    })
+  ),
+
+  http.post(`${API}/amc/visits/:id/reschedule/`, ({ params }) =>
+    HttpResponse.json({
+      success: true,
+      data: {
+        id: params.id, visit_number: 2, scheduled_date: "2025-06-20",
+        status: "rescheduled",
+      },
+    })
   ),
 
   // ── Reports ────────────────────────────────────────────────────────────────

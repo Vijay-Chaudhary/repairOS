@@ -17,15 +17,15 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 
 const LIMITED_USER = {
   ...MOCK_USER,
-  permissions: ["crm.customers.view"],
+  permissions: ["crm.customers.view"] as string[],
   is_platform_admin: false,
-} as const;
+};
 
 const ADMIN_USER = {
   ...MOCK_USER,
-  permissions: [],
+  permissions: [] as string[],
   is_platform_admin: true,
-} as const;
+};
 
 describe("usePermission hook", () => {
   it("returns true when user has permission", () => {

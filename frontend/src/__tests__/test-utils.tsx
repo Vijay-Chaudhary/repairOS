@@ -23,7 +23,8 @@ const MOCK_USER = {
     "hr.leaves.manage", "hr.salary.view", "hr.salary.generate",
     "reports.billing.view", "reports.repair.view", "reports.erp.view",
     "reports.hr.view", "reports.crm.view", "reports.amc.view",
-    "amc.contracts.view",
+    "amc.contracts.view", "amc.contracts.create", "amc.contracts.edit",
+    "amc.visits.schedule", "amc.visits.complete", "amc.renewals.manage",
   ],
   is_platform_admin: false,
 };
