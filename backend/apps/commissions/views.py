@@ -26,6 +26,11 @@ from .serializers import (
 
 logger = logging.getLogger(__name__)
 
+_PAYOUT_STATUS_TRANSITIONS = {
+    "draft":    "approved",
+    "approved": "paid",
+}
+
 
 class CommissionRulesView(APIView):
     permission_classes = [IsAuthenticated, require_permission("settings.commission_rules.manage")]
@@ -69,6 +74,15 @@ class TechnicianLedgerView(APIView):
 class CommissionPayoutView(APIView):
     permission_classes = [IsAuthenticated, require_permission("hr.salary.generate")]
 
+    def get(self, request: Request) -> Response:
+        from .models import CommissionPayout
+        qs = CommissionPayout.objects.select_related("technician").order_by("-period_end")
+        if tech_id := request.query_params.get("technician_id"):
+            qs = qs.filter(technician_id=tech_id)
+        if s := request.query_params.get("status"):
+            qs = qs.filter(status=s)
+        return Response(CommissionPayoutSerializer(qs, many=True).data)
+
     def post(self, request: Request) -> Response:
         serializer = CreatePayoutSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -87,3 +101,38 @@ class CommissionPayoutView(APIView):
             created_by=request.user,
         )
         return Response(CommissionPayoutSerializer(payout).data, status=status.HTTP_201_CREATED)
+
+
+class CommissionPayoutDetailView(APIView):
+    """PATCH to advance payout status: draft→approved→paid."""
+
+    permission_classes = [IsAuthenticated, require_permission("hr.salary.generate")]
+
+    def get(self, request: Request, payout_id) -> Response:
+        from .models import CommissionPayout
+        try:
+            payout = CommissionPayout.objects.select_related("technician").get(id=payout_id)
+        except CommissionPayout.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(CommissionPayoutSerializer(payout).data)
+
+    def patch(self, request: Request, payout_id) -> Response:
+        from .models import CommissionPayout
+        from django.utils import timezone as tz
+        try:
+            payout = CommissionPayout.objects.get(id=payout_id)
+        except CommissionPayout.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        next_status = _PAYOUT_STATUS_TRANSITIONS.get(payout.status)
+        if not next_status:
+            return Response(
+                {"detail": f"Payout is already '{payout.status}'; no further transitions."},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+        payout.status = next_status
+        if next_status == CommissionPayout.Status.PAID:
+            payout.paid_at = tz.now()
+            payout.paid_by = request.user
+        payout.save()
+        return Response(CommissionPayoutSerializer(payout).data)

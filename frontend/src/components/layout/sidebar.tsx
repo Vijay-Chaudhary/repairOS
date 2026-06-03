@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Wrench, Users, ShoppingCart,
   Package, TruckIcon, Receipt, UserCheck,
-  BarChart2, Shield, LogOut, Menu, X,
+  BarChart2, Shield, LogOut, Menu, X, DollarSign, Wallet, Building2,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -29,14 +29,21 @@ const NAV: NavItem[] = [
   { href: "/procurement", icon: TruckIcon,       label: "Procurement",  perms: ["ERP_PROCUREMENT_VIEW"] },
   { href: "/billing",     icon: Receipt,         label: "Billing",      perms: ["BILLING_INVOICES_VIEW", "BILLING_SALES_VIEW"] },
   { href: "/hr",          icon: UserCheck,       label: "HR",           perms: ["HR_EMPLOYEES_VIEW"] },
+  { href: "/commissions", icon: DollarSign,      label: "Commissions",  perms: ["HR_SALARY_VIEW"] },
+  { href: "/finance",     icon: Wallet,          label: "Finance",      perms: ["ERP_EXPENSES_MANAGE"] },
   { href: "/amc",         icon: Shield,          label: "AMC",          perms: ["AMC_CONTRACTS_VIEW"] },
   { href: "/reports",     icon: BarChart2,       label: "Reports",      perms: ["REPORTS_BILLING", "REPORTS_REPAIR", "REPORTS_ERP", "REPORTS_HR", "REPORTS_CRM", "REPORTS_AMC"] },
+  { href: "/platform",   icon: Building2,       label: "Platform Admin" }, // shown only to is_platform_admin
 ];
 
 function NavLink({ item }: { item: NavItem }) {
   const pathname = usePathname();
+  const user = useAuthStore((s) => s.user);
   const permKeys = (item.perms ?? []).map((k) => PERMISSIONS[k]);
   const allowed = useAnyPermission(...(permKeys as Parameters<typeof useAnyPermission>));
+
+  // Platform Admin link is only for platform admins
+  if (item.href === "/platform" && !user?.is_platform_admin) return null;
   if (item.perms && !allowed) return null;
 
   const active = pathname === item.href || pathname.startsWith(item.href + "/");

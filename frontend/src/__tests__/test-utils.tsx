@@ -25,6 +25,9 @@ const MOCK_USER = {
     "reports.hr.view", "reports.crm.view", "reports.amc.view",
     "amc.contracts.view", "amc.contracts.create", "amc.contracts.edit",
     "amc.visits.schedule", "amc.visits.complete", "amc.renewals.manage",
+    "hr.petty_cash.manage",
+    "erp.expenses.manage", "erp.assets.manage", "erp.budgets.manage",
+    "settings.commission_rules.manage",
   ],
   is_platform_admin: false,
 };

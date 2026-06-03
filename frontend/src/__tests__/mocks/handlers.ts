@@ -37,6 +37,9 @@ export const handlers = [
           "reports.hr.view", "reports.crm.view", "reports.amc.view",
           "amc.contracts.view", "amc.contracts.create", "amc.contracts.edit",
           "amc.visits.schedule", "amc.visits.complete", "amc.renewals.manage",
+          "hr.petty_cash.manage",
+          "erp.expenses.manage", "erp.assets.manage", "erp.budgets.manage",
+          "settings.commission_rules.manage",
         ],
         is_platform_admin: false,
       },
@@ -423,6 +426,204 @@ export const handlers = [
         id: params.id, visit_number: 2, scheduled_date: "2025-06-20",
         status: "rescheduled",
       },
+    })
+  ),
+
+  // ── Commissions ────────────────────────────────────────────────────────────
+
+  http.get(`${API}/commissions/rules/`, () =>
+    HttpResponse.json({
+      success: true,
+      data: [
+        { id: "rule-1", name: "Standard Rate", rate: "10.00", lead_tech_share: "60.00",
+          applies_to_job_type: null, effective_from: "2025-01-01", effective_to: null },
+        { id: "rule-2", name: "Smartphone Rate", rate: "12.00", lead_tech_share: "70.00",
+          applies_to_job_type: "Smartphone", effective_from: "2025-01-01", effective_to: "2025-12-31" },
+      ],
+    })
+  ),
+
+  http.post(`${API}/commissions/rules/`, () =>
+    HttpResponse.json(
+      { success: true, data: { id: "rule-new", name: "New Rule", rate: "8.00" } },
+      { status: 201 }
+    )
+  ),
+
+  http.get(`${API}/commissions/technician/:id/`, () =>
+    HttpResponse.json({
+      success: true,
+      data: {
+        technician_id: "emp-1",
+        total_unpaid: "1500.00",
+        commissions: [
+          { id: "comm-1", job_number: "JOB-001", sc_amount: "3500.00", rate: "10.00",
+            commission_amount: "350.00", is_lead: true, is_paid: false, payout_id: null },
+          { id: "comm-2", job_number: "JOB-002", sc_amount: "5000.00", rate: "10.00",
+            commission_amount: "500.00", is_lead: false, is_paid: true, payout_id: "pay-1" },
+        ],
+      },
+    })
+  ),
+
+  http.get(`${API}/commissions/payouts/`, () =>
+    HttpResponse.json({
+      success: true,
+      data: [
+        { id: "payout-1", technician: "emp-1", technician_name: "Suresh Kumar",
+          period_start: "2025-01-01", period_end: "2025-01-31",
+          total_commission: "1500.00", status: "draft", paid_at: null, pdf_url: "" },
+      ],
+    })
+  ),
+
+  http.post(`${API}/commissions/payouts/`, () =>
+    HttpResponse.json(
+      { success: true, data: { id: "payout-new", total_commission: "1500.00", status: "draft" } },
+      { status: 201 }
+    )
+  ),
+
+  http.patch(`${API}/commissions/payouts/:id/`, () =>
+    HttpResponse.json({ success: true, data: { id: "payout-1", status: "approved" } })
+  ),
+
+  // ── Finance ────────────────────────────────────────────────────────────────
+
+  // NOTE: literal path must come BEFORE the parametric :shopId handler
+  http.get(`${API}/finance/petty-cash/transactions/`, () =>
+    HttpResponse.json({
+      success: true,
+      data: [
+        { id: "txn-1", account: "acc-1", txn_type: "debit", amount: "200.00",
+          category: "Stationery", description: "Pens and paper", date: "2025-01-15", balance_after: "4800.00" },
+        { id: "txn-2", account: "acc-1", txn_type: "credit", amount: "2000.00",
+          category: "", description: "Cash top-up", date: "2025-01-10", balance_after: "5000.00" },
+      ],
+    })
+  ),
+
+  http.post(`${API}/finance/petty-cash/transactions/`, () =>
+    HttpResponse.json({ success: true, data: { id: "txn-new", balance_after: "4500.00" } }, { status: 201 })
+  ),
+
+  http.get(`${API}/finance/petty-cash/:shopId/`, () =>
+    HttpResponse.json({
+      success: true,
+      data: { id: "acc-1", shop: "shop-1", name: "Main Cash", current_balance: "5000.00", low_balance_threshold: "1000.00" },
+    })
+  ),
+
+  http.get(`${API}/finance/expenses/`, () =>
+    HttpResponse.json({
+      success: true,
+      data: [
+        { id: "exp-1", shop: "shop-1", budget_head: null, category: "Travel",
+          amount: "500.00", description: "Cab fare", date: "2025-01-20" },
+      ],
+    })
+  ),
+
+  http.post(`${API}/finance/expenses/`, () =>
+    HttpResponse.json({ success: true, data: { id: "exp-new", amount: "300.00" } }, { status: 201 })
+  ),
+
+  http.get(`${API}/finance/budget/`, () =>
+    HttpResponse.json({
+      success: true,
+      data: [
+        { id: "head-1", shop: "shop-1", name: "Operations", category: "fixed" },
+        { id: "head-2", shop: "shop-1", name: "Marketing", category: "variable" },
+      ],
+    })
+  ),
+
+  http.get(`${API}/finance/budget/allocations/`, () =>
+    HttpResponse.json({
+      success: true,
+      data: [
+        { id: "alloc-1", head: "head-1", month: 1, year: 2025,
+          budgeted_amount: "10000.00", actual_amount: "7500.00", variance: "2500.00" },
+      ],
+    })
+  ),
+
+  http.post(`${API}/finance/budget/allocations/`, () =>
+    HttpResponse.json({ success: true, data: { id: "alloc-new" } }, { status: 201 })
+  ),
+
+  http.get(`${API}/finance/assets/`, () =>
+    HttpResponse.json({
+      success: true,
+      data: [
+        { id: "asset-1", shop: "shop-1", name: "MacBook Pro", category: "Electronics",
+          asset_code: "ASSET-001", purchase_date: "2024-06-01", purchase_cost: "120000.00",
+          warranty_expiry: "2027-06-01", condition: "good", location_description: "Main Office",
+          notes: "", is_active: true },
+      ],
+    })
+  ),
+
+  http.post(`${API}/finance/assets/`, () =>
+    HttpResponse.json({ success: true, data: { id: "asset-new" } }, { status: 201 })
+  ),
+
+  http.patch(`${API}/finance/assets/:id/`, () =>
+    HttpResponse.json({ success: true, data: { id: "asset-1", condition: "fair" } })
+  ),
+
+  // ── Platform Admin ─────────────────────────────────────────────────────────
+
+  http.get(`${API}/platform/tenants/`, () =>
+    HttpResponse.json({
+      success: true,
+      data: [
+        { id: "tenant-1", name: "Tech Repairs Pvt Ltd", slug: "techrepairs",
+          status: "active", plan: "professional", owner_email: "owner@techrepairs.in",
+          owner_phone: "+919876543210", created_at: "2025-01-01T10:00:00Z" },
+        { id: "tenant-2", name: "QuickFix Solutions", slug: "quickfix",
+          status: "suspended", plan: "starter", owner_email: "admin@quickfix.in",
+          owner_phone: "+919999999999", created_at: "2025-02-15T10:00:00Z" },
+      ],
+    })
+  ),
+
+  http.get(`${API}/platform/tenants/:id/`, ({ params }) =>
+    HttpResponse.json({
+      success: true,
+      data: {
+        id: params.id, name: "Tech Repairs Pvt Ltd", slug: "techrepairs",
+        status: "active", plan: "professional",
+        owner_email: "owner@techrepairs.in", owner_phone: "+919876543210",
+        created_at: "2025-01-01T10:00:00Z", updated_at: "2025-01-15T10:00:00Z",
+        db_status: "active",
+        subscription: {
+          id: "sub-1", status: "active",
+          plan: { id: "plan-1", name: "Professional", max_shops: 3, max_users: 20, price_monthly_inr: "2999.00" },
+          current_period_start: "2025-01-01", current_period_end: "2025-12-31",
+        },
+      },
+    })
+  ),
+
+  http.post(`${API}/platform/tenants/:id/suspend/`, () =>
+    HttpResponse.json({ success: true, data: { status: "suspended" } })
+  ),
+
+  http.get(`${API}/platform/plans/`, () =>
+    HttpResponse.json({
+      success: true,
+      data: [
+        { id: "plan-1", name: "Starter", max_shops: 1, max_users: 5,
+          max_products: 200, max_jobs_per_month: 100, features: { whatsapp: false, reports: true },
+          price_monthly_inr: "999.00" },
+        { id: "plan-2", name: "Professional", max_shops: 3, max_users: 20,
+          max_products: 1000, max_jobs_per_month: 500, features: { whatsapp: true, reports: true },
+          price_monthly_inr: "2999.00" },
+        { id: "plan-3", name: "Enterprise", max_shops: 0, max_users: 0,
+          max_products: 0, max_jobs_per_month: 0, features: { whatsapp: true, reports: true, api: true },
+          price_monthly_inr: "9999.00" },
+      ],
     })
   ),
 

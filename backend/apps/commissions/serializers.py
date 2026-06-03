@@ -24,12 +24,18 @@ class TechnicianCommissionSerializer(serializers.ModelSerializer):
 
 
 class CommissionPayoutSerializer(serializers.ModelSerializer):
+    technician_name = serializers.SerializerMethodField()
+
     class Meta:
         model = CommissionPayout
         fields = [
-            "id", "technician", "period_start", "period_end",
+            "id", "technician", "technician_name",
+            "period_start", "period_end",
             "total_commission", "status", "paid_at", "pdf_url",
         ]
+
+    def get_technician_name(self, obj) -> str:
+        return getattr(obj.technician, "name", "") or ""
 
 
 class CreatePayoutSerializer(serializers.Serializer):
