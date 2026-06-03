@@ -14,6 +14,7 @@ urlpatterns = [
     path("api/v1/commissions/", include("commissions.urls")),
     path("api/v1/hr/", include("hr.urls")),
     path("api/v1/finance/", include("finance.urls")),
+    path("api/v1/reports/", include("reports.urls")),
     path("api/v1/health/", include("core.urls")),
 ]
 
