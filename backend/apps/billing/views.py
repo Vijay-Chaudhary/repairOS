@@ -6,6 +6,7 @@ All business logic delegated to services.py.
 
 import logging
 
+from django.db.models import Q
 from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -14,14 +15,16 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from authentication.permissions import require_permission
+from core.pagination import RepairOSCursorPagination
 
 from . import services
-from .models import RepairInvoice
+from .models import Payment, RepairInvoice
 from .serializers import (
     CreatePaymentSerializer,
     CreateRepairInvoiceSerializer,
     PaymentSerializer,
-    RepairInvoiceSerializer,
+    RepairInvoiceDetailSerializer,
+    RepairInvoiceListSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,6 +32,44 @@ logger = logging.getLogger(__name__)
 
 class RepairInvoiceView(APIView):
     permission_classes = [IsAuthenticated, require_permission("billing.repair_invoices.create")]
+
+    def get(self, request: Request) -> Response:
+        """List repair invoices for the authenticated user's shops."""
+        token = getattr(request, "auth", None)
+        shop_ids = token.get("shop_ids", []) if token else []
+        # Allow explicit shop_id override from query params
+        if qp_shop := request.query_params.get("shop_id"):
+            shop_ids = [qp_shop]
+
+        qs = (
+            RepairInvoice.objects.select_related("customer", "job", "shop")
+            .prefetch_related("payment_set")
+            .filter(shop_id__in=shop_ids)
+            .order_by("-created_at")
+        )
+
+        # Filters
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
+        customer_id = request.query_params.get("customer_id")
+        if customer_id:
+            qs = qs.filter(customer_id=customer_id)
+
+        search = request.query_params.get("search", "").strip()
+        if search:
+            qs = qs.filter(
+                Q(invoice_number__icontains=search)
+                | Q(customer__name__icontains=search)
+                | Q(customer__phone__icontains=search)
+                | Q(job__job_number__icontains=search)
+            )
+
+        paginator = RepairOSCursorPagination()
+        page = paginator.paginate_queryset(qs, request)
+        serializer = RepairInvoiceListSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
     def post(self, request: Request) -> Response:
         serializer = CreateRepairInvoiceSerializer(data=request.data)
@@ -48,7 +89,24 @@ class RepairInvoiceView(APIView):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response(RepairInvoiceSerializer(invoice).data, status=status.HTTP_201_CREATED)
+        return Response(
+            RepairInvoiceDetailSerializer(invoice).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class RepairInvoiceDetailView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("billing.repair_invoices.create")]
+
+    def get(self, request: Request, invoice_id: str) -> Response:
+        try:
+            invoice = RepairInvoice.objects.select_related(
+                "customer", "job", "shop"
+            ).prefetch_related("items", "payment_set").get(id=invoice_id)
+        except RepairInvoice.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(RepairInvoiceDetailSerializer(invoice).data)
 
 
 class PaymentView(APIView):

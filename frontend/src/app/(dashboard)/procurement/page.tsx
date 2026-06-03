@@ -6,6 +6,7 @@ import { Plus, Search, TruckIcon, Package } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { formatDate, cn } from "@/lib/utils";
+import type { CursorPage } from "@/types/api";
 
 interface PurchaseOrder {
   id: string;
@@ -95,11 +96,11 @@ export default function ProcurementPage() {
 function POList({ search }: { search: string }) {
   const { data, isLoading } = useQuery({
     queryKey: ["purchase-orders", search],
-    queryFn: async () => {
+    queryFn: async (): Promise<CursorPage<PurchaseOrder>> => {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
       const res = await api.get(`/procurement/purchase-orders/?${params}`);
-      return res.data.data as { count: number; results: PurchaseOrder[] };
+      return { data: res.data.data, meta: res.data.meta };
     },
   });
 
@@ -113,7 +114,7 @@ function POList({ search }: { search: string }) {
     );
   }
 
-  if (!data?.results?.length) {
+  if (!data?.data?.length) {
     return (
       <div className="text-center py-16 text-gray-500">
         <TruckIcon className="w-10 h-10 mx-auto mb-3 opacity-30" />
@@ -124,7 +125,7 @@ function POList({ search }: { search: string }) {
 
   return (
     <div className="space-y-2">
-      {data.results.map((po) => {
+      {data.data.map((po) => {
         const status = PO_STATUS[po.status] ?? { label: po.status, cls: "bg-gray-100 text-gray-700" };
         return (
           <Link
@@ -157,11 +158,11 @@ function POList({ search }: { search: string }) {
 function SupplierList({ search }: { search: string }) {
   const { data, isLoading } = useQuery({
     queryKey: ["suppliers", search],
-    queryFn: async () => {
+    queryFn: async (): Promise<CursorPage<Supplier>> => {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
       const res = await api.get(`/procurement/suppliers/?${params}`);
-      return res.data.data as { count: number; results: Supplier[] };
+      return { data: res.data.data, meta: res.data.meta };
     },
   });
 
@@ -175,7 +176,7 @@ function SupplierList({ search }: { search: string }) {
     );
   }
 
-  if (!data?.results?.length) {
+  if (!data?.data?.length) {
     return (
       <div className="text-center py-16 text-gray-500">
         <Package className="w-10 h-10 mx-auto mb-3 opacity-30" />
@@ -186,7 +187,7 @@ function SupplierList({ search }: { search: string }) {
 
   return (
     <div className="space-y-2">
-      {data.results.map((supplier) => {
+      {data.data.map((supplier) => {
         const outstanding = parseFloat(supplier.outstanding_balance);
         return (
           <Link

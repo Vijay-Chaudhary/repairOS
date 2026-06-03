@@ -6,31 +6,45 @@ import { Plus, Search, Users, Phone, MapPin } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
-import type { Customer, PaginatedResponse } from "@/types/crm";
+import type { Customer } from "@/types/crm";
+import type { CursorPage } from "@/types/api";
 
-async function fetchCustomers(
-  search: string,
-  page: number
-): Promise<PaginatedResponse<Customer>> {
-  const params = new URLSearchParams({ page: String(page) });
-  if (search) params.set("search", search);
+async function fetchCustomers(search: string, cursor: string): Promise<CursorPage<Customer>> {
+  const params = new URLSearchParams();
+  if (search) params.set("q", search);
+  if (cursor) params.set("cursor", cursor);
   const res = await api.get(`/crm/customers/?${params}`);
-  return res.data.data;
+  // Renderer flattens: { success, data: [...], meta: {...} }
+  return { data: res.data.data, meta: res.data.meta };
 }
 
 export default function CustomersPage() {
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const [cursor, setCursor] = useState("");
+  const [cursorStack, setCursorStack] = useState<string[]>([]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["customers", search, page],
-    queryFn: () => fetchCustomers(search, page),
+    queryKey: ["customers", search, cursor],
+    queryFn: () => fetchCustomers(search, cursor),
     placeholderData: (prev) => prev,
   });
 
   const handleSearch = (val: string) => {
     setSearch(val);
-    setPage(1);
+    setCursor("");
+    setCursorStack([]);
+  };
+
+  const goNext = () => {
+    if (!data?.meta?.next_cursor) return;
+    setCursorStack((s) => [...s, cursor]);
+    setCursor(data.meta.next_cursor!);
+  };
+
+  const goPrev = () => {
+    const prev = cursorStack[cursorStack.length - 1] ?? "";
+    setCursorStack((s) => s.slice(0, -1));
+    setCursor(prev);
   };
 
   return (
@@ -39,7 +53,7 @@ export default function CustomersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Customers</h1>
-          <p className="text-sm text-gray-500">{data?.count ?? 0} total</p>
+          <p className="text-sm text-gray-500">{data?.data?.length ?? 0} shown</p>
         </div>
         <Link
           href="/customers/new"
@@ -69,33 +83,32 @@ export default function CustomersPage() {
             <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />
           ))}
         </div>
-      ) : data?.results?.length === 0 ? (
+      ) : data?.data?.length === 0 ? (
         <div className="text-center py-16 text-gray-500">
           <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">No customers found</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {data?.results?.map((customer) => (
+          {data?.data?.map((customer) => (
             <CustomerCard key={customer.id} customer={customer} />
           ))}
         </div>
       )}
 
-      {/* Pagination */}
-      {data && data.count > 20 && (
+      {/* Cursor pagination */}
+      {(data?.meta?.prev_cursor || data?.meta?.next_cursor) && (
         <div className="flex items-center justify-center gap-3 pt-2">
           <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={!data.previous}
+            onClick={goPrev}
+            disabled={cursorStack.length === 0}
             className="px-4 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50 transition min-h-[44px]"
           >
             Previous
           </button>
-          <span className="text-sm text-gray-500">Page {page}</span>
           <button
-            onClick={() => setPage((p) => p + 1)}
-            disabled={!data.next}
+            onClick={goNext}
+            disabled={!data?.meta?.next_cursor}
             className="px-4 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50 transition min-h-[44px]"
           >
             Next
@@ -115,14 +128,11 @@ function CustomerCard({ customer }: { customer: Customer }) {
       className="block bg-white rounded-xl border border-gray-200 p-4 hover:border-blue-300 hover:shadow-sm transition"
     >
       <div className="flex items-start gap-3">
-        {/* Avatar */}
         <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
           <span className="text-blue-700 font-semibold text-sm">
             {customer.name.charAt(0).toUpperCase()}
           </span>
         </div>
-
-        {/* Details */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="font-medium text-gray-900 text-sm truncate">{customer.name}</p>
@@ -147,23 +157,18 @@ function CustomerCard({ customer }: { customer: Customer }) {
           {customer.tags.length > 0 && (
             <div className="flex gap-1 mt-1.5 flex-wrap">
               {customer.tags.slice(0, 3).map((tag) => (
-                <span
-                  key={tag}
-                  className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded"
-                >
+                <span key={tag} className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">
                   {tag}
                 </span>
               ))}
             </div>
           )}
         </div>
-
-        {/* Stats */}
         <div className="text-right flex-shrink-0">
           <p className="text-sm font-semibold text-gray-900">{customer.total_jobs} jobs</p>
           {outstanding > 0 && (
             <p className="text-xs text-red-500 font-medium mt-0.5">
-              ₹{formatCurrency(outstanding)} due
+              {formatCurrency(outstanding)} due
             </p>
           )}
         </div>

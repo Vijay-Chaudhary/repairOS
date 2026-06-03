@@ -7,26 +7,30 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { formatCurrency, cn } from "@/lib/utils";
 import type { Product } from "@/types/inventory";
+import type { CursorPage } from "@/types/api";
 
-type PaginatedProducts = { count: number; next: string | null; previous: string | null; results: Product[] };
-
-async function fetchProducts(search: string, page: number): Promise<PaginatedProducts> {
-  const params = new URLSearchParams({ page: String(page) });
+async function fetchProducts(search: string, cursor: string): Promise<CursorPage<Product>> {
+  const params = new URLSearchParams();
   if (search) params.set("search", search);
+  if (cursor) params.set("cursor", cursor);
   const res = await api.get(`/inventory/products/?${params}`);
-  return res.data.data;
+  return { data: res.data.data, meta: res.data.meta };
 }
 
 export default function InventoryPage() {
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const [cursor, setCursor] = useState("");
+  const [cursorStack, setCursorStack] = useState<string[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["inventory-products", search, page],
-    queryFn: () => fetchProducts(search, page),
+    queryKey: ["inventory-products", search, cursor],
+    queryFn: () => fetchProducts(search, cursor),
     placeholderData: (prev) => prev,
   });
+
+  const goNext = () => { if (!data?.meta?.next_cursor) return; setCursorStack(s => [...s, cursor]); setCursor(data.meta.next_cursor!); };
+  const goPrev = () => { const p = cursorStack[cursorStack.length - 1] ?? ""; setCursorStack(s => s.slice(0, -1)); setCursor(p); };
 
   return (
     <div className="space-y-4">
@@ -34,7 +38,7 @@ export default function InventoryPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Inventory</h1>
-          <p className="text-sm text-gray-500">{data?.count ?? 0} products</p>
+          <p className="text-sm text-gray-500">{data?.data?.length ?? 0} shown</p>
         </div>
         <div className="flex gap-2">
           <Link
@@ -60,7 +64,7 @@ export default function InventoryPage() {
           type="text"
           placeholder="Search by name, SKU, brand…"
           value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          onChange={(e) => { setSearch(e.target.value); setCursor(""); setCursorStack([]); }}
           className="w-full pl-9 pr-3 py-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
@@ -72,14 +76,14 @@ export default function InventoryPage() {
             <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />
           ))}
         </div>
-      ) : data?.results?.length === 0 ? (
+      ) : data?.data?.length === 0 ? (
         <div className="text-center py-16 text-gray-500">
           <Package className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">No products found</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {data?.results?.map((product) => (
+          {data?.data?.map((product) => (
             <ProductRow
               key={product.id}
               product={product}
@@ -90,24 +94,10 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {/* Pagination */}
-      {data && data.count > 20 && (
+      {(cursorStack.length > 0 || data?.meta?.next_cursor) && (
         <div className="flex items-center justify-center gap-3 pt-2">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={!data.previous}
-            className="px-4 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50 min-h-[44px]"
-          >
-            Previous
-          </button>
-          <span className="text-sm text-gray-500">Page {page}</span>
-          <button
-            onClick={() => setPage((p) => p + 1)}
-            disabled={!data.next}
-            className="px-4 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50 min-h-[44px]"
-          >
-            Next
-          </button>
+          <button onClick={goPrev} disabled={cursorStack.length === 0} className="px-4 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50 min-h-[44px]">Previous</button>
+          <button onClick={goNext} disabled={!data?.meta?.next_cursor} className="px-4 py-2 text-sm border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50 min-h-[44px]">Next</button>
         </div>
       )}
     </div>
