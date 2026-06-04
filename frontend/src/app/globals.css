@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg:        #f7f8fa;
+    --surface:   #ffffff;
+    --surface-2: #f1f3f6;
+    --border:    #e2e6ec;
+    --text:      #11161d;
+    --text-muted:#5b6573;
+    --accent:    #1f6feb;
+    --accent-fg: #ffffff;
+    --success:   #1a7f48;
+    --warning:   #b25e00;
+    --danger:    #c1392b;
+    --info:      #2a6f97;
+
+    --status-open:      #2a6f97;
+    --status-progress:  #b25e00;
+    --status-ready:     #1a7f48;
+    --status-hold:      #8a6d3b;
+    --status-closed:    #5b6573;
+    --status-cancelled: #c1392b;
+
+    --radius: 10px;
+  }
+
+  .dark {
+    --bg:        #0d1117;
+    --surface:   #161b22;
+    --surface-2: #1c232c;
+    --border:    #2a313c;
+    --text:      #e6edf3;
+    --text-muted:#9aa4b2;
+    --accent:    #4d8bf0;
+    --accent-fg: #ffffff;
+  }
+
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    font-size: 15px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ibm-plex-sans), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Tabular figures for numeric columns */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Minimum tap targets */
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Focus ring */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--surface-2);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .font-mono-num {
+    font-family: var(--font-ibm-plex-mono), monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}

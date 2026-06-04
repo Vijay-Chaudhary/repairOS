@@ -1,0 +1,37 @@
+{
+  "name": "RepairOS",
+  "short_name": "RepairOS",
+  "description": "Repair shop management platform",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f7f8fa",
+  "theme_color": "#1f6feb",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "New Job",
+      "url": "/jobs/new",
+      "description": "Create a new repair job"
+    },
+    {
+      "name": "POS",
+      "url": "/pos",
+      "description": "Counter sale"
+    }
+  ]
+}
