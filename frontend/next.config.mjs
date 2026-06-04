@@ -1,22 +1,35 @@
+import withPWA from 'next-pwa';
+
+const pwaConfig = withPWA({
+  dest: 'public',
+  register: true,
+  skipWaiting: true,
+  disable: process.env.NODE_ENV === 'development',
+  runtimeCaching: [
+    {
+      urlPattern: /^https:\/\/api\.repaiross\.app\/api\/v1\/(jobs|customers|products|invoices)/,
+      handler: 'StaleWhileRevalidate',
+      options: {
+        cacheName: 'api-reads',
+        expiration: { maxEntries: 200, maxAgeSeconds: 300 },
+      },
+    },
+  ],
+});
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "standalone",
-
-  // Preserve trailing slashes so /api/v1/auth/foo/ reaches Django as-is.
-  // Without this, Next.js 308-redirects /foo/ → /foo before rewrites apply,
-  // and Django URL patterns require trailing slashes.
+  output: 'standalone',
   skipTrailingSlashRedirect: true,
-
-  // Proxy /api/* to Django backend during local dev, avoids CORS entirely
   async rewrites() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
     return [
       {
-        source: "/api/:path*",
+        source: '/api/:path*',
         destination: `${apiUrl}/api/:path*`,
       },
     ];
   },
 };
 
-export default nextConfig;
+export default pwaConfig(nextConfig);
