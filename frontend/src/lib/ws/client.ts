@@ -98,6 +98,7 @@ class WsClient {
       case 'job.status_changed':
         queryClient.invalidateQueries({ queryKey: qk.jobs() });
         queryClient.invalidateQueries({ queryKey: qk.job(event.data.job_id) });
+        queryClient.invalidateQueries({ queryKey: qk.dashboard(this.activeShopId) });
         if (event.data.assigned_to === this.currentUserId) {
           toast.info('Job status updated');
         }
