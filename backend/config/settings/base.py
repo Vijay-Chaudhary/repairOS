@@ -212,6 +212,10 @@ TENANT_CRED_ENCRYPTION_KEY = env("TENANT_CRED_ENCRYPTION_KEY", default="")
 TENANT_CACHE_TTL = 300  # 5 min
 TENANT_DB_CONN_MAX_AGE = 30
 TENANT_DB_MAX_CONNS = 5  # PgBouncer limit per tenant DB
+# Host stored in TenantDatabase for every provisioned tenant.
+# In local dev set to "pgbouncer"; in prod this is the PgBouncer sidecar hostname.
+# Master DB (MASTER_DATABASE_URL) connects directly to postgres so CREATE DATABASE DDL works.
+TENANT_DB_HOST = env("TENANT_DB_HOST", default="")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # OTP

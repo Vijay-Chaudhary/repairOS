@@ -63,12 +63,15 @@ class Command(BaseCommand):
             db_name = tenant.db_name
             db_user = tenant.db_user
 
-            # Use master DB host/port for tenant DB (same PG instance)
+            # Tenant connections route through PgBouncer, not postgres directly.
+            # TENANT_DB_HOST (e.g. "pgbouncer") is set in settings; falls back to
+            # the master DB host so the command still works without PgBouncer.
             master_cfg = settings.DATABASES["default"]
+            tenant_host = getattr(settings, "TENANT_DB_HOST", None) or master_cfg["HOST"]
             tenant_db = TenantDatabase(
                 tenant=tenant,
                 db_name=db_name,
-                db_host=master_cfg["HOST"],
+                db_host=tenant_host,
                 db_port=int(master_cfg.get("PORT", 5432)),
                 db_user=db_user,
             )
