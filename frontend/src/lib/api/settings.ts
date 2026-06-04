@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPatch, type PageMeta } from './client';
+import { apiGet, apiPost, apiPatch, apiDelete, type PageMeta } from './client';
 
 // ── Shop ────────────────────────────────────────────────────────────────────
 
@@ -124,7 +124,7 @@ export const settingsApi = {
     apiPatch<Role>(`/roles/${id}/`, body),
 
   deleteRole: (id: string) =>
-    apiPost<void>(`/roles/${id}/delete/`, {}),
+    apiDelete<void>(`/roles/${id}/`),
 
   // WhatsApp / notifications
   getWhatsAppConnection: () =>
