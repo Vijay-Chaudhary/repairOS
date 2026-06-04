@@ -42,6 +42,8 @@ const STATUS_MAP: Record<string, { label: string; className: string }> = {
   // Lead statuses
   new: { label: 'New', className: 'bg-[var(--info)]/15 text-[var(--info)] border-[var(--info)]/30' },
   contacted: { label: 'Contacted', className: 'bg-[var(--warning)]/15 text-[var(--warning)] border-[var(--warning)]/30' },
+  interested: { label: 'Interested', className: 'bg-[var(--warning)]/15 text-[var(--warning)] border-[var(--warning)]/30' },
+  quoted: { label: 'Quoted', className: 'bg-[var(--accent)]/15 text-[var(--accent)] border-[var(--accent)]/30' },
   qualified: { label: 'Qualified', className: 'bg-[var(--accent)]/15 text-[var(--accent)] border-[var(--accent)]/30' },
   converted: { label: 'Converted', className: 'bg-[var(--success)]/15 text-[var(--success)] border-[var(--success)]/30' },
   lost: { label: 'Lost', className: 'bg-[var(--danger)]/15 text-[var(--danger)] border-[var(--danger)]/30' },
