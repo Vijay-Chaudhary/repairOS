@@ -20,7 +20,7 @@ import { formatDate } from '@/lib/format/date';
 
 const schema = z.object({
   custom_part_name: z.string().min(2, 'Part name required'),
-  quantity: z.coerce.number().int().min(1, 'Min quantity is 1'),
+  quantity: z.number().int().min(1, 'Min quantity is 1'),
   is_urgent: z.boolean(),
 });
 
@@ -150,7 +150,13 @@ export function SparePartRequestSheet({ open, onOpenChange, jobId, requests }: S
                     <FormItem>
                       <FormLabel>Quantity</FormLabel>
                       <FormControl>
-                        <Input type="number" min={1} inputMode="numeric" {...field} />
+                        <Input
+                          type="number"
+                          min={1}
+                          inputMode="numeric"
+                          value={field.value}
+                          onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 1)}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

@@ -23,7 +23,7 @@ const schema = z.object({
   parts_cost: z.number().min(0),
   valid_until: z.string().optional(),
   notes: z.string().optional(),
-  send_via: z.enum(['whatsapp', 'email', 'in_person']).default('whatsapp'),
+  send_via: z.enum(['whatsapp', 'email', 'in_person']),
 });
 
 type FormValues = z.infer<typeof schema>;

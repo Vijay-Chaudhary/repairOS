@@ -18,6 +18,13 @@ const STATUS_MAP: Record<string, { label: string; className: string }> = {
   delivered: { label: 'Delivered', className: 'bg-[var(--accent)]/15 text-[var(--accent)] border-[var(--accent)]/30' },
   closed: { label: 'Closed', className: 'bg-[var(--text-muted)]/15 text-[var(--text-muted)] border-[var(--text-muted)]/30' },
   cancelled: { label: 'Cancelled', className: 'bg-[var(--danger)]/15 text-[var(--danger)] border-[var(--danger)]/30' },
+  // Additional job statuses
+  estimated: { label: 'Estimated', className: 'bg-[var(--info)]/15 text-[var(--info)] border-[var(--info)]/30' },
+  estimate_sent: { label: 'Est. Sent', className: 'bg-[var(--accent)]/15 text-[var(--accent)] border-[var(--accent)]/30' },
+  estimate_approved: { label: 'Approved', className: 'bg-[var(--success)]/15 text-[var(--success)] border-[var(--success)]/30' },
+  estimate_rejected: { label: 'Rejected', className: 'bg-[var(--danger)]/15 text-[var(--danger)] border-[var(--danger)]/30' },
+  ready_for_qc: { label: 'Ready for QC', className: 'bg-[var(--info)]/15 text-[var(--info)] border-[var(--info)]/30' },
+  qc_failed: { label: 'QC Failed', className: 'bg-[var(--danger)]/15 text-[var(--danger)] border-[var(--danger)]/30' },
   // Invoice statuses
   draft: { label: 'Draft', className: 'bg-[var(--text-muted)]/15 text-[var(--text-muted)] border-[var(--text-muted)]/30' },
   issued: { label: 'Issued', className: 'bg-[var(--info)]/15 text-[var(--info)] border-[var(--info)]/30' },

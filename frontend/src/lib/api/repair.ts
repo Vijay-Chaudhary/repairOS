@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPatch, type PageMeta } from './client';
+import { apiGet, apiPost, apiPatch, apiDelete, type PageMeta } from './client';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -236,6 +236,29 @@ export const repairApi = {
 
   listTemplates: (shopId: string) =>
     apiGet<{ items: FaultTemplate[] }>('/fault-templates/', { shop_id: shopId }),
+
+  createTemplate: (body: {
+    shop_id: string;
+    name: string;
+    device_type: string;
+    device_brand?: string;
+    problem_description: string;
+    default_sc: number;
+    estimated_duration_hours?: number;
+  }) => apiPost<FaultTemplate>('/fault-templates/', body),
+
+  updateTemplate: (id: string, body: Partial<{
+    name: string;
+    device_type: string;
+    device_brand: string;
+    problem_description: string;
+    default_sc: number;
+    estimated_duration_hours: number;
+    is_active: boolean;
+  }>) => apiPatch<FaultTemplate>(`/fault-templates/${id}/`, body),
+
+  deleteTemplate: (id: string) =>
+    apiDelete(`/fault-templates/${id}/`),
 
   getTimeline: (jobId: string) =>
     apiGet<{ items: Array<{ id: string; type: string; actor?: string; description: string; created_at: string }> }>(`/jobs/${jobId}/timeline/`),
