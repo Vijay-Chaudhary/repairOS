@@ -25,10 +25,22 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   verifyOtp: async ({ phone, otp, tenant_slug }) => {
     const res = await api.post("/auth/verify-otp/", { phone, otp, tenant_slug });
-    const { access, user } = res.data.data as { access: string; user: User };
+    const { access, user: profile } = res.data.data as { access: string; user: Partial<User> };
+    const payload = jwtDecode<TokenPayload>(access);
     tokenStore.set(access);
     setTenantSlug(tenant_slug);
-    set({ user, isAuthenticated: true });
+    const user: User = {
+      id: payload.user_id,
+      tenant_slug,
+      shop_ids: payload.shop_ids ?? [],
+      role_ids: payload.role_ids ?? [],
+      permissions: payload.permissions ?? [],
+      is_platform_admin: payload.is_platform_admin ?? false,
+      name: profile.name ?? "",
+      phone: profile.phone ?? phone,
+      email: profile.email ?? null,
+    };
+    set({ user, isAuthenticated: true, isLoading: false });
   },
 
   logout: async () => {
@@ -66,16 +78,17 @@ export const useAuthStore = create<AuthStore>((set) => ({
         credentials: "include",
       });
       const userData = userRes.ok ? (await userRes.json()).data : null;
-      const user: User = userData ?? {
+      // JWT payload is authoritative for permissions/roles; /me/ provides profile fields.
+      const user: User = {
         id: payload.user_id,
-        name: "",
-        phone: "",
-        email: null,
         tenant_slug: payload.tenant_slug,
-        shop_ids: payload.shop_ids,
-        role_ids: payload.role_ids,
-        permissions: payload.permissions,
-        is_platform_admin: payload.is_platform_admin,
+        shop_ids: payload.shop_ids ?? [],
+        role_ids: payload.role_ids ?? [],
+        permissions: payload.permissions ?? [],
+        is_platform_admin: payload.is_platform_admin ?? false,
+        name: userData?.full_name ?? userData?.name ?? "",
+        phone: userData?.phone ?? "",
+        email: userData?.email ?? null,
       };
 
       set({ user, isAuthenticated: true, isLoading: false });

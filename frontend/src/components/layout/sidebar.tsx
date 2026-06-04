@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Wrench, Users, ShoppingCart,
   Package, TruckIcon, Receipt, UserCheck,
@@ -65,6 +65,7 @@ function NavLink({ item }: { item: NavItem }) {
 
 export function Sidebar() {
   const { user, logout } = useAuthStore();
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -121,7 +122,7 @@ export function Sidebar() {
             </div>
           </div>
           <button
-            onClick={() => logout()}
+            onClick={() => logout().then(() => router.replace("/login"))}
             className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm text-gray-500 hover:bg-red-50 hover:text-red-600 transition min-h-[44px]"
           >
             <LogOut className="w-4 h-4" />

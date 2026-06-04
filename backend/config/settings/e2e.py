@@ -38,6 +38,9 @@ class E2ERouter:
 # ── Dev flags ─────────────────────────────────────────────────────────────────
 DEBUG = True  # Required for OTP console logging + dev header support
 ALLOWED_HOSTS = ["*"]
+# Next.js proxy strips trailing slashes before forwarding — disable Django's
+# APPEND_SLASH so POST requests to /foo (without slash) don't blow up with 500.
+APPEND_SLASH = False
 
 # withCredentials=true requires explicit origin, not wildcard
 CORS_ALLOW_ALL_ORIGINS = False
@@ -53,17 +56,43 @@ TENANT_SLUG_DEV_HEADER = "HTTP_X_TENANT_SLUG"
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
 
+# ── Trailing-slash middleware ──────────────────────────────────────────────────
+# Next.js proxy strips trailing slashes before forwarding. Re-add them here so
+# Django URL patterns (which require trailing slashes) resolve correctly.
+
+
+class TrailingSlashMiddleware:
+    """E2E-only: restore trailing slash on /api/* requests that lack one."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if (
+            request.path_info.startswith("/api/")
+            and not request.path_info.endswith("/")
+            and "." not in request.path_info.rsplit("/", 1)[-1]
+        ):
+            request.path_info = request.path_info + "/"
+            request.environ["PATH_INFO"] = request.path_info
+        return self.get_response(request)
+
+
 # ── E2E Tenant Middleware patch ────────────────────────────────────────────────
 # Replace the real TenantMiddleware with a no-op version that always routes
 # to the single SQLite "default" DB. This lets the whole API work without
 # needing a real multi-DB tenant setup.
 _mw = MIDDLEWARE  # noqa: F405
-MIDDLEWARE = [
-    m.replace(
-        "core.middleware.TenantMiddleware",
-        "config.settings.e2e.E2ETenantMiddleware"
-    ) for m in _mw  # noqa: F405
-]
+MIDDLEWARE = (
+    ["config.settings.e2e.TrailingSlashMiddleware"]
+    + [
+        m.replace(
+            "core.middleware.TenantMiddleware",
+            "config.settings.e2e.E2ETenantMiddleware",
+        )
+        for m in _mw  # noqa: F405
+    ]
+)
 
 
 class E2ETenantMiddleware:

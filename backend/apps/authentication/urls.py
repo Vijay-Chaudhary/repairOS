@@ -27,9 +27,17 @@ urlpatterns = [
     path("logout/", LogoutView.as_view(), name="auth-logout"),
     path("password/change/", PasswordChangeView.as_view(), name="auth-password-change"),
     path("me/", MeView.as_view(), name="auth-me"),
+    # No-trailing-slash duplicates for Next.js proxy (strips slash before forwarding)
+    path("send-otp", OTPRequestView.as_view()),
+    path("verify-otp", OTPVerifyView.as_view()),
+    path("refresh", TokenRefreshView.as_view()),
+    path("logout", LogoutView.as_view()),
+    path("me", MeView.as_view()),
+    path("login", LoginView.as_view()),
 ]
 
 if settings.DEBUG:
     urlpatterns += [
         path("dev/otp/", DevOTPView.as_view(), name="auth-dev-otp"),
+        path("dev/otp", DevOTPView.as_view()),
     ]
