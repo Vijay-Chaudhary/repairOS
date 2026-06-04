@@ -165,10 +165,10 @@ class LoginView(APIView):
 
         response = Response(
             {
-                "access_token": access,
+                "access": access,
                 "user": {
                     "id": str(user.id),
-                    "full_name": user.full_name,
+                    "name": user.full_name,
                     "email": user.email,
                     "is_platform_admin": user.is_platform_admin,
                 },
@@ -251,10 +251,10 @@ class OTPVerifyView(APIView):
 
         response = Response(
             {
-                "access_token": access,
+                "access": access,
                 "user": {
                     "id": str(user.id),
-                    "full_name": user.full_name,
+                    "name": user.full_name,
                     "email": user.email,
                     "is_platform_admin": user.is_platform_admin,
                 },
@@ -350,7 +350,7 @@ class TokenRefreshView(APIView):
         except Exception:
             pass
 
-        response = Response({"access_token": str(new_access)})
+        response = Response({"access": str(new_access)})
         _set_refresh_cookie(response, str(new_refresh))
         return response
 

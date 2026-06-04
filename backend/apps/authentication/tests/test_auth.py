@@ -29,7 +29,7 @@ class TestLogin:
     def test_valid_credentials_returns_access_token(self, api_client, tenant_user):
         res = api_client.post(self.url, {"email": tenant_user.email, "password": "TestPass@123"})
         assert res.status_code == status.HTTP_200_OK
-        assert "access_token" in res.data
+        assert "access" in res.data
         assert "user" in res.data
         assert _REFRESH_COOKIE in res.cookies
 
@@ -95,7 +95,7 @@ class TestOTP:
         otp_data = cache.get(f"otp:{tenant_user.phone}")
         res = api_client.post(self.verify_url, {"phone": tenant_user.phone, "otp": otp_data["otp"]})
         assert res.status_code == status.HTTP_200_OK
-        assert "access_token" in res.data
+        assert "access" in res.data
 
     def test_otp_verify_wrong_code(self, api_client, tenant_user):
         api_client.post(self.request_url, {"phone": tenant_user.phone})
@@ -126,7 +126,7 @@ class TestTokenRefresh:
         api_client.cookies[_REFRESH_COOKIE] = refresh_token
         res = api_client.post(self.refresh_url)
         assert res.status_code == status.HTTP_200_OK
-        assert "access_token" in res.data
+        assert "access" in res.data
 
     def test_refresh_without_cookie_returns_401(self, api_client):
         res = api_client.post(self.refresh_url)

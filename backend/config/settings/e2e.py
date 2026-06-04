@@ -38,7 +38,14 @@ class E2ERouter:
 # ── Dev flags ─────────────────────────────────────────────────────────────────
 DEBUG = True  # Required for OTP console logging + dev header support
 ALLOWED_HOSTS = ["*"]
-CORS_ALLOW_ALL_ORIGINS = True
+
+# withCredentials=true requires explicit origin, not wildcard
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+CORS_ALLOW_CREDENTIALS = True
 AUTH_PASSWORD_VALIDATORS = []
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 TENANT_SLUG_DEV_HEADER = "HTTP_X_TENANT_SLUG"
