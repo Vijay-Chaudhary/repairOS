@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -20,12 +20,7 @@ import { useOfflineQueueStore } from '@/lib/stores/offlineQueueStore';
 import { qk } from '@/lib/query/keys';
 import { cn } from '@/lib/utils';
 import { money } from '@/lib/format/money';
-import { formatDate } from '@/lib/format/date';
-
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
+import { formatDate, MONTHS_FULL as MONTHS } from '@/lib/format/date';
 
 function isMoneyCellKey(key: string) {
   return /amount|revenue|value|total|salary|cost|dues|payable|balance/i.test(key);
@@ -202,7 +197,9 @@ export default function ReportViewPage() {
     return f;
   }, [report, isAllShops, activeShopId, dateFrom, dateTo, month, year, overdueDays, category, status]);
 
-  const filters = buildFilters();
+  // Memoize so the object reference is stable between renders; a new object
+  // reference would change the queryKey on every render and cause spurious fetches.
+  const filters = useMemo(buildFilters, [buildFilters]);
 
   const { data: reportData, isLoading, error, refetch } = useQuery({
     queryKey: [qk.revenueReport(filters)[0], type, filters],

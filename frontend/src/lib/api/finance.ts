@@ -195,7 +195,5 @@ export const BUDGET_CATEGORY_LABELS: Record<BudgetCategory, string> = {
   fixed: 'Fixed', variable: 'Variable', capital: 'Capital',
 };
 
-export const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
+// Re-export so existing imports from this module continue to work.
+export { MONTHS_FULL as MONTHS } from '@/lib/format/date';

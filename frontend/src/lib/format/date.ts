@@ -44,3 +44,23 @@ export function formatTime(value: string | Date): string {
     return String(value);
   }
 }
+
+// Shared month-name arrays — single source of truth used across modules.
+export const MONTHS_FULL = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+] as const;
+
+export const MONTHS_SHORT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+] as const;
+
+// ISO date helpers for period pickers.
+export function monthStart(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, '0')}-01`;
+}
+
+export function monthEnd(year: number, month: number): string {
+  return new Date(year, month, 0).toISOString().split('T')[0];
+}

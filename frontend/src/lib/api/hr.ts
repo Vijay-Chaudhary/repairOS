@@ -199,7 +199,5 @@ export const LEAVE_TYPE_LABELS: Record<LeaveType, string> = {
   unpaid: 'Unpaid', maternity: 'Maternity', paternity: 'Paternity',
 };
 
-export const MONTHS = [
-  'January','February','March','April','May','June',
-  'July','August','September','October','November','December',
-];
+// Re-export so existing imports from this module continue to work.
+export { MONTHS_FULL as MONTHS } from '@/lib/format/date';

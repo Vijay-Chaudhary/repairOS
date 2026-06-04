@@ -17,18 +17,9 @@ import { commissionsApi, type PayoutStatus } from '@/lib/api/commissions';
 import { qk } from '@/lib/query/keys';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { ApiError } from '@/lib/api/client';
-import { formatDate } from '@/lib/format/date';
+import { formatDate, MONTHS_SHORT as MONTHS, monthStart, monthEnd } from '@/lib/format/date';
 import { money } from '@/lib/format/money';
 import { cn } from '@/lib/utils';
-
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
-function monthStart(y: number, m: number) {
-  return `${y}-${String(m).padStart(2,'0')}-01`;
-}
-function monthEnd(y: number, m: number) {
-  return new Date(y, m, 0).toISOString().split('T')[0];
-}
 
 export default function CommissionsPage() {
   const queryClient = useQueryClient();

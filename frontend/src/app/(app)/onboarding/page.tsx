@@ -167,6 +167,10 @@ export default function OnboardingPage() {
         setLoading(false);
       }
     }
+    // If the user typed a number and then clicked Skip, make the discard explicit.
+    if (skip && waPhone.trim()) {
+      toast.info('WhatsApp number not saved — connect later in Settings → WhatsApp');
+    }
     // Mark onboarding complete and go to dashboard
     try {
       await onboardingApi.completeOnboarding();
