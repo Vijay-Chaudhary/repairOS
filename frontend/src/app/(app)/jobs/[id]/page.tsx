@@ -25,6 +25,7 @@ import { CheckinForm } from '@/components/repair/CheckinForm';
 import { EstimateBuilder } from '@/components/repair/EstimateBuilder';
 import { StageWorkflow } from '@/components/repair/StageWorkflow';
 import { SparePartRequestSheet } from '@/components/repair/SparePartRequestSheet';
+import { GenerateInvoiceDialog } from '@/components/billing/GenerateInvoiceDialog';
 import {
   repairApi, STATUS_TRANSITIONS, STAGE_LABELS,
   type JobStatus, type StageType,
@@ -59,6 +60,7 @@ export default function JobDetailPage() {
 
   const [partsSheetOpen, setPartsSheetOpen] = useState(false);
   const [stagesDialogOpen, setStagesDialogOpen] = useState(false);
+  const [generateInvoiceOpen, setGenerateInvoiceOpen] = useState(false);
   const [pendingTransition, setPendingTransition] = useState<{ to: JobStatus; label: string; requiresReason?: boolean } | null>(null);
   const [transitionReason, setTransitionReason] = useState('');
   const [warrantyConfirmOpen, setWarrantyConfirmOpen] = useState(false);
@@ -250,6 +252,26 @@ export default function JobDetailPage() {
                   <p className="text-body text-[var(--text)]">{job.location_address}</p>
                 </div>
               </div>
+            )}
+
+            {/* Invoice CTA */}
+            {['ready_for_pickup', 'delivered', 'closed'].includes(job.status) && (
+              <Can permission="billing.repair_invoices.create">
+                <div className="flex items-center justify-between rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-4">
+                  <div>
+                    <p className="text-body-sm font-medium text-[var(--text)]">Ready to invoice</p>
+                    <p className="text-xs text-[var(--text-muted)]">Generate GST invoice for this job</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="ghost" asChild>
+                      <a href={`/invoices?job_id=${id}`}>View invoices</a>
+                    </Button>
+                    <Button size="sm" onClick={() => setGenerateInvoiceOpen(true)}>
+                      Generate
+                    </Button>
+                  </div>
+                </div>
+              </Can>
             )}
 
             {/* Warranty */}
@@ -469,6 +491,15 @@ export default function JobDetailPage() {
         onOpenChange={setStagesDialogOpen}
         jobId={id}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: qk.job(id) })}
+      />
+
+      {/* Generate invoice dialog */}
+      <GenerateInvoiceDialog
+        open={generateInvoiceOpen}
+        onOpenChange={setGenerateInvoiceOpen}
+        jobId={id}
+        jobNumber={job.job_number}
+        serviceCharge={job.service_charge}
       />
 
       {/* Parts sheet */}
