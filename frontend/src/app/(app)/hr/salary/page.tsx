@@ -38,11 +38,10 @@ export default function SalaryPage() {
   });
 
   const generateMutation = useMutation({
-    mutationFn: () => hrApi.generateSalarySlips({
-      month,
-      year,
-      shop_id: activeShopId ?? '',
-    }),
+    mutationFn: () => {
+      if (!activeShopId) throw new Error('No shop selected');
+      return hrApi.generateSalarySlips({ month, year, shop_id: activeShopId });
+    },
     onSuccess: (r) => {
       queryClient.invalidateQueries({ queryKey: qk.salarySlips() });
       toast.success(`Generated ${r.slips.length} salary slip${r.slips.length !== 1 ? 's' : ''}`);
@@ -103,15 +102,21 @@ export default function SalaryPage() {
           </SelectContent>
         </Select>
         <Can permission="hr.salary.generate">
-          <Button
-            size="sm"
-            className="h-9 ml-auto"
-            onClick={() => generateMutation.mutate()}
-            disabled={generateMutation.isPending}
-          >
-            <Play className="h-3.5 w-3.5" />
-            {generateMutation.isPending ? 'Generating…' : `Generate for ${MONTHS[month-1]} ${year}`}
-          </Button>
+          {isAllShops || !activeShopId ? (
+            <p className="text-body-sm text-[var(--text-muted)] ml-auto">
+              Select a shop to generate slips
+            </p>
+          ) : (
+            <Button
+              size="sm"
+              className="h-9 ml-auto"
+              onClick={() => generateMutation.mutate()}
+              disabled={generateMutation.isPending}
+            >
+              <Play className="h-3.5 w-3.5" />
+              {generateMutation.isPending ? 'Generating…' : `Generate for ${MONTHS[month-1]} ${year}`}
+            </Button>
+          )}
         </Can>
       </div>
 
