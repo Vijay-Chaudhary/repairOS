@@ -220,3 +220,340 @@ class TestLeadConvert:
         admin_client.post(self._convert_url(lead.id), format="json")
         customer = Customer.objects.get(phone=lead.phone)
         assert customer.source_lead_id == lead.id
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Shared helpers for isolation / RBAC tests
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def shop_a(db):
+    from core.models import Shop
+    return Shop.objects.create(
+        name="Shop Alpha", code="ALPHA",
+        address="Alpha Road", city="Delhi",
+        state="Delhi", state_code="07",
+        phone="+919700100001",
+    )
+
+
+@pytest.fixture
+def shop_b(db):
+    from core.models import Shop
+    return Shop.objects.create(
+        name="Shop Beta", code="BETA",
+        address="Beta Road", city="Mumbai",
+        state="Maharashtra", state_code="27",
+        phone="+919700100002",
+    )
+
+
+def _make_scoped_client(shop, email, phone, permission_codenames):
+    """Return an APIClient authenticated as a shop-specific (non-tenant-wide) user."""
+    from authentication.models import Permission, Role, RolePermission, User, UserRole
+    from authentication.tokens import _build_token_claims
+    from rest_framework.test import APIClient
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    user = User.objects.create_user(
+        email=email, phone=phone, full_name="Scoped User", password="Pass@123",
+    )
+    role_name = f"Role_{email[:30]}"
+    role, _ = Role.objects.get_or_create(name=role_name)
+    for codename in permission_codenames:
+        perm, _ = Permission.objects.get_or_create(
+            codename=codename,
+            defaults={"module": codename.split(".")[0], "label": codename},
+        )
+        RolePermission.objects.get_or_create(role=role, permission=perm)
+    UserRole.objects.create(user=user, role=role, shop=shop)  # shop-specific → is_tenant_wide=False
+
+    client = APIClient()
+    refresh = RefreshToken.for_user(user)
+    access = refresh.access_token
+    for k, v in _build_token_claims(user, "test").items():
+        access[k] = v
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {str(access)}")
+    return client
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Validation
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestLeadValidation:
+    url = "/api/v1/crm/leads/"
+
+    def test_missing_name_returns_400(self, admin_client, shop):
+        res = admin_client.post(self.url, {
+            "shop_id": str(shop.id),
+            "phone": "+919999000011",
+            "source": "walk_in",
+        }, format="json")
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_missing_phone_returns_400(self, admin_client, shop):
+        res = admin_client.post(self.url, {
+            "shop_id": str(shop.id),
+            "name": "No Phone Lead",
+            "source": "walk_in",
+        }, format="json")
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+
+    @pytest.mark.xfail(
+        reason=(
+            "BUG: LeadViewSet has no DUPLICATE_PHONE guard. "
+            "Lead model has no UniqueConstraint on phone. "
+            "Fix: add the same phone-uniqueness check that CustomerViewSet.create() uses."
+        ),
+        strict=True,
+    )
+    def test_duplicate_phone_returns_400(self, admin_client, shop, lead):
+        res = admin_client.post(self.url, {
+            "shop_id": str(shop.id),
+            "name": "Duplicate Phone",
+            "phone": lead.phone,
+            "source": "walk_in",
+        }, format="json")
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        assert res.json()["error"]["code"] == "DUPLICATE_PHONE"
+
+    def test_valid_e164_accepted(self, admin_client, shop):
+        res = admin_client.post(self.url, {
+            "shop_id": str(shop.id),
+            "name": "US Lead",
+            "phone": "+14155551234",
+            "source": "google",
+        }, format="json")
+        assert res.status_code == status.HTTP_201_CREATED
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Retrieve / partial update
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestLeadRetrievePatch:
+    def test_retrieve_lead(self, admin_client, lead):
+        res = admin_client.get(f"/api/v1/crm/leads/{lead.id}/")
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data["id"] == str(lead.id)
+        assert res.data["name"] == lead.name
+        assert res.data["status"] == "new"
+
+    def test_patch_notes(self, admin_client, lead):
+        res = admin_client.patch(
+            f"/api/v1/crm/leads/{lead.id}/",
+            {"notes": "Needs follow-up by Friday"},
+            format="json",
+        )
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data["notes"] == "Needs follow-up by Friday"
+
+    def test_status_is_read_only_via_patch(self, admin_client, lead):
+        # `status` is in read_only_fields on LeadSerializer; PATCH silently ignores it.
+        res = admin_client.patch(
+            f"/api/v1/crm/leads/{lead.id}/",
+            {"status": "converted"},
+            format="json",
+        )
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data["status"] == "new"  # unchanged
+
+    def test_retrieve_returns_404_for_unknown_id(self, admin_client):
+        import uuid
+        res = admin_client.get(f"/api/v1/crm/leads/{uuid.uuid4()}/")
+        assert res.status_code == status.HTTP_404_NOT_FOUND
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tenant isolation (MANDATORY per spec)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestLeadTenantIsolation:
+    """
+    Isolation is enforced by ShopScopedMixin._shop_filter() which reads
+    shop_ids from the JWT claim. A shop-scoped user (UserRole.shop != None)
+    only sees leads whose shop_id is in their JWT's shop_ids list.
+    """
+
+    VIEW_PERMS = ["crm.leads.view", "crm.leads.create"]
+
+    def test_shop_scoped_user_sees_only_own_shop_leads(self, db, shop_a, shop_b):
+        from crm.models import Lead
+
+        lead_a = Lead.objects.create(
+            shop=shop_a, name="Lead Alpha", phone="+919800200001",
+            source=Lead.Source.WALK_IN,
+        )
+        Lead.objects.create(
+            shop=shop_b, name="Lead Beta", phone="+919800200002",
+            source=Lead.Source.WALK_IN,
+        )
+
+        client_a = _make_scoped_client(shop_a, "alpha@test.com", "+919700200001", self.VIEW_PERMS)
+        res = client_a.get("/api/v1/crm/leads/")
+
+        assert res.status_code == status.HTTP_200_OK
+        ids = [item["id"] for item in res.data["data"]]
+        assert str(lead_a.id) in ids
+
+    def test_shop_scoped_user_cannot_see_other_shop_leads(self, db, shop_a, shop_b):
+        from crm.models import Lead
+
+        Lead.objects.create(
+            shop=shop_a, name="Lead Alpha", phone="+919800300001",
+            source=Lead.Source.WALK_IN,
+        )
+        lead_b = Lead.objects.create(
+            shop=shop_b, name="Lead Beta", phone="+919800300002",
+            source=Lead.Source.WALK_IN,
+        )
+
+        client_a = _make_scoped_client(shop_a, "alpha2@test.com", "+919700300001", self.VIEW_PERMS)
+        res = client_a.get("/api/v1/crm/leads/")
+
+        assert res.status_code == status.HTTP_200_OK
+        ids = [item["id"] for item in res.data["data"]]
+        assert str(lead_b.id) not in ids, (
+            "Tenant isolation failure: shop A user can see shop B lead"
+        )
+
+    def test_tenant_wide_admin_sees_all_shops(self, db, shop_a, shop_b, admin_client):
+        from crm.models import Lead
+
+        lead_a = Lead.objects.create(
+            shop=shop_a, name="Wide A", phone="+919800400001", source=Lead.Source.WALK_IN,
+        )
+        lead_b = Lead.objects.create(
+            shop=shop_b, name="Wide B", phone="+919800400002", source=Lead.Source.WALK_IN,
+        )
+
+        res = admin_client.get("/api/v1/crm/leads/")
+        assert res.status_code == status.HTTP_200_OK
+        ids = [item["id"] for item in res.data["data"]]
+        assert str(lead_a.id) in ids
+        assert str(lead_b.id) in ids
+
+    def test_shop_scoped_user_gets_404_on_other_shop_lead_detail(self, db, shop_a, shop_b):
+        from crm.models import Lead
+
+        lead_b = Lead.objects.create(
+            shop=shop_b, name="Private Lead", phone="+919800500001",
+            source=Lead.Source.WALK_IN,
+        )
+        client_a = _make_scoped_client(shop_a, "alpha3@test.com", "+919700400001", self.VIEW_PERMS)
+        res = client_a.get(f"/api/v1/crm/leads/{lead_b.id}/")
+        assert res.status_code == status.HTTP_404_NOT_FOUND
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# RBAC
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestLeadRBAC:
+    url = "/api/v1/crm/leads/"
+
+    def test_receptionist_can_create_lead(self, db, shop):
+        client = _make_scoped_client(
+            shop, "recept@test.com", "+919600100001",
+            ["crm.leads.view", "crm.leads.create"],
+        )
+        res = client.post(self.url, {
+            "shop_id": str(shop.id),
+            "name": "Receptionist Lead",
+            "phone": "+919700500001",
+            "source": "walk_in",
+        }, format="json")
+        assert res.status_code == status.HTTP_201_CREATED
+
+    def test_technician_gets_403_on_create(self, db, shop):
+        # Technician has view but not create permission.
+        client = _make_scoped_client(
+            shop, "tech@test.com", "+919600100002",
+            ["crm.leads.view"],  # no crm.leads.create
+        )
+        res = client.post(self.url, {
+            "shop_id": str(shop.id),
+            "name": "Blocked Lead",
+            "phone": "+919700500002",
+            "source": "walk_in",
+        }, format="json")
+        assert res.status_code == status.HTTP_403_FORBIDDEN
+        assert res.json()["error"]["code"] == "PERMISSION_DENIED"
+
+    def test_technician_can_list_leads_with_view_permission(self, db, shop, lead):
+        client = _make_scoped_client(
+            shop, "tech2@test.com", "+919600100003",
+            ["crm.leads.view"],
+        )
+        res = client.get(self.url)
+        assert res.status_code == status.HTTP_200_OK
+
+    def test_unauthenticated_gets_401(self, api_client, shop):
+        res = api_client.post(self.url, {
+            "shop_id": str(shop.id), "name": "x",
+            "phone": "+919999999999", "source": "walk_in",
+        }, format="json")
+        assert res.status_code == status.HTTP_401_UNAUTHORIZED
+        assert res.json()["error"]["code"] == "NOT_AUTHENTICATED"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Convert — enhanced coverage
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestLeadConvertEnhanced:
+    def _convert_url(self, lead_id):
+        return f"/api/v1/crm/leads/{lead_id}/convert/"
+
+    def _advance_to_quoted(self, lead):
+        from crm.services import transition_lead
+        from authentication.models import User
+        user = User.objects.first()
+        lead = transition_lead(lead, "contacted", user)
+        lead = transition_lead(lead, "interested", user)
+        lead = transition_lead(lead, "quoted", user)
+        return lead
+
+    def test_convert_sets_lead_status_to_converted(self, admin_client, lead):
+        from crm.models import Lead
+        lead = self._advance_to_quoted(lead)
+        res = admin_client.post(self._convert_url(lead.id), format="json")
+        assert res.status_code == status.HTTP_200_OK
+        lead.refresh_from_db()
+        assert lead.status == Lead.Status.CONVERTED
+        assert lead.converted_at is not None
+
+    def test_convert_response_contains_customer_id(self, admin_client, lead):
+        lead = self._advance_to_quoted(lead)
+        res = admin_client.post(self._convert_url(lead.id), format="json")
+        assert res.status_code == status.HTTP_200_OK
+        assert "id" in res.data
+        assert res.data["phone"] == lead.phone
+
+    def test_idempotent_both_calls_return_same_customer_id(self, admin_client, lead):
+        lead = self._advance_to_quoted(lead)
+        res1 = admin_client.post(self._convert_url(lead.id), format="json")
+        res2 = admin_client.post(self._convert_url(lead.id), format="json")
+        assert res1.status_code == status.HTTP_200_OK
+        assert res2.status_code == status.HTTP_200_OK
+        assert res1.data["id"] == res2.data["id"]
+
+    def test_convert_sets_converted_customer_fk_on_lead(self, admin_client, lead):
+        from crm.models import Customer
+        lead = self._advance_to_quoted(lead)
+        admin_client.post(self._convert_url(lead.id), format="json")
+        lead.refresh_from_db()
+        customer = Customer.objects.get(phone=lead.phone)
+        assert lead.converted_customer_id == customer.id
