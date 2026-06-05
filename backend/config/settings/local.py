@@ -25,3 +25,6 @@ EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # Local dev: allow X-Tenant-Slug header as fallback when no subdomain is present
 TENANT_SLUG_DEV_HEADER = "HTTP_X_TENANT_SLUG"
+
+from corsheaders.defaults import default_headers  # noqa: E402
+CORS_ALLOW_HEADERS = list(default_headers) + ["x-tenant-slug"]

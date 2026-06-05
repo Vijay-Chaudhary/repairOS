@@ -231,6 +231,16 @@ class Command(BaseCommand):
                 defaults={"module": module, "label": codename.replace(".", " ").title()},
             )
 
+        # Grant all permissions to Tenant Admin so the first admin can access everything.
+        from authentication.models import RolePermission
+        admin_role = Role.objects.get(name="Tenant Admin")
+        all_permissions = Permission.objects.all()
+        existing = set(RolePermission.objects.filter(role=admin_role).values_list("permission_id", flat=True))
+        RolePermission.objects.bulk_create(
+            [RolePermission(role=admin_role, permission=p) for p in all_permissions if p.id not in existing],
+            ignore_conflicts=True,
+        )
+
     def _create_admin_user(self, name: str, email: str, phone: str, password: str):
         from authentication.models import Role, User, UserRole
 
