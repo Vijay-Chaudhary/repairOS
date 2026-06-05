@@ -7,6 +7,7 @@ import { z } from 'zod';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authApi } from '@/lib/api/auth';
+import { settingsApi } from '@/lib/api/settings';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
 import { wsClient } from '@/lib/ws/client';
@@ -27,7 +28,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const tenantSlug = searchParams.get('tenant') ?? '';
   const { setAccessToken, setUser } = useAuthStore();
-  const { setShops, setActiveShop } = useActiveShopStore();
+  const { setShops } = useActiveShopStore();
   const [apiError, setApiError] = useState<string | null>(null);
   const [lockedUntil, setLockedUntil] = useState<string | null>(null);
 
@@ -43,10 +44,10 @@ function LoginForm() {
       const res = await authApi.login({ ...values, ...(tenantSlug ? { tenant_slug: tenantSlug } : {}) });
       setAccessToken(res.access);
       setUser(res.user);
-      if (res.user.shop_ids.length > 0) {
-        setActiveShop(res.user.shop_ids[0]);
-      }
-      wsClient.connect(res.user.shop_ids[0] ?? null, res.user.id);
+      const shops = await settingsApi.listShops();
+      setShops(shops);
+      const shopId = useActiveShopStore.getState().activeShopId;
+      wsClient.connect(shopId, res.user.id);
       if (res.user.is_platform_admin) {
         router.replace('/platform');
       } else {

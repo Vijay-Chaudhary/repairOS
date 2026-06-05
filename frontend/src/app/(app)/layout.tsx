@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
 import { authApi } from '@/lib/api/auth';
+import { settingsApi } from '@/lib/api/settings';
 import { wsClient } from '@/lib/ws/client';
 import { flushOfflineQueue, loadQueueFromDb } from '@/lib/pwa/offlineQueue';
 import { useOfflineQueueStore } from '@/lib/stores/offlineQueueStore';
@@ -14,7 +15,7 @@ const REFRESH_INTERVAL_MS = 13 * 60 * 1000;
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { setAccessToken, setUser, logout, isBootstrapping, setBootstrapping, user } = useAuthStore();
-  const { setActiveShop } = useActiveShopStore();
+  const { setShops } = useActiveShopStore();
   const { setOnline } = useOfflineQueueStore();
   const router = useRouter();
   const pathname = usePathname();
@@ -38,10 +39,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     try {
       const res = await authApi.refresh();
       setAccessToken(res.access);
-      const me = await authApi.me();
+      const [me, shops] = await Promise.all([authApi.me(), settingsApi.listShops()]);
       setUser(me);
-      const shopId = useActiveShopStore.getState().activeShopId ?? me.shop_ids[0] ?? null;
-      if (shopId) setActiveShop(shopId);
+      setShops(shops);  // auto-selects first shop if activeShopId is null
+      const shopId = useActiveShopStore.getState().activeShopId;
       wsClient.connect(shopId, me.id);
       scheduleProactiveRefresh();
     } catch {
@@ -50,7 +51,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     } finally {
       setBootstrapping(false);
     }
-  }, [logout, pathname, router, scheduleProactiveRefresh, setAccessToken, setActiveShop, setBootstrapping, setUser]);
+  }, [logout, pathname, router, scheduleProactiveRefresh, setAccessToken, setBootstrapping, setShops, setUser]);
 
   useEffect(() => {
     bootstrap();

@@ -82,6 +82,9 @@ export interface WhatsAppConnection {
 
 export const settingsApi = {
   // Shop
+  listShops: () =>
+    apiGet<Pick<Shop, 'id' | 'name' | 'code' | 'address' | 'city'>[]>('/shops/'),
+
   getShop: (id: string) =>
     apiGet<Shop>(`/shops/${id}/`),
 
