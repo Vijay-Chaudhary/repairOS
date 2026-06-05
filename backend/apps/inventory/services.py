@@ -53,9 +53,11 @@ def update_stock(
     Returns (stock_record, new_quantity).
     Raises core.exceptions.InsufficientStock if the result would be negative.
     """
+    from core.context import get_tenant_db_alias
     from core.exceptions import InsufficientStock
 
-    with transaction.atomic():
+    _db = get_tenant_db_alias() or "default"
+    with transaction.atomic(using=_db):
         # Ensure the row exists before locking it
         InventoryStock.objects.get_or_create(
             shop=shop, variant=variant,

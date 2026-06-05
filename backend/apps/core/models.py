@@ -107,8 +107,10 @@ class DocumentCounter(models.Model):
     def next(cls, shop, year: int, doc_type: str, month: int = 0) -> int:
         """Return the next sequential number for this shop/year[/month]/doc_type, atomically."""
         from django.db import transaction
+        from core.context import get_tenant_db_alias
 
-        with transaction.atomic():
+        _db = get_tenant_db_alias() or "default"
+        with transaction.atomic(using=_db):
             counter, _ = cls.objects.select_for_update().get_or_create(
                 shop=shop, year=year, month=month, doc_type=doc_type,
                 defaults={"last_number": 0},

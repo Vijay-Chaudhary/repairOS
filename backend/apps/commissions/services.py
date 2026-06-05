@@ -161,7 +161,10 @@ def create_payout(technician, period_start, period_end, created_by) -> Commissio
 
     Raises BusinessRuleViolation if nothing to pay.
     """
+    from core.context import get_tenant_db_alias
     from core.exceptions import BusinessRuleViolation
+
+    _db = get_tenant_db_alias() or "default"
 
     unpaid = TechnicianCommission.objects.filter(
         technician=technician,
@@ -170,7 +173,7 @@ def create_payout(technician, period_start, period_end, created_by) -> Commissio
         job__created_at__date__lte=period_end,
     ).select_for_update()
 
-    with transaction.atomic():
+    with transaction.atomic(using=_db):
         rows = list(unpaid)
         if not rows:
             raise BusinessRuleViolation("No unpaid commissions for this technician in this period.")

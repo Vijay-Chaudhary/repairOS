@@ -35,9 +35,12 @@ def record_petty_cash_txn(account: PettyCashAccount, data: dict, user) -> PettyC
     Atomically adjust current_balance and record an immutable ledger row.
     Uses SELECT FOR UPDATE to serialise concurrent transactions.
     """
-    amount = Decimal(str(data["amount"])).quantize(_TWO)
+    from core.context import get_tenant_db_alias
 
-    with transaction.atomic():
+    amount = Decimal(str(data["amount"])).quantize(_TWO)
+    _db = get_tenant_db_alias() or "default"
+
+    with transaction.atomic(using=_db):
         account_locked = PettyCashAccount.objects.select_for_update().get(pk=account.pk)
 
         if data["txn_type"] == PettyCashTransaction.TxnType.CREDIT:
