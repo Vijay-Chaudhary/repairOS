@@ -106,6 +106,10 @@ class LeadViewSet(ShopScopedMixin, ModelViewSet):
     def get_queryset(self):
         qs = Lead.objects.filter(self._shop_filter()).select_related("assigned_to", "converted_customer")
 
+        search = self.request.query_params.get("search")
+        if search:
+            qs = qs.filter(Q(name__icontains=search) | Q(phone__icontains=search))
+
         status_filter = self.request.query_params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)
@@ -193,9 +197,9 @@ class CustomerViewSet(ShopScopedMixin, ModelViewSet):
     def get_queryset(self):
         qs = Customer.objects.filter(self._shop_filter()).select_related("source_lead")
 
-        q = self.request.query_params.get("q")
-        if q:
-            qs = qs.filter(Q(name__icontains=q) | Q(phone__icontains=q))
+        search = self.request.query_params.get("search") or self.request.query_params.get("q")
+        if search:
+            qs = qs.filter(Q(name__icontains=search) | Q(phone__icontains=search))
 
         customer_type = self.request.query_params.get("customer_type")
         if customer_type:
