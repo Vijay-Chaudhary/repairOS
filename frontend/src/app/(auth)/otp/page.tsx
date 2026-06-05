@@ -69,7 +69,7 @@ export default function OtpPage() {
     try {
       const normalized = normalizePhone(phone);
       const res = await authApi.otpVerify({ phone: normalized, otp });
-      setAccessToken(res.access_token);
+      setAccessToken(res.access);
       setUser(res.user);
       if (res.user.shop_ids[0]) setActiveShop(res.user.shop_ids[0]);
       wsClient.connect(res.user.shop_ids[0] ?? null, res.user.id);

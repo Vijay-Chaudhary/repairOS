@@ -25,7 +25,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     refreshTimer.current = setInterval(async () => {
       try {
         const res = await authApi.refresh();
-        setAccessToken(res.access_token);
+        setAccessToken(res.access);
       } catch {
         logout();
         router.replace('/login');
@@ -37,7 +37,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     setBootstrapping(true);
     try {
       const res = await authApi.refresh();
-      setAccessToken(res.access_token);
+      setAccessToken(res.access);
       const me = await authApi.me();
       setUser(me);
       const shopId = useActiveShopStore.getState().activeShopId ?? me.shop_ids[0] ?? null;

@@ -29,7 +29,7 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
       setBootstrapping(true);
       try {
         const res = await authApi.refresh();
-        setAccessToken(res.access_token);
+        setAccessToken(res.access);
         const me = await authApi.me();
         setUser(me);
         if (!me.is_platform_admin) {

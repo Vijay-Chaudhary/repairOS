@@ -2,7 +2,7 @@ import { apiFetch, apiPost } from './client';
 import type { AuthUser } from '@/lib/stores/authStore';
 
 export interface LoginResponse {
-  access_token: string;
+  access: string;
   user: AuthUser;
 }
 
@@ -12,7 +12,7 @@ export interface OtpRequestResponse {
 }
 
 export const authApi = {
-  login: (body: { email: string; password: string }) =>
+  login: (body: { email: string; password: string; tenant_slug?: string }) =>
     apiFetch<LoginResponse>('/auth/login/', { method: 'POST', body: JSON.stringify(body), skipAuth: true }),
 
   otpRequest: (body: { phone: string }) =>
@@ -22,7 +22,7 @@ export const authApi = {
     apiFetch<LoginResponse>('/auth/otp/verify/', { method: 'POST', body: JSON.stringify(body), skipAuth: true }),
 
   refresh: () =>
-    apiFetch<{ access_token: string }>('/auth/token/refresh/', { method: 'POST', body: JSON.stringify({}), skipAuth: true, credentials: 'include' } as RequestInit & { skipAuth: boolean }),
+    apiFetch<{ access: string }>('/auth/token/refresh/', { method: 'POST', body: JSON.stringify({}), skipAuth: true, credentials: 'include' } as RequestInit & { skipAuth: boolean }),
 
   logout: () =>
     apiPost<void>('/auth/logout/', {}),

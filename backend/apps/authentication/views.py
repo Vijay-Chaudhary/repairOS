@@ -78,7 +78,7 @@ def _get_tenant_slug(request) -> str:
     return alias.removeprefix("tenant_")
 
 
-def _issue_tokens(user, tenant_slug: str, request) -> tuple[str, str]:
+def _issue_tokens(user, tenant_slug: str, request) -> tuple[str, str, dict]:
     """Returns (access_token_str, refresh_token_str) with custom claims injected."""
     from .tokens import _build_token_claims
 
@@ -102,7 +102,7 @@ def _issue_tokens(user, tenant_slug: str, request) -> tuple[str, str]:
         current_jti=str(refresh["jti"]),
     )
 
-    return str(access), str(refresh)
+    return str(access), str(refresh), extra
 
 
 def _set_refresh_cookie(response: Response, refresh_str: str) -> None:
@@ -160,7 +160,7 @@ class LoginView(APIView):
             except Tenant.DoesNotExist:
                 pass
 
-        access, refresh = _issue_tokens(user, tenant_slug, request)
+        access, refresh, claims = _issue_tokens(user, tenant_slug, request)
         _write_audit(request, user.id, AuditLog.Action.LOGIN)
 
         response = Response(
@@ -170,7 +170,12 @@ class LoginView(APIView):
                     "id": str(user.id),
                     "name": user.full_name,
                     "email": user.email,
+                    "phone": user.phone or "",
+                    "avatar_url": user.avatar_url or None,
                     "is_platform_admin": user.is_platform_admin,
+                    "shop_ids": claims.get("shop_ids", []),
+                    "role_ids": claims.get("role_ids", []),
+                    "permissions": claims.get("permissions", []),
                 },
             },
             status=status.HTTP_200_OK,
@@ -246,7 +251,7 @@ class OTPVerifyView(APIView):
             raise ValidationError({"phone": ["No active account found for this phone number."]})
 
         tenant_slug = _get_tenant_slug(request)
-        access, refresh = _issue_tokens(user, tenant_slug, request)
+        access, refresh, claims = _issue_tokens(user, tenant_slug, request)
         _write_audit(request, user.id, AuditLog.Action.LOGIN, extra={"method": "otp"})
 
         response = Response(
@@ -256,7 +261,12 @@ class OTPVerifyView(APIView):
                     "id": str(user.id),
                     "name": user.full_name,
                     "email": user.email,
+                    "phone": user.phone or "",
+                    "avatar_url": user.avatar_url or None,
                     "is_platform_admin": user.is_platform_admin,
+                    "shop_ids": claims.get("shop_ids", []),
+                    "role_ids": claims.get("role_ids", []),
+                    "permissions": claims.get("permissions", []),
                 },
             },
             status=status.HTTP_200_OK,
@@ -397,4 +407,18 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        user = request.user
+        tenant_slug = _get_tenant_slug(request)
+        from .tokens import _build_token_claims
+        claims = _build_token_claims(user, tenant_slug)
+        return Response({
+            "id": str(user.id),
+            "name": user.full_name,
+            "email": user.email,
+            "phone": user.phone or "",
+            "avatar_url": user.avatar_url or None,
+            "is_platform_admin": user.is_platform_admin,
+            "shop_ids": claims.get("shop_ids", []),
+            "role_ids": claims.get("role_ids", []),
+            "permissions": claims.get("permissions", []),
+        })

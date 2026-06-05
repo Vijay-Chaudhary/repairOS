@@ -1,6 +1,7 @@
 import { useAuthStore } from '@/lib/stores/authStore';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+const DEV_TENANT_SLUG = process.env.NEXT_PUBLIC_TENANT_SLUG ?? '';
 
 export class ApiError extends Error {
   code: string;
@@ -45,10 +46,10 @@ async function doRefresh(): Promise<string | null> {
       }
       return null;
     }
-    const data: ApiResponse<{ access_token: string }> = await res.json();
+    const data: ApiResponse<{ access: string }> = await res.json();
     if (!data.success) return null;
-    useAuthStore.getState().setAccessToken(data.data.access_token);
-    return data.data.access_token;
+    useAuthStore.getState().setAccessToken(data.data.access);
+    return data.data.access;
   } catch {
     return null;
   }
@@ -74,6 +75,7 @@ export async function apiFetch<T>(
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    ...(DEV_TENANT_SLUG ? { 'X-Tenant-Slug': DEV_TENANT_SLUG } : {}),
     ...(fetchOptions.headers as Record<string, string> | undefined),
   };
 
