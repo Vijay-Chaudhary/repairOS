@@ -42,85 +42,126 @@ def _shop_filter(shop_ids: list) -> Q:
 
 def dashboard(shop_ids: list) -> dict:
     today = timezone.now().date()
+    month_start = date(today.year, today.month, 1)
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
-    month_end = date(today.year, today.month, 1)
     if today.month == 12:
         next_month = date(today.year + 1, 1, 1)
     else:
         next_month = date(today.year, today.month + 1, 1)
+    trend_start = today - timedelta(days=13)
 
     from repair.models import JobTicket
     from billing.models import RepairInvoice, Payment
+    from crm.models import Customer, FollowUpTask
     from amc.models import AMCVisit, AMCContract
     from inventory.models import InventoryStock
     from finance.models import BudgetAllocation
 
     sq = _shop_filter(shop_ids)
+    terminal = [JobTicket.Status.DELIVERED, JobTicket.Status.CLOSED, JobTicket.Status.CANCELLED]
 
-    # 1. Jobs today by status
-    jobs_today = (
+    # 1. Open jobs (not in terminal states)
+    open_jobs = (
         JobTicket.objects
-        .filter(sq, created_at__date=today)
-        .values("status")
-        .annotate(count=Count("id"))
-    )
-    jobs_today_by_status = {row["status"]: row["count"] for row in jobs_today}
-
-    # 2. Revenue today (sum of payments recorded today)
-    revenue_today = (
-        Payment.objects
-        .filter(invoice__shop_id__in=shop_ids, paid_at__date=today)
-        .aggregate(total=Sum("amount"))["total"] or _ZERO
+        .filter(sq, deleted_at__isnull=True)
+        .exclude(status__in=terminal)
+        .count()
     )
 
-    # 3. Outstanding dues (all unpaid/partially-paid repair invoices)
-    outstanding_dues = (
+    # 2. Jobs completed (delivered or closed) today
+    jobs_completed_today = (
+        JobTicket.objects
+        .filter(sq, status__in=[JobTicket.Status.DELIVERED, JobTicket.Status.CLOSED],
+                updated_at__date=today)
+        .count()
+    )
+
+    # 3. Revenue today and this month
+    payments_qs = Payment.objects.filter(invoice__shop_id__in=shop_ids) if shop_ids else Payment.objects.none()
+    revenue_today = payments_qs.filter(paid_at__date=today).aggregate(t=Sum("amount"))["t"] or _ZERO
+    revenue_month = payments_qs.filter(paid_at__date__gte=month_start).aggregate(t=Sum("amount"))["t"] or _ZERO
+
+    # 4. Revenue trend — last 14 days
+    trend_payments = (
+        payments_qs
+        .filter(paid_at__date__gte=trend_start)
+        .values("paid_at__date")
+        .annotate(revenue=Sum("amount"))
+        .order_by("paid_at__date")
+    )
+    revenue_trend = [
+        {"date": str(row["paid_at__date"]), "revenue": _d(row["revenue"])}
+        for row in trend_payments
+    ]
+
+    # 5. Outstanding dues (repair)
+    outstanding_amount = (
         RepairInvoice.objects
         .filter(sq, amount_outstanding__gt=0, deleted_at__isnull=True)
-        .aggregate(total=Sum("amount_outstanding"))["total"] or _ZERO
+        .aggregate(t=Sum("amount_outstanding"))["t"] or _ZERO
     )
 
-    # 4. AMC visits this week
+    # 6. New customers this month
+    new_customers_month = (
+        Customer.objects
+        .filter(sq, deleted_at__isnull=True, created_at__date__gte=month_start)
+        .count()
+    )
+
+    # 7. CRM tasks due today (scoped via lead or customer shop)
+    task_shop_q = (
+        Q(lead__shop_id__in=shop_ids) | Q(customer__shop_id__in=shop_ids)
+        if shop_ids else Q(pk__in=[])
+    )
+    tasks_due_today = (
+        FollowUpTask.objects
+        .filter(task_shop_q, deleted_at__isnull=True, due_date=today)
+        .exclude(status="completed")
+        .count()
+    )
+
+    # 8. AMC visits this week
     amc_visits_this_week = (
         AMCVisit.objects
         .filter(contract__shop_id__in=shop_ids, scheduled_date__range=(week_start, week_end))
         .count()
     )
 
-    # 5. Low stock alerts
+    # 9. Low stock alerts
     low_stock_alerts = (
         InventoryStock.objects
         .filter(shop_id__in=shop_ids, quantity_in_stock__lt=F("reorder_level"))
         .count()
     )
 
-    # 6. Contracts expiring this month
+    # 10. Contracts expiring this month
     contracts_expiring_this_month = (
         AMCContract.objects
-        .filter(
-            shop_id__in=shop_ids,
-            end_date__gte=today,
-            end_date__lt=next_month,
-        )
+        .filter(shop_id__in=shop_ids, end_date__gte=today, end_date__lt=next_month)
         .count()
     )
 
-    # 7. Budget heads over limit
-    budget_heads_over_limit = (
+    # 11. Budget heads over limit
+    over_budget_heads = (
         BudgetAllocation.objects
         .filter(head__shop_id__in=shop_ids, variance__gt=0)
         .count()
     )
 
     return {
-        "jobs_today_by_status": jobs_today_by_status,
+        "open_jobs": open_jobs,
+        "jobs_completed_today": jobs_completed_today,
         "revenue_today": _d(revenue_today),
-        "outstanding_dues": _d(outstanding_dues),
+        "revenue_month": _d(revenue_month),
+        "outstanding_amount": _d(outstanding_amount),
+        "new_customers_month": new_customers_month,
+        "tasks_due_today": tasks_due_today,
         "amc_visits_this_week": amc_visits_this_week,
         "low_stock_alerts": low_stock_alerts,
         "contracts_expiring_this_month": contracts_expiring_this_month,
-        "budget_heads_over_limit": budget_heads_over_limit,
+        "over_budget_heads": over_budget_heads,
+        "revenue_trend": revenue_trend,
     }
 
 

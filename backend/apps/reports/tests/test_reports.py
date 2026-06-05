@@ -143,24 +143,28 @@ class TestDashboard:
         res = rpt_client.get(self.url, {"shop_id": str(shop.id)})
         assert res.status_code == status.HTTP_200_OK
         data = res.data
-        assert "jobs_today_by_status" in data
+        assert "open_jobs" in data
+        assert "jobs_completed_today" in data
         assert "revenue_today" in data
-        assert "outstanding_dues" in data
+        assert "revenue_month" in data
+        assert "outstanding_amount" in data
+        assert "new_customers_month" in data
+        assert "tasks_due_today" in data
         assert "amc_visits_this_week" in data
         assert "low_stock_alerts" in data
         assert "contracts_expiring_this_month" in data
-        assert "budget_heads_over_limit" in data
+        assert "over_budget_heads" in data
+        assert "revenue_trend" in data
 
     def test_revenue_today_reflects_payments(self, rpt_client, shop, paid_invoice):
         res = rpt_client.get(self.url, {"shop_id": str(shop.id)})
         assert res.status_code == status.HTTP_200_OK
         assert Decimal(str(res.data["revenue_today"])) >= paid_invoice.grand_total
 
-    def test_outstanding_dues_counts_unpaid(self, rpt_client, shop, repair_invoice):
-        """Repair invoice with outstanding > 0 should appear in outstanding_dues."""
+    def test_outstanding_amount_counts_unpaid(self, rpt_client, shop, repair_invoice):
         res = rpt_client.get(self.url, {"shop_id": str(shop.id)})
         assert res.status_code == status.HTTP_200_OK
-        assert Decimal(str(res.data["outstanding_dues"])) >= repair_invoice.grand_total
+        assert Decimal(str(res.data["outstanding_amount"])) >= repair_invoice.grand_total
 
 
 # ──────────────────────────────────────────────────────────────────────────────
