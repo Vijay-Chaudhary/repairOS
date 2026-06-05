@@ -12,6 +12,7 @@ from .models import (
     CustomerSegmentMember,
     FollowUpTask,
     Lead,
+    LeadQuote,
 )
 
 _PHONE_RE = re.compile(r"^\+[1-9]\d{6,14}$")
@@ -37,10 +38,14 @@ class LeadSerializer(serializers.ModelSerializer):
         model = Lead
         fields = [
             "id", "shop_id", "name", "phone", "email", "source", "status",
-            "lost_reason", "device_type", "notes", "assigned_to", "assigned_to_name",
+            "lost_reason", "status_before_lost", "device_type", "notes",
+            "assigned_to", "assigned_to_name",
             "converted_customer_id", "converted_at", "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "status", "converted_customer_id", "converted_at", "created_at", "updated_at"]
+        read_only_fields = [
+            "id", "status", "status_before_lost",
+            "converted_customer_id", "converted_at", "created_at", "updated_at",
+        ]
 
     def validate_phone(self, value):
         return _validate_e164(value)
@@ -144,6 +149,46 @@ class CommunicationLogSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data["logged_by"] = self.context["request"].user
         return super().create(validated_data)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Lead quote
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class QuoteItemSerializer(serializers.Serializer):
+    description = serializers.CharField()
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+
+class LeadQuoteSerializer(serializers.ModelSerializer):
+    items = QuoteItemSerializer(many=True)
+    sent_by_name = serializers.CharField(source="sent_by.full_name", read_only=True)
+
+    class Meta:
+        model = LeadQuote
+        fields = [
+            "id", "quote_number", "items", "total_amount", "valid_until",
+            "notes", "sent_via_whatsapp", "sent_by", "sent_by_name", "created_at",
+        ]
+        read_only_fields = ["id", "quote_number", "sent_via_whatsapp", "sent_by", "created_at"]
+
+
+class SendQuoteSerializer(serializers.Serializer):
+    """Input-only serializer for the send_quote action."""
+    items = QuoteItemSerializer(many=True)
+    valid_until = serializers.DateField()
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_items(self, value):
+        if not value:
+            raise serializers.ValidationError("At least one line item is required.")
+        return value
+
+    def validate(self, attrs):
+        total = sum(item["amount"] for item in attrs["items"])
+        attrs["total_amount"] = total
+        return attrs
 
 
 # ──────────────────────────────────────────────────────────────────────────────

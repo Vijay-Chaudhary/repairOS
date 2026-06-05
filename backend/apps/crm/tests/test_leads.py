@@ -115,12 +115,12 @@ class TestLeadCreate:
     def test_list_leads(self, admin_client, lead):
         res = admin_client.get(self.url)
         assert res.status_code == status.HTTP_200_OK
-        assert len(res.data["data"]) >= 1
+        assert len(res.data["items"]) >= 1
 
     def test_filter_by_status(self, admin_client, lead):
         res = admin_client.get(self.url + "?status=new")
         assert res.status_code == status.HTTP_200_OK
-        for item in res.data["data"]:
+        for item in res.data["items"]:
             assert item["status"] == "new"
 
 
@@ -178,6 +178,7 @@ class TestLeadStatusTransition:
         )
         assert res.status_code == status.HTTP_200_OK
         assert res.data["status"] == "lost"
+        assert res.data["status_before_lost"] == "quoted"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -393,7 +394,7 @@ class TestLeadTenantIsolation:
         res = client_a.get("/api/v1/crm/leads/")
 
         assert res.status_code == status.HTTP_200_OK
-        ids = [item["id"] for item in res.data["data"]]
+        ids = [item["id"] for item in res.data["items"]]
         assert str(lead_a.id) in ids
 
     def test_shop_scoped_user_cannot_see_other_shop_leads(self, db, shop_a, shop_b):
@@ -412,7 +413,7 @@ class TestLeadTenantIsolation:
         res = client_a.get("/api/v1/crm/leads/")
 
         assert res.status_code == status.HTTP_200_OK
-        ids = [item["id"] for item in res.data["data"]]
+        ids = [item["id"] for item in res.data["items"]]
         assert str(lead_b.id) not in ids, (
             "Tenant isolation failure: shop A user can see shop B lead"
         )
@@ -429,7 +430,7 @@ class TestLeadTenantIsolation:
 
         res = admin_client.get("/api/v1/crm/leads/")
         assert res.status_code == status.HTTP_200_OK
-        ids = [item["id"] for item in res.data["data"]]
+        ids = [item["id"] for item in res.data["items"]]
         assert str(lead_a.id) in ids
         assert str(lead_b.id) in ids
 
@@ -549,3 +550,169 @@ class TestLeadConvertEnhanced:
         lead.refresh_from_db()
         customer = Customer.objects.get(phone=lead.phone)
         assert lead.converted_customer_id == customer.id
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Lost from any active stage + re-open to prior stage
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestLeadLostAndReopen:
+    """
+    Spec §4.1: any active stage can go to lost (reason required).
+    Re-open restores the exact prior stage and clears status_before_lost.
+    """
+
+    def _status_url(self, lead_id):
+        return f"/api/v1/crm/leads/{lead_id}/status/"
+
+    def _make_lead(self, shop, phone, start_status="new"):
+        from crm.models import Lead
+        from crm.services import transition_lead
+        from authentication.models import User
+
+        lead = Lead.objects.create(
+            shop=shop, name="Test Lead", phone=phone,
+            source=Lead.Source.WALK_IN,
+        )
+        if start_status == "new":
+            return lead
+        user = User.objects.first()
+        pipeline = ["contacted", "interested", "quoted"]
+        for s in pipeline:
+            lead = transition_lead(lead, s, user)
+            if s == start_status:
+                break
+        return lead
+
+    @pytest.mark.parametrize("start_status,phone", [
+        ("new",       "+919110000001"),
+        ("contacted", "+919110000002"),
+        ("interested","+919110000003"),
+        ("quoted",    "+919110000004"),
+    ])
+    def test_lost_from_any_active_stage_sets_status_before_lost(
+        self, admin_client, shop, start_status, phone
+    ):
+        lead = self._make_lead(shop, phone, start_status)
+        res = admin_client.post(
+            self._status_url(lead.id),
+            {"to_status": "lost", "reason": "No budget"},
+            format="json",
+        )
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data["status"] == "lost"
+        assert res.data["status_before_lost"] == start_status
+
+    @pytest.mark.parametrize("start_status,phone", [
+        ("new",       "+919110000011"),
+        ("contacted", "+919110000012"),
+        ("interested","+919110000013"),
+        ("quoted",    "+919110000014"),
+    ])
+    def test_lost_requires_reason_from_all_stages(
+        self, admin_client, shop, start_status, phone
+    ):
+        lead = self._make_lead(shop, phone, start_status)
+        res = admin_client.post(
+            self._status_url(lead.id),
+            {"to_status": "lost"},  # no reason
+            format="json",
+        )
+        assert res.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    @pytest.mark.parametrize("start_status,phone", [
+        ("new",       "+919110000021"),
+        ("contacted", "+919110000022"),
+        ("interested","+919110000023"),
+        ("quoted",    "+919110000024"),
+    ])
+    def test_reopen_returns_to_exact_prior_stage(
+        self, admin_client, shop, start_status, phone
+    ):
+        lead = self._make_lead(shop, phone, start_status)
+        # Mark lost first
+        admin_client.post(
+            self._status_url(lead.id),
+            {"to_status": "lost", "reason": "Changed mind"},
+            format="json",
+        )
+        lead.refresh_from_db()
+        assert lead.status == "lost"
+        assert lead.status_before_lost == start_status
+
+        # Re-open — must target the prior stage
+        res = admin_client.post(
+            self._status_url(lead.id),
+            {"to_status": start_status},
+            format="json",
+        )
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data["status"] == start_status
+        assert res.data["status_before_lost"] is None
+
+    def test_reopen_clears_lost_reason(self, admin_client, shop):
+        lead = self._make_lead(shop, "+919110000031", "quoted")
+        admin_client.post(
+            self._status_url(lead.id),
+            {"to_status": "lost", "reason": "Too expensive"},
+            format="json",
+        )
+        admin_client.post(
+            self._status_url(lead.id),
+            {"to_status": "quoted"},
+            format="json",
+        )
+        lead.refresh_from_db()
+        assert lead.lost_reason is None
+        assert lead.status_before_lost is None
+
+    def test_reopen_with_null_status_before_lost_returns_422(self, admin_client, shop):
+        from crm.models import Lead
+        # Simulate a legacy lost lead with no status_before_lost recorded
+        lead = Lead.objects.create(
+            shop=shop, name="Legacy Lost", phone="+919110000041",
+            source=Lead.Source.OTHER, status=Lead.Status.LOST,
+            lost_reason="old record", status_before_lost=None,
+        )
+        res = admin_client.post(
+            self._status_url(lead.id),
+            {"to_status": "interested"},
+            format="json",
+        )
+        assert res.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_reopen_to_wrong_stage_returns_400(self, admin_client, shop):
+        lead = self._make_lead(shop, "+919110000051", "new")
+        admin_client.post(
+            self._status_url(lead.id),
+            {"to_status": "lost", "reason": "Not interested"},
+            format="json",
+        )
+        # Lead was lost from 'new'; trying to re-open to 'quoted' must fail
+        res = admin_client.post(
+            self._status_url(lead.id),
+            {"to_status": "quoted"},
+            format="json",
+        )
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        assert res.json()["error"]["code"] == "INVALID_STATUS_TRANSITION"
+
+    def test_converted_lead_cannot_be_marked_lost(self, admin_client, lead):
+        from crm.services import transition_lead
+        from authentication.models import User
+        user = User.objects.first()
+        for s in ["contacted", "interested", "quoted"]:
+            lead = transition_lead(lead, s, user)
+        admin_client.post(f"/api/v1/crm/leads/{lead.id}/convert/", format="json")
+        lead.refresh_from_db()
+        assert lead.status == "converted"
+
+        res = admin_client.post(
+            self._status_url(lead.id),
+            {"to_status": "lost", "reason": "Irreversible"},
+            format="json",
+        )
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        assert res.json()["error"]["code"] == "INVALID_STATUS_TRANSITION"

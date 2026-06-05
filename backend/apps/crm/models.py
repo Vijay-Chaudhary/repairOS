@@ -62,6 +62,8 @@ class Lead(SoftDeleteModel):
         related_name="lead_conversions",
     )
     converted_at = models.DateTimeField(null=True, blank=True)
+    # Saved when the lead is marked lost so re-open can restore the exact prior stage.
+    status_before_lost = models.CharField(max_length=30, null=True, blank=True)
 
     class Meta:
         app_label = "crm"
@@ -70,6 +72,38 @@ class Lead(SoftDeleteModel):
             models.Index(fields=["shop", "status"]),
             models.Index(fields=["assigned_to"]),
         ]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Lead quote
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class LeadQuote(BaseModel):
+    """
+    A price quote sent to a lead before converting them to a customer.
+    Sending a quote transitions the lead to status='quoted' and fires
+    a WhatsApp notification.
+    """
+
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="quotes")
+    quote_number = models.CharField(max_length=50, unique=True)
+    # Line items: [{"description": "Screen replacement", "amount": "4500.00"}, ...]
+    items = models.JSONField(default=list)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    valid_until = models.DateField()
+    notes = models.TextField(blank=True, default="")
+    sent_via_whatsapp = models.BooleanField(default=False)
+    sent_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="sent_lead_quotes",
+    )
+
+    class Meta:
+        app_label = "crm"
+        db_table = "lead_quotes"
+        ordering = ["-created_at"]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.phone}) — {self.status}"

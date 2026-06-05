@@ -42,11 +42,11 @@ class InvalidStatusTransition(APIException):
     status_code = status.HTTP_400_BAD_REQUEST
     default_code = "INVALID_STATUS_TRANSITION"
 
-    def __init__(self, from_status: str, to_status: str):
-        super().__init__(
-            detail=f"Cannot move from '{from_status}' to '{to_status}'.",
-            code=self.default_code,
-        )
+    def __init__(self, from_status: str, to_status: str, hint: str = ""):
+        msg = f"Cannot move from '{from_status}' to '{to_status}'."
+        if hint:
+            msg = f"{msg} {hint}"
+        super().__init__(detail=msg, code=self.default_code)
 
 
 class InsufficientStock(APIException):

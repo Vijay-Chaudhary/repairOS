@@ -29,6 +29,7 @@ Manage leads through to conversion, maintain the rich customer profile (the 360�
 | source | VARCHAR(50) | walk_in/whatsapp/referral/google/facebook/other |
 | status | VARCHAR(30) | new/contacted/interested/quoted/converted/lost INDEXED |
 | lost_reason | TEXT | required if status=lost |
+| status_before_lost | VARCHAR(30) | NULL — set to the status at the moment of going to lost; cleared on re-open |
 | device_type | VARCHAR(100) | NULL |
 | notes | TEXT | NULL |
 | assigned_to | UUID | FK→users NULL |
@@ -93,12 +94,19 @@ Manage leads through to conversion, maintain the rich customer profile (the 360�
 ### 4.1 Lead lifecycle
 | Status | → next | WhatsApp |
 |---|---|---|
-| new | contacted (assign + log first contact) | — |
-| contacted | interested | — |
-| interested | quoted (create task / send estimate) | — |
-| quoted | converted / lost | estimate if job created |
-| converted | (auto-creates customer) | welcome on first job |
-| lost | terminal — `lost_reason` required | — |
+| new | contacted (assign + log first contact) / **lost** | — |
+| contacted | interested / **lost** | — |
+| interested | quoted (create task / send estimate) / **lost** | — |
+| quoted | converted / **lost** | estimate if job created |
+| converted | (auto-creates customer) — **terminal** | welcome on first job |
+| lost | **re-open** → restores exact prior stage | — |
+
+**Lost rules:**
+- `lost_reason` is required on every `→ lost` transition.
+- `status_before_lost` is set to the current status before the transition fires.
+- Re-open (`→ status_before_lost`): `status` is restored, `status_before_lost` and `lost_reason` are cleared.
+- If `status_before_lost` is null (legacy rows), re-open returns 422 `BUSINESS_RULE_VIOLATION`.
+- Passing `to_status` ≠ `status_before_lost` when re-opening returns 400 `INVALID_STATUS_TRANSITION`.
 
 **Convert:** creates a `customers` row, sets `converted_customer_id`, `converted_at`, copies `source_lead_id`. Idempotent — re-convert returns existing customer.
 
