@@ -17,9 +17,21 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
   GRANT ALL PRIVILEGES ON DATABASE repaiross_master TO repaiross_master_user;
   GRANT ALL ON SCHEMA public TO repaiross_master_user;
 
+EOSQL
+
+# Switch to md5 password storage and auth so PgBouncer (auth_type=md5)
+# can authenticate both tenant users and the auth-query lookup user.
+# SCRAM-SHA-256 (PG16 default) is incompatible with PgBouncer md5 auth mode.
+# Must happen BEFORE creating pgbouncer_auth so its password is stored as md5.
+sed -i 's/scram-sha-256/md5/g' "$PGDATA/pg_hba.conf"
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
+  -c "ALTER SYSTEM SET password_encryption = 'md5';"
+pg_ctl reload -D "$PGDATA" -s
+
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
   -- ── PgBouncer auth lookup user ─────────────────────────────────────────────
-  -- This user authenticates on behalf of all other users (including dynamic
-  -- tenant users) by querying pg_shadow. Requires pg_monitor membership.
+  -- Created AFTER password_encryption='md5' is active so the hash is md5,
+  -- not SCRAM-SHA-256. PgBouncer auth_type=md5 cannot verify SCRAM hashes.
   DO \$\$
   BEGIN
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pgbouncer_auth') THEN
@@ -33,11 +45,3 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
   GRANT SELECT ON pg_shadow TO pgbouncer_auth;
 
 EOSQL
-
-# Switch to md5 password storage and auth so PgBouncer (auth_type=md5)
-# can authenticate both tenant users and the auth-query lookup user.
-# SCRAM-SHA-256 (PG16 default) is incompatible with PgBouncer md5 auth mode.
-sed -i 's/scram-sha-256/md5/g' "$PGDATA/pg_hba.conf"
-psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
-  -c "ALTER SYSTEM SET password_encryption = 'md5';"
-pg_ctl reload -D "$PGDATA" -s
