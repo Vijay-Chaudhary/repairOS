@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { authApi } from '@/lib/api/auth';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
@@ -22,8 +22,10 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const tenantSlug = searchParams.get('tenant') ?? '';
   const { setAccessToken, setUser } = useAuthStore();
   const { setShops, setActiveShop } = useActiveShopStore();
   const [apiError, setApiError] = useState<string | null>(null);
@@ -38,8 +40,8 @@ export default function LoginPage() {
     setApiError(null);
     setLockedUntil(null);
     try {
-      const res = await authApi.login(values);
-      setAccessToken(res.access_token);
+      const res = await authApi.login({ ...values, ...(tenantSlug ? { tenant_slug: tenantSlug } : {}) });
+      setAccessToken(res.access);
       setUser(res.user);
       if (res.user.shop_ids.length > 0) {
         setActiveShop(res.user.shop_ids[0]);
@@ -108,5 +110,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }

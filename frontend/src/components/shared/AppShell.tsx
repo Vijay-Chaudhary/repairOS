@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Wrench, Users, ShoppingCart, FileText,
   Package, ShoppingBag, CreditCard, TrendingUp, Settings,
   Building, BarChart3, DollarSign, Menu, X, ChevronDown,
-  Bell, Search, LogOut, User
+  Bell, Search, LogOut, User, UserCheck, Boxes, Receipt,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
@@ -21,7 +21,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 
-interface NavItem {
+// ── Types ─────────────────────────────────────────────────────────────
+
+interface NavLeaf {
+  type: 'leaf';
   label: string;
   href: string;
   icon: React.ElementType;
@@ -29,31 +32,58 @@ interface NavItem {
   anyOf?: string[];
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Jobs', href: '/jobs', icon: Wrench, permission: 'repair.jobs.view' },
-  { label: 'Customers', href: '/customers', icon: Users, permission: 'crm.customers.view' },
-  { label: 'Leads', href: '/leads', icon: Users, permission: 'crm.leads.view' },
-  { label: 'POS', href: '/pos', icon: ShoppingCart, permission: 'pos.counter_sale.create' },
-  { label: 'AMC', href: '/amc', icon: Building, permission: 'amc.contracts.view' },
-  { label: 'Inventory', href: '/inventory', icon: Package, permission: 'erp.inventory.view' },
-  { label: 'Purchases', href: '/purchases', icon: ShoppingBag, permission: 'erp.purchase_orders.create' },
-  { label: 'Invoices', href: '/invoices', icon: FileText, permission: 'billing.repair_invoices.view' },
-  { label: 'Payments', href: '/payments', icon: CreditCard, permission: 'billing.payments.record' },
-  { label: 'Commissions', href: '/commissions', icon: TrendingUp, permission: 'hr.salary.view' },
-  { label: 'HR', href: '/hr', icon: Users, permission: 'hr.employees.view' },
-  { label: 'Finance', href: '/finance', icon: DollarSign, permission: 'erp.expenses.view' },
-  { label: 'Reports', href: '/reports', icon: BarChart3, anyOf: ['reports.revenue.view', 'reports.repair.view'] },
-  { label: 'Settings', href: '/settings', icon: Settings, permission: 'settings.shop.edit' },
+interface NavGroup {
+  type: 'group';
+  label: string;
+  icon: React.ElementType;
+  children: NavLeaf[];
+}
+
+type NavEntry = NavLeaf | NavGroup;
+
+// ── Data ──────────────────────────────────────────────────────────────
+
+const NAV_ITEMS: NavEntry[] = [
+  { type: 'leaf', label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+
+  { type: 'group', label: 'Repair', icon: Wrench, children: [
+    { type: 'leaf', label: 'Jobs', href: '/jobs', icon: Wrench, permission: 'repair.jobs.view' },
+  ]},
+
+  { type: 'group', label: 'CRM', icon: UserCheck, children: [
+    { type: 'leaf', label: 'Customers', href: '/customers', icon: Users, permission: 'crm.customers.view' },
+    { type: 'leaf', label: 'Leads',     href: '/leads',     icon: Users, permission: 'crm.leads.view' },
+  ]},
+
+  { type: 'leaf', label: 'POS',  href: '/pos', icon: ShoppingCart, permission: 'pos.counter_sale.create' },
+  { type: 'leaf', label: 'AMC',  href: '/amc', icon: Building,     permission: 'amc.contracts.view' },
+
+  { type: 'group', label: 'Inventory & Purchases', icon: Boxes, children: [
+    { type: 'leaf', label: 'Inventory', href: '/inventory', icon: Package,     permission: 'erp.inventory.view' },
+    { type: 'leaf', label: 'Purchases', href: '/purchases', icon: ShoppingBag, permission: 'erp.purchase_orders.create' },
+  ]},
+
+  { type: 'group', label: 'Billing', icon: Receipt, children: [
+    { type: 'leaf', label: 'Invoices', href: '/invoices', icon: FileText,   permission: 'billing.repair_invoices.view' },
+    { type: 'leaf', label: 'Payments', href: '/payments', icon: CreditCard, permission: 'billing.payments.record' },
+  ]},
+
+  { type: 'leaf', label: 'Commissions', href: '/commissions', icon: TrendingUp, permission: 'hr.salary.view' },
+  { type: 'leaf', label: 'HR',          href: '/hr',          icon: Users,       permission: 'hr.employees.view' },
+  { type: 'leaf', label: 'Finance',     href: '/finance',     icon: DollarSign,  permission: 'erp.expenses.view' },
+  { type: 'leaf', label: 'Reports',     href: '/reports',     icon: BarChart3,   anyOf: ['reports.revenue.view', 'reports.repair.view'] },
+  { type: 'leaf', label: 'Settings',    href: '/settings',    icon: Settings,    permission: 'settings.shop.edit' },
 ];
 
 const BOTTOM_TAB_ITEMS = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Jobs', href: '/jobs', icon: Wrench },
-  { label: 'POS', href: '/pos', icon: ShoppingCart },
+  { label: 'Jobs',      href: '/jobs',      icon: Wrench },
+  { label: 'POS',       href: '/pos',       icon: ShoppingCart },
 ];
 
-function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
+// ── Nav components ────────────────────────────────────────────────────
+
+function NavLink({ item, collapsed }: { item: NavLeaf; collapsed: boolean }) {
   const pathname = usePathname();
   const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
 
@@ -75,6 +105,90 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
     </Can>
   );
 }
+
+function NavGroupItem({ group, collapsed }: { group: NavGroup; collapsed: boolean }) {
+  const pathname = usePathname();
+  const { navGroupsOpen, toggleNavGroup } = useUiStore();
+  const { hasPermission, hasAnyPermission } = useAuthStore();
+
+  const hasAccess = group.children.some((child) =>
+    child.anyOf
+      ? hasAnyPermission(child.anyOf)
+      : child.permission
+        ? hasPermission(child.permission)
+        : true
+  );
+  if (!hasAccess) return null;
+
+  const isChildActive = group.children.some(
+    (c) => pathname === c.href || pathname.startsWith(c.href + '/')
+  );
+  // auto-open when a child is active; otherwise use stored toggle state
+  const isOpen = isChildActive || (navGroupsOpen[group.label] ?? false);
+
+  if (collapsed) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            className={cn(
+              'flex items-center justify-center w-full px-3 py-2.5 rounded-md text-sm font-medium transition-colors min-h-[44px]',
+              isChildActive
+                ? 'bg-[var(--accent)]/10 text-[var(--accent)]'
+                : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
+            )}
+            title={group.label}
+          >
+            <group.icon className="h-5 w-5 shrink-0" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="right" className="w-48">
+          <div className="px-2 py-1.5 text-xs font-semibold text-[var(--text-muted)]">{group.label}</div>
+          {group.children.map((child) => (
+            <Can key={child.href} permission={child.permission} anyOf={child.anyOf}>
+              <DropdownMenuItem asChild>
+                <Link href={child.href} className="flex items-center gap-2">
+                  <child.icon className="h-4 w-4" />
+                  {child.label}
+                </Link>
+              </DropdownMenuItem>
+            </Can>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        onClick={() => toggleNavGroup(group.label)}
+        aria-expanded={isOpen}
+        className={cn(
+          'flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm font-medium transition-colors min-h-[44px]',
+          isChildActive
+            ? 'text-[var(--accent)]'
+            : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
+        )}
+      >
+        <group.icon className="h-5 w-5 shrink-0" />
+        <span className="flex-1 text-left">{group.label}</span>
+        <ChevronDown
+          className={cn('h-4 w-4 shrink-0 transition-transform duration-200', isOpen && 'rotate-180')}
+        />
+      </button>
+      {isOpen && (
+        <div className="ml-4 pl-2 border-l border-[var(--border)] space-y-0.5 mt-0.5">
+          {group.children.map((child) => (
+            <NavLink key={child.href} item={child} collapsed={false} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── ShopSwitcher ──────────────────────────────────────────────────────
 
 function ShopSwitcher() {
   const { shops, activeShopId, isAllShops, setActiveShop, setAllShops } = useActiveShopStore();
@@ -118,6 +232,8 @@ function ShopSwitcher() {
   );
 }
 
+// ── AppShell ──────────────────────────────────────────────────────────
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuthStore();
   const { sidebarCollapsed, toggleSidebar } = useUiStore();
@@ -159,9 +275,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Nav */}
         <ScrollArea className="flex-1 py-2 px-2">
           <nav className="space-y-0.5">
-            {NAV_ITEMS.map((item) => (
-              <NavLink key={item.href} item={item} collapsed={sidebarCollapsed} />
-            ))}
+            {NAV_ITEMS.map((entry) =>
+              entry.type === 'group' ? (
+                <NavGroupItem key={entry.label} group={entry} collapsed={sidebarCollapsed} />
+              ) : (
+                <NavLink key={entry.href} item={entry} collapsed={sidebarCollapsed} />
+              )
+            )}
           </nav>
         </ScrollArea>
 
