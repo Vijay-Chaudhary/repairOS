@@ -109,20 +109,35 @@ class CustomerMergeSerializer(serializers.Serializer):
 
 class CommunicationLogSerializer(serializers.ModelSerializer):
     logged_by_name = serializers.CharField(source="logged_by.full_name", read_only=True)
+    logged_at = serializers.DateTimeField(required=False, default=timezone.now)
+    # Accept _id suffix variants that the frontend sends
+    customer_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
+    lead_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
 
     class Meta:
         model = CommunicationLog
         fields = [
-            "id", "customer", "lead", "type", "direction", "summary",
-            "duration_minutes", "logged_by", "logged_by_name", "logged_at",
+            "id", "customer", "customer_id", "lead", "lead_id", "type", "direction",
+            "summary", "duration_minutes", "logged_by", "logged_by_name", "logged_at",
             "created_at",
         ]
-        read_only_fields = ["id", "logged_by", "created_at"]
+        read_only_fields = ["id", "customer", "lead", "logged_by", "created_at"]
 
     def validate(self, attrs):
+        # Resolve _id fields to FK instances
+        if attrs.get("customer_id"):
+            attrs["customer"] = Customer.objects.get(pk=attrs.pop("customer_id"))
+        else:
+            attrs.pop("customer_id", None)
+
+        if attrs.get("lead_id"):
+            attrs["lead"] = Lead.objects.get(pk=attrs.pop("lead_id"))
+        else:
+            attrs.pop("lead_id", None)
+
         if not attrs.get("customer") and not attrs.get("lead"):
             raise serializers.ValidationError(
-                "One of 'customer' or 'lead' must be provided."
+                "One of 'customer_id' or 'lead_id' must be provided."
             )
         return attrs
 
