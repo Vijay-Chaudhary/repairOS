@@ -19,6 +19,7 @@ export interface Lead {
   source: LeadSource;
   status: LeadStatus;
   lost_reason?: string | null;
+  status_before_lost?: string | null;
   device_type?: string | null;
   notes?: string | null;
   assigned_to?: string | null;
@@ -78,6 +79,24 @@ export interface Task {
   assigned_to_name?: string | null;
   completed_at?: string | null;
   completed_by?: string | null;
+}
+
+export interface QuoteItem {
+  description: string;
+  amount: string;
+}
+
+export interface LeadQuote {
+  id: string;
+  quote_number: string;
+  items: QuoteItem[];
+  total_amount: string;
+  valid_until: string;
+  notes: string;
+  sent_via_whatsapp: boolean;
+  sent_by: string;
+  sent_by_name?: string;
+  created_at: string;
 }
 
 export interface Segment {
@@ -287,6 +306,13 @@ export const crmApi = {
   // Lead status
   changeLeadStatus: (id: string, toStatus: LeadStatus, reason?: string) =>
     apiPost<Lead>(`/crm/leads/${id}/status/`, { to_status: toStatus, ...(reason ? { reason } : {}) }),
+
+  // Lead quotes
+  sendQuote: (id: string, body: { items: QuoteItem[]; valid_until: string; notes?: string }) =>
+    apiPost<LeadQuote>(`/crm/leads/${id}/quote/`, body),
+
+  listLeadQuotes: (id: string) =>
+    apiGet<LeadQuote[]>(`/crm/leads/${id}/quotes/`),
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -297,15 +323,16 @@ export const LEAD_PIPELINE_COLS: Array<{ status: LeadStatus; label: string }> = 
   { status: 'interested', label: 'Interested' },
   { status: 'quoted',     label: 'Quoted' },
   { status: 'converted',  label: 'Converted' },
+  { status: 'lost',       label: 'Lost' },
 ];
 
-export const LEAD_TRANSITIONS: Record<LeadStatus, Array<{ to: LeadStatus; label: string; requiresReason?: boolean }>> = {
-  new:       [{ to: 'contacted', label: 'Mark contacted' }],
-  contacted: [{ to: 'interested', label: 'Mark interested' }],
-  interested:[{ to: 'quoted', label: 'Send quote' }],
+export const LEAD_TRANSITIONS: Record<LeadStatus, Array<{ to: LeadStatus; label: string; requiresReason?: boolean; requiresQuote?: boolean }>> = {
+  new:       [{ to: 'contacted', label: 'Mark contacted' }, { to: 'lost', label: 'Mark lost', requiresReason: true }],
+  contacted: [{ to: 'interested', label: 'Mark interested' }, { to: 'lost', label: 'Mark lost', requiresReason: true }],
+  interested:[{ to: 'quoted', label: 'Send quote', requiresQuote: true }, { to: 'lost', label: 'Mark lost', requiresReason: true }],
   quoted:    [{ to: 'converted', label: 'Convert' }, { to: 'lost', label: 'Mark lost', requiresReason: true }],
   converted: [],
-  lost:      [],
+  lost:      [],  // re-open target is dynamic (lead.status_before_lost); handled in UI
 };
 
 export const SOURCE_LABELS: Record<LeadSource, string> = {

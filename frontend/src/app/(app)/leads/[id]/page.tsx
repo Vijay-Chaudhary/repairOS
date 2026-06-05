@@ -3,11 +3,14 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { ArrowLeft, Phone, Mail, Wrench, ExternalLink, Pencil, MessageSquare, Users } from 'lucide-react';
+import {
+  ArrowLeft, Phone, Mail, Wrench, ExternalLink, Pencil,
+  MessageSquare, Users, FileText, Plus, Trash2, MessageCircle,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -24,7 +27,7 @@ import { TaskList } from '@/components/crm/TaskList';
 import { LogCommunicationSheet } from '@/components/crm/LogCommunicationSheet';
 import {
   crmApi, LEAD_TRANSITIONS, SOURCE_LABELS, COMM_TYPE_LABELS,
-  type Lead, type LeadSource, type CommunicationLog,
+  type Lead, type LeadSource, type CommunicationLog, type LeadQuote, type QuoteItem,
 } from '@/lib/api/crm';
 import { qk } from '@/lib/query/keys';
 import { ApiError } from '@/lib/api/client';
@@ -43,6 +46,20 @@ const editSchema = z.object({
 });
 type EditValues = z.infer<typeof editSchema>;
 
+// ── Send quote schema ─────────────────────────────────────────────────────────
+
+const quoteItemSchema = z.object({
+  description: z.string().min(1, 'Description required'),
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, 'Enter a valid amount'),
+});
+
+const sendQuoteSchema = z.object({
+  items: z.array(quoteItemSchema).min(1, 'Add at least one item'),
+  valid_until: z.string().min(1, 'Expiry date required'),
+  notes: z.string().optional(),
+});
+type SendQuoteValues = z.infer<typeof sendQuoteSchema>;
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function LeadDetailPage() {
@@ -55,6 +72,7 @@ export default function LeadDetailPage() {
   const [lostDialogOpen, setLostDialogOpen] = useState(false);
   const [lostReason, setLostReason] = useState('');
   const [convertConfirmOpen, setConvertConfirmOpen] = useState(false);
+  const [sendQuoteOpen, setSendQuoteOpen] = useState(false);
 
   const { data: lead, isLoading, error } = useQuery({
     queryKey: qk.lead(id),
@@ -73,6 +91,13 @@ export default function LeadDetailPage() {
     queryKey: qk.tasks({ lead_id: id }),
     queryFn: () => crmApi.listTasks({ lead_id: id }),
     staleTime: 30_000,
+    enabled: !!lead,
+  });
+
+  const { data: quotesData, isLoading: quotesLoading } = useQuery({
+    queryKey: qk.leadQuotes(id),
+    queryFn: () => crmApi.listLeadQuotes(id),
+    staleTime: 60_000,
     enabled: !!lead,
   });
 
@@ -95,6 +120,24 @@ export default function LeadDetailPage() {
       router.push(`/customers/${customer.id}`);
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Conversion failed'),
+  });
+
+  const sendQuoteMutation = useMutation({
+    mutationFn: (values: SendQuoteValues) =>
+      crmApi.sendQuote(id, {
+        items: values.items as QuoteItem[],
+        valid_until: values.valid_until,
+        notes: values.notes,
+      }),
+    onSuccess: (quote) => {
+      queryClient.invalidateQueries({ queryKey: qk.lead(id) });
+      queryClient.invalidateQueries({ queryKey: qk.leads() });
+      queryClient.invalidateQueries({ queryKey: qk.leadQuotes(id) });
+      queryClient.invalidateQueries({ queryKey: qk.leadComms(id) });
+      setSendQuoteOpen(false);
+      toast.success(`Quote ${quote.quote_number} sent!`);
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Failed to send quote'),
   });
 
   if (isLoading) {
@@ -120,6 +163,7 @@ export default function LeadDetailPage() {
   }
 
   const transitions = LEAD_TRANSITIONS[lead.status] ?? [];
+  const quotes = Array.isArray(quotesData) ? quotesData : [];
 
   return (
     <div className="flex flex-col min-h-full">
@@ -218,6 +262,14 @@ export default function LeadDetailPage() {
                 >
                   {t.label}
                 </Button>
+              ) : t.requiresQuote ? (
+                <Button
+                  key={t.to}
+                  size="sm"
+                  onClick={() => setSendQuoteOpen(true)}
+                >
+                  <FileText className="h-3.5 w-3.5" /> {t.label}
+                </Button>
               ) : (
                 <Button
                   key={t.to}
@@ -229,6 +281,20 @@ export default function LeadDetailPage() {
                   {t.label}
                 </Button>
               )
+            )}
+
+            {/* Re-open — only shown when lost AND prior stage is known */}
+            {lead.status === 'lost' && lead.status_before_lost && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={statusMutation.isPending}
+                onClick={() =>
+                  statusMutation.mutate({ toStatus: lead.status_before_lost as Lead['status'] })
+                }
+              >
+                Re-open
+              </Button>
             )}
           </Can>
 
@@ -251,6 +317,7 @@ export default function LeadDetailPage() {
           <TabsList className="h-10 bg-transparent gap-0 -mb-px w-full justify-start overflow-x-auto">
             {[
               { value: 'communications', label: 'Communications' },
+              { value: 'quotes', label: `Quotes${quotes.length ? ` (${quotes.length})` : ''}` },
               { value: 'tasks', label: 'Tasks' },
             ].map(({ value, label }) => (
               <TabsTrigger
@@ -268,6 +335,9 @@ export default function LeadDetailPage() {
           <TabsContent value="communications" className="p-4 md:p-6 mt-0">
             <CommLog comms={commsData?.items ?? []} loading={commsLoading} />
           </TabsContent>
+          <TabsContent value="quotes" className="p-4 md:p-6 mt-0">
+            <QuoteList quotes={quotes} loading={quotesLoading} onSendNew={() => setSendQuoteOpen(true)} leadStatus={lead.status} />
+          </TabsContent>
           <TabsContent value="tasks" className="p-4 md:p-6 mt-0">
             <TaskList
               tasks={tasksData?.items ?? []}
@@ -277,6 +347,15 @@ export default function LeadDetailPage() {
           </TabsContent>
         </div>
       </Tabs>
+
+      {/* Send quote dialog */}
+      <SendQuoteDialog
+        open={sendQuoteOpen}
+        onOpenChange={setSendQuoteOpen}
+        onSubmit={(values) => sendQuoteMutation.mutate(values)}
+        loading={sendQuoteMutation.isPending}
+        deviceType={lead.device_type ?? undefined}
+      />
 
       {/* Mark lost dialog */}
       <Dialog open={lostDialogOpen} onOpenChange={setLostDialogOpen}>
@@ -348,6 +427,272 @@ export default function LeadDetailPage() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+// ── Send quote dialog ─────────────────────────────────────────────────────────
+
+function SendQuoteDialog({
+  open, onOpenChange, onSubmit, loading, deviceType,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onSubmit: (values: SendQuoteValues) => void;
+  loading: boolean;
+  deviceType?: string;
+}) {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 7);
+  const defaultExpiry = tomorrow.toISOString().split('T')[0];
+
+  const form = useForm<SendQuoteValues>({
+    resolver: zodResolver(sendQuoteSchema),
+    defaultValues: {
+      items: [{ description: deviceType ? `${deviceType} repair` : '', amount: '' }],
+      valid_until: defaultExpiry,
+      notes: '',
+    },
+  });
+
+  const { fields, append, remove } = useFieldArray({ control: form.control, name: 'items' });
+
+  const watchedItems = form.watch('items');
+  const total = watchedItems.reduce((sum, item) => {
+    const v = parseFloat(item.amount);
+    return sum + (isNaN(v) ? 0 : v);
+  }, 0);
+
+  function handleClose() {
+    form.reset();
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileText className="h-4 w-4" /> Send quote
+          </DialogTitle>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+            {/* Line items */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-body-sm font-medium text-[var(--text)]">Line items</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-[var(--accent)] hover:text-[var(--accent)]"
+                  onClick={() => append({ description: '', amount: '' })}
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add item
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {fields.map((field, index) => (
+                  <div key={field.id} className="flex gap-2 items-start">
+                    <FormField
+                      control={form.control}
+                      name={`items.${index}.description`}
+                      render={({ field: f }) => (
+                        <FormItem className="flex-1 min-w-0">
+                          {index === 0 && <FormLabel className="text-xs">Description</FormLabel>}
+                          <FormControl>
+                            <Input placeholder="Screen replacement…" {...f} />
+                          </FormControl>
+                          <FormMessage className="text-xs" />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name={`items.${index}.amount`}
+                      render={({ field: f }) => (
+                        <FormItem className="w-28 shrink-0">
+                          {index === 0 && <FormLabel className="text-xs">Amount (₹)</FormLabel>}
+                          <FormControl>
+                            <Input placeholder="0.00" inputMode="decimal" {...f} />
+                          </FormControl>
+                          <FormMessage className="text-xs" />
+                        </FormItem>
+                      )}
+                    />
+                    <div className={index === 0 ? 'mt-6' : 'mt-0'}>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-9 w-9 text-[var(--text-muted)] hover:text-[var(--danger)]"
+                        disabled={fields.length === 1}
+                        onClick={() => remove(index)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {form.formState.errors.items?.root && (
+                <p className="text-xs text-[var(--danger)] mt-1">
+                  {form.formState.errors.items.root.message}
+                </p>
+              )}
+            </div>
+
+            {/* Total */}
+            <div className="flex justify-between items-center py-2 px-3 rounded-lg bg-[var(--surface-2)] border border-[var(--border)]">
+              <span className="text-body-sm font-medium text-[var(--text)]">Total</span>
+              <span className="text-body-sm font-semibold text-[var(--text)]">
+                ₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            {/* Valid until + notes */}
+            <div className="grid grid-cols-2 gap-3">
+              <FormField
+                control={form.control}
+                name="valid_until"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Valid until <span className="text-[var(--danger)]">*</span></FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="notes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notes</FormLabel>
+                  <FormControl>
+                    <textarea
+                      rows={2}
+                      placeholder="Includes 30-day warranty on parts…"
+                      className="flex w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-body text-[var(--text)] placeholder:text-[var(--text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] resize-none"
+                      {...field}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            {/* WhatsApp notice */}
+            <div className="flex items-start gap-2 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 px-3 py-2">
+              <MessageCircle className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+              <p className="text-xs text-green-700 dark:text-green-400">
+                Quote details will be sent to the customer via WhatsApp automatically.
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <Button type="button" variant="outline" className="flex-1" onClick={handleClose} disabled={loading}>
+                Cancel
+              </Button>
+              <Button type="submit" className="flex-1" disabled={loading || total === 0}>
+                {loading ? 'Sending…' : 'Send quote'}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Quote list ────────────────────────────────────────────────────────────────
+
+function QuoteList({
+  quotes, loading, onSendNew, leadStatus,
+}: {
+  quotes: LeadQuote[];
+  loading: boolean;
+  onSendNew: () => void;
+  leadStatus: Lead['status'];
+}) {
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        {[1, 2].map((i) => <Skeleton key={i} className="h-24 rounded-lg" />)}
+      </div>
+    );
+  }
+
+  const canSendNew = leadStatus === 'interested' || leadStatus === 'quoted';
+
+  if (quotes.length === 0) {
+    return (
+      <div className="text-center py-8 space-y-3">
+        <FileText className="h-10 w-10 text-[var(--text-muted)] mx-auto" />
+        <p className="text-body-sm text-[var(--text-muted)]">No quotes sent yet.</p>
+        {canSendNew && (
+          <Button size="sm" onClick={onSendNew}>
+            <FileText className="h-3.5 w-3.5" /> Send first quote
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {canSendNew && (
+        <div className="flex justify-end">
+          <Button size="sm" variant="outline" onClick={onSendNew}>
+            <Plus className="h-3.5 w-3.5" /> New quote
+          </Button>
+        </div>
+      )}
+      {quotes.map((q) => (
+        <div key={q.id} className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-body-sm font-semibold text-[var(--text)]">{q.quote_number}</span>
+                {q.sent_via_whatsapp && (
+                  <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                    <MessageCircle className="h-3 w-3" /> Sent
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                Valid until {formatDate(q.valid_until)} · by {q.sent_by_name ?? '—'}
+              </p>
+            </div>
+            <span className="text-body-sm font-semibold text-[var(--text)] shrink-0">
+              ₹{parseFloat(q.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 0 })}
+            </span>
+          </div>
+
+          {/* Line items */}
+          <div className="mt-2 space-y-1">
+            {q.items.map((item, i) => (
+              <div key={i} className="flex justify-between text-xs text-[var(--text-muted)]">
+                <span>{item.description}</span>
+                <span>₹{parseFloat(item.amount).toLocaleString('en-IN')}</span>
+              </div>
+            ))}
+          </div>
+
+          {q.notes && (
+            <p className="mt-2 text-xs text-[var(--text-muted)] italic">{q.notes}</p>
+          )}
+
+          <p className="mt-2 text-xs text-[var(--text-muted)]">{formatDatetime(q.created_at)}</p>
+        </div>
+      ))}
     </div>
   );
 }

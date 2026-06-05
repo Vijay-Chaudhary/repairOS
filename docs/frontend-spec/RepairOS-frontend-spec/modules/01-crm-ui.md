@@ -12,7 +12,7 @@
 | Segments | `/settings/segments` | crm.segments.manage |
 
 ## 2. Navigation & layout
-- **Leads**: Kanban by status (new→contacted→interested→quoted→converted/lost) with drag-to-advance; list toggle. Filters: source, assigned_to, date.
+- **Leads**: Kanban by status (new→contacted→interested→quoted→converted/lost) with drag-to-advance; list toggle. Filters: source, assigned_to, date. Any active stage can transition to **lost** (reason required). Lost leads show a **Re-open** action that restores the lead to its exact prior stage (`status_before_lost`); the Kanban card moves to that prior column.
 - **Customer profile**: header (name, phone, tags, credit limit, total billed/outstanding) + tabs: Repair history · Sales · AMC · Timeline · Tasks · Financial summary. The profile is the hub other modules deep-link into.
 
 ## 3. Components
@@ -46,3 +46,6 @@ Click-to-call and click-to-WhatsApp on phone numbers. Quick "log call" after tap
 - [ ] Timeline aggregates all comm types chronologically, filterable.
 - [ ] Merge previews repointed records before committing.
 - [ ] Bulk WhatsApp respects opt-out (count excludes opted-out, shown to user).
+- [ ] "Mark lost" action is available from new/contacted/interested/quoted; reason dialog required.
+- [ ] "Re-open" appears on lost leads only when `status_before_lost` is set; restores exact prior stage.
+- [ ] After re-open, Kanban card appears in the prior-stage column, not always "interested".

@@ -56,9 +56,17 @@ export function LeadCard({ lead }: LeadCardProps) {
   });
 
   function handleAdvance() {
+    if (lead.status === 'lost') {
+      if (lead.status_before_lost) {
+        advanceMutation.mutate({ status: lead.status_before_lost });
+      }
+      return;
+    }
     if (!primaryTransition) return;
     if (primaryTransition.to === 'converted') {
       setConvertConfirmOpen(true);
+    } else if (primaryTransition.requiresQuote) {
+      router.push(`/leads/${lead.id}`);
     } else {
       advanceMutation.mutate({ status: primaryTransition.to });
     }
@@ -131,7 +139,7 @@ export function LeadCard({ lead }: LeadCardProps) {
       </div>
 
       {/* Primary action */}
-      {primaryTransition && lead.status !== 'converted' && (
+      {(primaryTransition || (lead.status === 'lost' && lead.status_before_lost)) && lead.status !== 'converted' && (
         <Can permission="crm.leads.edit">
           <Button
             size="sm"
@@ -140,7 +148,8 @@ export function LeadCard({ lead }: LeadCardProps) {
             onClick={handleAdvance}
             disabled={advanceMutation.isPending || convertMutation.isPending}
           >
-            {primaryTransition.label} <ChevronRight className="h-3 w-3 ml-1" />
+            {lead.status === 'lost' ? 'Re-open' : primaryTransition!.label}
+            <ChevronRight className="h-3 w-3 ml-1" />
           </Button>
         </Can>
       )}
