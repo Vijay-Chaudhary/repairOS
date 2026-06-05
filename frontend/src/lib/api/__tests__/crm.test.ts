@@ -33,14 +33,7 @@ describe('LEAD_TRANSITIONS — pipeline state machine (frontend constant)', () =
     expect(targets).toContain('converted');
   });
 
-  /**
-   * BUG (frontend): Backend VALID_LEAD_TRANSITIONS[quoted] = {converted, lost}.
-   * LEAD_TRANSITIONS.quoted only has [{to:'converted'}] — omits 'lost'.
-   * Effect: the UI never offers "Mark as lost" for a quoted lead, so users
-   * cannot close lost deals without a backend API call outside the UI.
-   * Fix: add {to: 'lost', label: 'Mark lost', requiresReason: true} to quoted.
-   */
-  it.fails('quoted allows → lost [BUG: currently missing from LEAD_TRANSITIONS]', () => {
+  it('quoted allows → lost', () => {
     const targets = LEAD_TRANSITIONS.quoted.map(t => t.to);
     expect(targets).toContain('lost');
   });
@@ -49,13 +42,7 @@ describe('LEAD_TRANSITIONS — pipeline state machine (frontend constant)', () =
     expect(LEAD_TRANSITIONS.converted).toHaveLength(0);
   });
 
-  /**
-   * BUG (frontend/backend mismatch): LEAD_TRANSITIONS.lost = [{to:'new', label:'Re-open'}]
-   * but backend VALID_LEAD_TRANSITIONS[lost] = {} (empty set).
-   * Effect: clicking "Re-open" triggers POST /leads/{id}/status/ → 400 INVALID_STATUS_TRANSITION.
-   * Fix: remove the lost → new entry from LEAD_TRANSITIONS, or add the transition to the backend.
-   */
-  it.fails('lost has no valid transitions [BUG: frontend shows Re-open which backend rejects]', () => {
+  it('lost has no valid transitions', () => {
     expect(LEAD_TRANSITIONS.lost).toHaveLength(0);
   });
 });

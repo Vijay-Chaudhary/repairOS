@@ -108,9 +108,8 @@ export default function LeadsPage() {
   });
 
   const handleRowClick = useCallback((lead: Lead) => {
-    // No separate detail route — show actions via LeadCard in Kanban
-    void lead;
-  }, []);
+    router.push(`/leads/${lead.id}`);
+  }, [router]);
 
   return (
     <div className="flex flex-col h-full">

@@ -247,6 +247,13 @@ export const crmApi = {
   completeTask: (id: string) =>
     apiPatch<Task>(`/crm/tasks/${id}/`, { status: 'completed' }),
 
+  getTask: (id: string) =>
+    apiGet<Task>(`/crm/tasks/${id}/`),
+
+  // Communications
+  listCommunications: (filters: { customer_id?: string; lead_id?: string; cursor?: string } = {}) =>
+    apiGet<{ items: CommunicationLog[]; meta: PageMeta }>('/crm/communications/', filters as Record<string, string | undefined>),
+
   // Segments
   listSegments: () =>
     apiGet<{ items: Segment[] }>('/crm/segments/'),
@@ -271,8 +278,15 @@ export const crmApi = {
       cursor ? { cursor } : {},
     ),
 
+  getSegment: (id: string) =>
+    apiGet<Segment>(`/crm/segments/${id}/`),
+
   bulkWhatsapp: (id: string, body: { template_id: string; variables?: Record<string, string> }) =>
     apiPost<{ queued: number; excluded_optout: number }>(`/crm/segments/${id}/bulk-whatsapp/`, body),
+
+  // Lead status
+  changeLeadStatus: (id: string, toStatus: LeadStatus, reason?: string) =>
+    apiPost<Lead>(`/crm/leads/${id}/status/`, { to_status: toStatus, ...(reason ? { reason } : {}) }),
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -289,9 +303,9 @@ export const LEAD_TRANSITIONS: Record<LeadStatus, Array<{ to: LeadStatus; label:
   new:       [{ to: 'contacted', label: 'Mark contacted' }],
   contacted: [{ to: 'interested', label: 'Mark interested' }],
   interested:[{ to: 'quoted', label: 'Send quote' }],
-  quoted:    [{ to: 'converted', label: 'Convert' }],
+  quoted:    [{ to: 'converted', label: 'Convert' }, { to: 'lost', label: 'Mark lost', requiresReason: true }],
   converted: [],
-  lost:      [{ to: 'new', label: 'Re-open' }],
+  lost:      [],
 };
 
 export const SOURCE_LABELS: Record<LeadSource, string> = {

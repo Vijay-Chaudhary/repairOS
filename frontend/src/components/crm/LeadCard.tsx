@@ -36,7 +36,7 @@ export function LeadCard({ lead }: LeadCardProps) {
 
   const advanceMutation = useMutation({
     mutationFn: ({ status, lost_reason }: { status: string; lost_reason?: string }) =>
-      crmApi.updateLead(lead.id, { status: status as Lead['status'], lost_reason }),
+      crmApi.changeLeadStatus(lead.id, status as Lead['status'], lost_reason),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: qk.leads() });
       toast.success('Lead updated');

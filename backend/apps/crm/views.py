@@ -125,6 +125,19 @@ class LeadViewSet(ShopScopedMixin, ModelViewSet):
             return LeadStatusSerializer
         return LeadSerializer
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        phone = serializer.validated_data.get("phone", "")
+        shop = serializer.validated_data.get("shop")
+        if phone and Lead.objects.filter(shop=shop, phone=phone).exists():
+            return Response(
+                {"code": "DUPLICATE_PHONE", "message": "A lead with this phone number already exists."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        self.perform_create(serializer)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
     @action(detail=True, methods=["post"], url_path="convert")
     def convert(self, request, pk=None):
         lead = self.get_object()

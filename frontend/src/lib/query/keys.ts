@@ -29,6 +29,7 @@ export const qk = {
   customerTimeline:(id: string) => ['customer', id, 'timeline'] as const,
   leads:           listKey('leads'),
   lead:            (id: string) => ['lead', id] as const,
+  leadComms:       (id: string) => ['lead', id, 'comms'] as const,
   tasks:           listKey('tasks'),
   segments:        () => ['segments'] as const,
 

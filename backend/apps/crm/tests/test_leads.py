@@ -303,14 +303,6 @@ class TestLeadValidation:
         }, format="json")
         assert res.status_code == status.HTTP_400_BAD_REQUEST
 
-    @pytest.mark.xfail(
-        reason=(
-            "BUG: LeadViewSet has no DUPLICATE_PHONE guard. "
-            "Lead model has no UniqueConstraint on phone. "
-            "Fix: add the same phone-uniqueness check that CustomerViewSet.create() uses."
-        ),
-        strict=True,
-    )
     def test_duplicate_phone_returns_400(self, admin_client, shop, lead):
         res = admin_client.post(self.url, {
             "shop_id": str(shop.id),
