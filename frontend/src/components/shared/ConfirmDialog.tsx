@@ -28,7 +28,7 @@ export function ConfirmDialog({
           {description && <AlertDialogDescription>{description}</AlertDialogDescription>}
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
+          <AlertDialogCancel onClick={() => onOpenChange(false)}>{cancelLabel}</AlertDialogCancel>
           <AlertDialogAction onClick={onConfirm} disabled={loading}>
             {loading ? 'Please wait…' : confirmLabel}
           </AlertDialogAction>
