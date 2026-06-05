@@ -4,7 +4,13 @@ DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
 
-CORS_ALLOW_ALL_ORIGINS = True
+# credentials: 'include' requires an explicit origin, not the wildcard '*'
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+CORS_ALLOW_CREDENTIALS = True
 
 # Debug toolbar
 INSTALLED_APPS += ["debug_toolbar"]  # noqa: F405

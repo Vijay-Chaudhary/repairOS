@@ -1,5 +1,3 @@
-version: "3.9"
-
 # ─────────────────────────────────────────────────────────────────────────────
 # RepairOS — local development stack
 #
@@ -71,22 +69,22 @@ services:
   # Wildcard [databases] entry auto-pools every repaiross_tenant_* DB.
   # See infra/pgbouncer/pgbouncer.ini for runtime tenant-pool addition docs.
   pgbouncer:
-    image: edoburu/pgbouncer:v1.22.1
+    build:
+      context: infra/pgbouncer
+      dockerfile: Dockerfile
     restart: unless-stopped
-    entrypoint: ["/bin/sh", "/etc/pgbouncer/entrypoint.sh"]
     environment:
       PGBOUNCER_ADMIN_PASSWORD: ${PGBOUNCER_ADMIN_PASSWORD}
       PGBOUNCER_AUTH_PASSWORD: ${PGBOUNCER_AUTH_PASSWORD}
     volumes:
       - ./infra/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
-      - ./infra/pgbouncer/entrypoint.sh:/etc/pgbouncer/entrypoint.sh:ro
     ports:
       - "6432:5432"
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U pgbouncer_admin"]
+      test: ["CMD-SHELL", "PGPASSWORD=${PGBOUNCER_ADMIN_PASSWORD} psql -h 127.0.0.1 -p 5432 -U pgbouncer_admin -d pgbouncer -c 'SHOW VERSION' -q >/dev/null 2>&1"]
       interval: 5s
       timeout: 5s
       retries: 10

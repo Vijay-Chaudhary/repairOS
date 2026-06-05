@@ -112,7 +112,10 @@ class Command(BaseCommand):
         self._create_admin_user(name=name, email=email, phone=phone, password=admin_password)
         self.stdout.write(f"  ✓ Tenant Admin created — email: {email}")
 
-        # 6. Activate tenant
+        # 6. Activate tenant — clear tenant context first so the router doesn't
+        # accidentally send this master-DB save to the tenant alias.
+        from core.context import clear_tenant_context
+        clear_tenant_context()
         tenant.status = Tenant.Status.ACTIVE
         tenant.save(using="default", update_fields=["status"])
 
@@ -134,13 +137,33 @@ class Command(BaseCommand):
                     f'CREATE DATABASE "{db_name}" ENCODING \'UTF8\' LC_COLLATE \'en_US.utf8\' LC_CTYPE \'en_US.utf8\' TEMPLATE template0'
                 )
 
+            cursor.execute("SET password_encryption = 'md5'")
             cursor.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", [db_user])
             if not cursor.fetchone():
                 cursor.execute(f"CREATE USER \"{db_user}\" WITH PASSWORD %s", [db_password])
+            else:
+                # User exists from a previous failed run — reset password to match
+                # the new TenantDatabase record so PgBouncer auth succeeds.
+                cursor.execute(f"ALTER USER \"{db_user}\" WITH PASSWORD %s", [db_password])
 
             cursor.execute(f'GRANT ALL PRIVILEGES ON DATABASE "{db_name}" TO "{db_user}"')
             cursor.execute(f'REVOKE ALL ON DATABASE "{db_name}" FROM PUBLIC')
             connection.connection.autocommit = False
+
+        # PostgreSQL 15+ revoked CREATE on public schema from PUBLIC by default.
+        # Grant it to the tenant user via a separate connection to the new DB.
+        import psycopg2
+        master_cfg = settings.DATABASES["default"]
+        with psycopg2.connect(
+            dbname=db_name,
+            user=master_cfg["USER"],
+            password=master_cfg["PASSWORD"],
+            host=master_cfg["HOST"],
+            port=int(master_cfg.get("PORT", 5432)),
+        ) as schema_conn:
+            schema_conn.autocommit = True
+            with schema_conn.cursor() as sc:
+                sc.execute(f'GRANT ALL ON SCHEMA public TO "{db_user}"')
 
     def _seed_roles_and_permissions(self):
         from authentication.models import Permission, Role

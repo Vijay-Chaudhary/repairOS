@@ -1,10 +1,12 @@
-FROM node:20.18-alpine AS dev
+FROM node:22-alpine AS dev
 
 WORKDIR /app
 
-# Install deps before mounting source so node_modules lives in the image layer.
+# npm install (not ci) tolerates a stale lockfile in dev.
+# Run `npm install` on the host and commit the updated package-lock.json
+# before switching to `npm ci` here.
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm install
 
 EXPOSE 3000
 
@@ -15,7 +17,7 @@ ENV NODE_ENV=development
 CMD ["npm", "run", "dev"]
 
 # ── Production stage ──────────────────────────────────────────────────────────
-FROM node:20.18-alpine AS production
+FROM node:22-alpine AS production
 
 WORKDIR /app
 
