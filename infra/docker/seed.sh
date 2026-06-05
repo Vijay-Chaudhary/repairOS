@@ -22,19 +22,19 @@ echo "==> [seed] Seeding demo tenants (idempotent)..."
 
 python manage.py create_tenant \
   --slug demo \
-  --name "Demo Repairs" \
-  --email "admin@demo.repaiross.local" \
+  --name "Shree Electronics" \
+  --email "admin@demo.com" \
   --phone "+919876543210" \
-  --admin-password "Demo@1234" \
+  --admin-password "Demo@1234!" \
   --plan professional \
   2>&1 | grep -v "already exists" || true
 
 python manage.py create_tenant \
   --slug testshop \
   --name "Test Shop" \
-  --email "admin@testshop.repaiross.local" \
+  --email "admin@testshop.com" \
   --phone "+919876543211" \
-  --admin-password "Test@1234" \
+  --admin-password "Demo@1234!" \
   --plan starter \
   2>&1 | grep -v "already exists" || true
 

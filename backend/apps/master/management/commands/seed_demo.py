@@ -214,6 +214,18 @@ class Command(BaseCommand):
         if admin is None:
             raise CommandError("Could not locate provisioned admin user in tenant DB.")
 
+        # Normalise admin credentials to canonical demo values regardless of
+        # what create_tenant used (email/password may differ on first run)
+        changed = []
+        if admin.email != "admin@demo.com":
+            admin.email = "admin@demo.com"
+            changed.append("email")
+        if not admin.check_password(DEMO_PASSWORD):
+            admin.set_password(DEMO_PASSWORD)
+            changed.append("password")
+        if changed:
+            admin.save(update_fields=changed)
+
         specs = [
             ("manager@demo.com",   "+919000000001", "Amit Sharma",   "Shop Manager",  [shop_del, shop_mum], False),
             ("reception@demo.com", "+919000000002", "Priya Gupta",   "Receptionist",  [shop_del],           False),
