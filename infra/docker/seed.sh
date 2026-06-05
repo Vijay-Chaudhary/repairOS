@@ -38,5 +38,8 @@ python manage.py create_tenant \
   --plan starter \
   2>&1 | grep -v "already exists" || true
 
+echo "==> [seed] Loading demo data (idempotent)..."
+python manage.py seed_demo
+
 echo "==> [seed] Starting Daphne..."
 exec daphne -b 0.0.0.0 -p 8000 config.asgi:application
