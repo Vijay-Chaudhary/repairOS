@@ -5,12 +5,13 @@ class RepairOSRenderer(JSONRenderer):
     """
     Wraps every response in the RepairOS envelope:
 
-        Success:  {"success": true,  "data": <payload>, "meta": {...}}
-        Error:    {"success": false, "error": <payload>}
+        Success (single):  {"success": true, "data": <payload>}
+        Success (list):    {"success": true, "data": {"items": [...], "meta": {...}}}
+        Error:             {"success": false, "error": <payload>}
 
-    The exception handler already shapes error payloads; the renderer just
-    wraps them. For list responses with pagination, the paginator injects
-    `meta` directly into the response dict before this renderer runs.
+    Paginated list views produce {"items": [...], "meta": {...}} from the
+    paginator; the renderer wraps that object as `data` so the client
+    consistently receives the full list payload under `data`.
     """
 
     def render(self, data, accepted_media_type=None, renderer_context=None):
@@ -26,10 +27,6 @@ class RepairOSRenderer(JSONRenderer):
         if status_code >= 400:
             envelope = {"success": False, "error": data}
         else:
-            # Paginated list views set response.data as {"data": [...], "meta": {...}}
-            if isinstance(data, dict) and "data" in data and "meta" in data:
-                envelope = {"success": True, **data}
-            else:
-                envelope = {"success": True, "data": data}
+            envelope = {"success": True, "data": data}
 
         return super().render(envelope, accepted_media_type, renderer_context)

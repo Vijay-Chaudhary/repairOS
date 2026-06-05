@@ -17,7 +17,7 @@ class RepairOSCursorPagination(CursorPagination):
     def get_paginated_response(self, data):
         return Response(
             {
-                "data": data,
+                "items": data,
                 "meta": {
                     "next_cursor": self.get_next_link(),
                     "prev_cursor": self.get_previous_link(),
@@ -29,7 +29,7 @@ class RepairOSCursorPagination(CursorPagination):
         return {
             "type": "object",
             "properties": {
-                "data": schema,
+                "items": schema,
                 "meta": {
                     "type": "object",
                     "properties": {

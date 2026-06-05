@@ -25,8 +25,8 @@ RUN pip install -r requirements/local.txt
 
 EXPOSE 8000
 
-# seed.sh: runs master migrate → seeds demo tenants → starts daphne
-CMD ["/app/infra/docker/seed.sh"]
+# entrypoint.sh: runs master migrate → seeds demo tenants → starts daphne
+CMD ["/app/entrypoint.sh"]
 
 # ── Production stage ──────────────────────────────────────────────────────────
 FROM base AS production

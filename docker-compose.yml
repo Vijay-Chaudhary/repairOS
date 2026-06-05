@@ -30,8 +30,6 @@ x-backend-base: &backend-base
   env_file: .env
   volumes:
     - ./backend:/app
-    # Seed script and pgbouncer config live outside backend/ but are needed inside
-    - ./infra/docker/seed.sh:/app/infra/docker/seed.sh:ro
   depends_on:
     postgres:
       condition: service_healthy
