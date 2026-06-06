@@ -10,7 +10,8 @@ class EmployeeSerializer(serializers.ModelSerializer):
     Safe output serializer — never exposes encrypted fields or their ciphertexts.
     Encrypted fields are masked as 'XXXX' to confirm they exist without leaking values.
     """
-    shop_id = serializers.UUIDField(source="shop_id", read_only=True)
+    shop_id = serializers.UUIDField(read_only=True)
+    user_id = serializers.UUIDField(read_only=True, allow_null=True)
     is_active = serializers.SerializerMethodField()
     bank_account_masked = serializers.SerializerMethodField()
     pan_masked = serializers.SerializerMethodField()
@@ -19,7 +20,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
         fields = [
-            "id", "shop_id", "employee_code", "full_name", "designation", "department",
+            "id", "shop_id", "user_id", "employee_code", "full_name", "designation", "department",
             "date_of_joining", "date_of_leaving", "employment_type",
             "basic_salary", "hra", "other_allowances", "gross_salary",
             "pf_employee", "pf_employer", "esic_employee", "esic_employer",
@@ -80,8 +81,38 @@ class BulkAttendanceSerializer(serializers.Serializer):
     records = AttendanceRecordSerializer(many=True, min_length=1)
 
 
+class DateRangeBulkAttendanceSerializer(serializers.Serializer):
+    """Accepts a date range + employee list and expands to per-day records server-side."""
+    shop_id = serializers.UUIDField()
+    employee_ids = serializers.ListField(child=serializers.UUIDField(), min_length=1)
+    date_from = serializers.DateField()
+    date_to = serializers.DateField()
+    status = serializers.ChoiceField(choices=AttendanceRecord.AttendanceStatus.choices)
+    notes = serializers.CharField(required=False, default="", allow_blank=True)
+
+    def validate(self, data):
+        if data["date_to"] < data["date_from"]:
+            raise serializers.ValidationError("date_to must be >= date_from.")
+        delta = (data["date_to"] - data["date_from"]).days + 1
+        if delta > 31:
+            raise serializers.ValidationError("Date range cannot exceed 31 days.")
+        return data
+
+
+class AttendanceRecordOutputSerializer(serializers.ModelSerializer):
+    employee_id = serializers.UUIDField(read_only=True)
+    employee_name = serializers.CharField(source="employee.full_name", read_only=True)
+
+    class Meta:
+        model = AttendanceRecord
+        fields = [
+            "id", "employee_id", "employee_name", "date", "status",
+            "check_in", "check_out", "overtime_hours", "notes",
+        ]
+
+
 class LeaveRequestSerializer(serializers.ModelSerializer):
-    employee_id = serializers.UUIDField(source="employee_id", read_only=True)
+    employee_id = serializers.UUIDField(read_only=True)
     employee_name = serializers.CharField(source="employee.full_name", read_only=True)
 
     class Meta:
@@ -114,13 +145,14 @@ class UpdateLeaveStatusSerializer(serializers.Serializer):
 
 
 class SalarySlipSerializer(serializers.ModelSerializer):
-    employee_id = serializers.UUIDField(source="employee_id", read_only=True)
+    employee_id = serializers.UUIDField(read_only=True)
     employee_name = serializers.CharField(source="employee.full_name", read_only=True)
+    employee_code = serializers.CharField(source="employee.employee_code", read_only=True)
 
     class Meta:
         model = SalarySlip
         fields = [
-            "id", "employee_id", "employee_name", "month", "year", "working_days",
+            "id", "employee_id", "employee_name", "employee_code", "month", "year", "working_days",
             "present_days", "leave_days", "absent_days", "overtime_hours",
             "basic_earned", "hra_earned", "allowances_earned", "overtime_amount",
             "gross_earned", "pf_deduction", "esic_deduction",
@@ -133,7 +165,21 @@ class GenerateSlipsSerializer(serializers.Serializer):
     shop_id = serializers.UUIDField()
     month = serializers.IntegerField(min_value=1, max_value=12)
     year = serializers.IntegerField(min_value=2020, max_value=2100)
-    employee_ids = serializers.ListField(child=serializers.UUIDField(), min_length=1)
+    employee_ids = serializers.ListField(child=serializers.UUIDField(), required=False, default=list)
+
+
+class UpdateEmployeeSerializer(serializers.Serializer):
+    full_name = serializers.CharField(max_length=200, required=False)
+    designation = serializers.CharField(max_length=100, required=False)
+    department = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    date_of_leaving = serializers.DateField(required=False, allow_null=True)
+    employment_type = serializers.ChoiceField(
+        choices=Employee.EmploymentType.choices, required=False
+    )
+    basic_salary = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    hra = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    other_allowances = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    is_active = serializers.BooleanField(required=False)
 
 
 class UpdateSlipStatusSerializer(serializers.Serializer):

@@ -3,6 +3,7 @@ HR & Payroll API views.
 """
 
 import logging
+from datetime import timedelta
 
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -14,20 +15,32 @@ from authentication.permissions import require_permission
 from core.pagination import RepairOSCursorPagination
 
 from . import services
-from .models import Employee, LeaveRequest, SalarySlip
+from .models import AttendanceRecord, Employee, LeaveRequest, SalarySlip
 from .serializers import (
+    AttendanceRecordOutputSerializer,
     BulkAttendanceSerializer,
     CreateEmployeeSerializer,
     CreateLeaveRequestSerializer,
+    DateRangeBulkAttendanceSerializer,
     EmployeeSerializer,
     GenerateSlipsSerializer,
     LeaveRequestSerializer,
     SalarySlipSerializer,
+    UpdateEmployeeSerializer,
     UpdateLeaveStatusSerializer,
     UpdateSlipStatusSerializer,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _shop_ids_for_request(token) -> tuple[list, bool]:
+    """Returns (shop_ids, is_wide). is_wide=True means no shop filter should apply."""
+    if not token:
+        return [], False
+    if token.get("is_tenant_wide") or token.get("is_platform_admin"):
+        return [], True
+    return token.get("shop_ids", []), False
 
 
 class EmployeeListCreateView(APIView):
@@ -39,14 +52,15 @@ class EmployeeListCreateView(APIView):
 
     def get(self, request: Request) -> Response:
         token = getattr(request, "auth", None)
-        shop_ids = token.get("shop_ids", []) if token else []
-        base = Employee.objects.filter(deleted_at__isnull=True).select_related("shop")
-        qs = base.filter(shop_id__in=shop_ids) if shop_ids else base
-        qs = qs.order_by("full_name")
+        shop_ids, is_wide = _shop_ids_for_request(token)
 
-        if q := request.query_params.get("q"):
+        qs = Employee.objects.filter(deleted_at__isnull=True).select_related("shop").order_by("full_name")
+        if not is_wide:
+            qs = qs.filter(shop_id__in=shop_ids)
+
+        if search := request.query_params.get("search"):
             from django.db.models import Q as DQ
-            qs = qs.filter(DQ(full_name__icontains=q) | DQ(employee_code__icontains=q))
+            qs = qs.filter(DQ(full_name__icontains=search) | DQ(employee_code__icontains=search))
 
         if et := request.query_params.get("employment_type"):
             qs = qs.filter(employment_type=et)
@@ -103,40 +117,109 @@ class EmployeeListCreateView(APIView):
 
 
 class EmployeeDetailView(APIView):
-    permission_classes = [IsAuthenticated, require_permission("hr.employees.view")]
 
-    def get(self, request: Request, employee_id) -> Response:
+    def get_permissions(self):
+        if self.request.method == "PATCH":
+            return [IsAuthenticated(), require_permission("hr.employees.manage")()]
+        return [IsAuthenticated(), require_permission("hr.employees.view")()]
+
+    def _get_employee(self, request: Request, employee_id):
         qs = Employee.objects.filter(deleted_at__isnull=True)
         token = getattr(request, "auth", None)
-        if token and not token.get("is_tenant_wide") and not token.get("is_platform_admin"):
-            qs = qs.filter(shop_id__in=token.get("shop_ids", []))
+        shop_ids, is_wide = _shop_ids_for_request(token)
+        if not is_wide:
+            qs = qs.filter(shop_id__in=shop_ids)
         try:
-            emp = qs.get(id=employee_id)
+            return qs.get(id=employee_id)
         except Employee.DoesNotExist:
+            return None
+
+    def get(self, request: Request, employee_id) -> Response:
+        emp = self._get_employee(request, employee_id)
+        if not emp:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(EmployeeSerializer(emp).data)
+
+    def patch(self, request: Request, employee_id) -> Response:
+        emp = self._get_employee(request, employee_id)
+        if not emp:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        ser = UpdateEmployeeSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+
+        updatable = [
+            "full_name", "designation", "department", "date_of_leaving",
+            "employment_type", "basic_salary", "hra", "other_allowances",
+        ]
+        for field in updatable:
+            if field in data:
+                setattr(emp, field, data[field])
+
+        if "is_active" in data:
+            from django.utils import timezone
+            emp.deleted_at = None if data["is_active"] else timezone.now()
+
+        emp.save()
+        return Response(EmployeeSerializer(emp).data)
+
+
+class AttendanceListView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("hr.attendance.mark")]
+
+    def get(self, request: Request) -> Response:
+        token = getattr(request, "auth", None)
+        shop_ids, is_wide = _shop_ids_for_request(token)
+
+        qs = AttendanceRecord.objects.select_related("employee").order_by("date", "employee__full_name")
+        if not is_wide:
+            qs = qs.filter(employee__shop_id__in=shop_ids)
+
+        if month := request.query_params.get("month"):
+            qs = qs.filter(date__month=month)
+        if year := request.query_params.get("year"):
+            qs = qs.filter(date__year=year)
+        if emp_id := request.query_params.get("employee_id"):
+            qs = qs.filter(employee_id=emp_id)
+
+        return Response({"items": AttendanceRecordOutputSerializer(qs, many=True).data})
 
 
 class BulkAttendanceView(APIView):
     permission_classes = [IsAuthenticated, require_permission("hr.attendance.mark")]
 
     def post(self, request: Request) -> Response:
-        serializer = BulkAttendanceSerializer(data=request.data)
+        serializer = DateRangeBulkAttendanceSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        records = serializer.validated_data["records"]
-        created = services.bulk_mark_attendance(records)
-        return Response({"created": created, "total": len(records)}, status=status.HTTP_201_CREATED)
+        data = serializer.validated_data
+
+        records = []
+        current = data["date_from"]
+        while current <= data["date_to"]:
+            for emp_id in data["employee_ids"]:
+                records.append({
+                    "employee_id": emp_id,
+                    "date": current,
+                    "status": data["status"],
+                    "notes": data.get("notes", ""),
+                })
+            current += timedelta(days=1)
+
+        created, updated = services.bulk_mark_attendance(records)
+        return Response({"created": created, "updated": updated}, status=status.HTTP_201_CREATED)
 
 
 class LeaveRequestListCreateView(APIView):
     permission_classes = [IsAuthenticated, require_permission("hr.leaves.manage")]
 
     def get(self, request: Request) -> Response:
-        """List leave requests, optionally filtered by status or employee."""
         token = getattr(request, "auth", None)
-        shop_ids = token.get("shop_ids", []) if token else []
-        base = LeaveRequest.objects.select_related("employee").order_by("-from_date")
-        qs = base.filter(employee__shop_id__in=shop_ids) if shop_ids else base
+        shop_ids, is_wide = _shop_ids_for_request(token)
+
+        qs = LeaveRequest.objects.select_related("employee").order_by("-from_date")
+        if not is_wide:
+            qs = qs.filter(employee__shop_id__in=shop_ids)
 
         if s := request.query_params.get("status"):
             qs = qs.filter(status=s)
@@ -176,10 +259,11 @@ class LeaveRequestDetailView(APIView):
         serializer = UpdateLeaveStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        qs = LeaveRequest.objects.select_related("employee")
         token = getattr(request, "auth", None)
-        if token and not token.get("is_tenant_wide") and not token.get("is_platform_admin"):
-            qs = qs.filter(employee__shop_id__in=token.get("shop_ids", []))
+        shop_ids, is_wide = _shop_ids_for_request(token)
+        qs = LeaveRequest.objects.select_related("employee")
+        if not is_wide:
+            qs = qs.filter(employee__shop_id__in=shop_ids)
         try:
             leave = qs.get(id=leave_id)
         except LeaveRequest.DoesNotExist:
@@ -192,16 +276,17 @@ class LeaveRequestDetailView(APIView):
 
 
 class SalarySlipListView(APIView):
-    """List salary slips filtered by month + year."""
 
     def get_permissions(self):
         return [IsAuthenticated(), require_permission("hr.salary.view")()]
 
     def get(self, request: Request) -> Response:
         token = getattr(request, "auth", None)
-        shop_ids = token.get("shop_ids", []) if token else []
-        base = SalarySlip.objects.select_related("employee").order_by("-year", "-month", "employee__full_name")
-        qs = base.filter(employee__shop_id__in=shop_ids) if shop_ids else base
+        shop_ids, is_wide = _shop_ids_for_request(token)
+
+        qs = SalarySlip.objects.select_related("employee").order_by("-year", "-month", "employee__full_name")
+        if not is_wide:
+            qs = qs.filter(employee__shop_id__in=shop_ids)
 
         if month := request.query_params.get("month"):
             qs = qs.filter(month=month)
@@ -238,7 +323,7 @@ class GenerateSalarySlipsView(APIView):
             year=data["year"],
             employee_ids=data["employee_ids"],
         )
-        return Response(SalarySlipSerializer(slips, many=True).data, status=status.HTTP_201_CREATED)
+        return Response({"slips": SalarySlipSerializer(slips, many=True).data}, status=status.HTTP_201_CREATED)
 
 
 class SalarySlipDetailView(APIView):
@@ -249,10 +334,11 @@ class SalarySlipDetailView(APIView):
         return [IsAuthenticated(), require_permission("hr.salary.view")()]
 
     def _get_slip(self, request: Request, slip_id):
-        qs = SalarySlip.objects.select_related("employee")
         token = getattr(request, "auth", None)
-        if token and not token.get("is_tenant_wide") and not token.get("is_platform_admin"):
-            qs = qs.filter(employee__shop_id__in=token.get("shop_ids", []))
+        shop_ids, is_wide = _shop_ids_for_request(token)
+        qs = SalarySlip.objects.select_related("employee")
+        if not is_wide:
+            qs = qs.filter(employee__shop_id__in=shop_ids)
         try:
             return qs.get(id=slip_id)
         except SalarySlip.DoesNotExist:
@@ -274,3 +360,19 @@ class SalarySlipDetailView(APIView):
 
         slip = services.update_slip_status(slip, serializer.validated_data["status"])
         return Response(SalarySlipSerializer(slip).data)
+
+
+class SalarySlipPdfView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("hr.salary.view")]
+
+    def get(self, request: Request, slip_id) -> Response:
+        token = getattr(request, "auth", None)
+        shop_ids, is_wide = _shop_ids_for_request(token)
+        qs = SalarySlip.objects.select_related("employee")
+        if not is_wide:
+            qs = qs.filter(employee__shop_id__in=shop_ids)
+        try:
+            slip = qs.get(id=slip_id)
+        except SalarySlip.DoesNotExist:
+            return Response({"detail": "Salary slip not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"pdf_url": slip.pdf_url or ""})

@@ -191,7 +191,7 @@ class TestEmployeeCRUD:
     def test_list_employees(self, hr_client, employee):
         res = hr_client.get(self.url)
         assert res.status_code == status.HTTP_200_OK
-        assert len(res.data) >= 1
+        assert len(res.data["items"]) >= 1
 
     def test_encryption_roundtrip(self, db, employee):
         """Encrypted fields decrypt correctly."""
@@ -224,34 +224,31 @@ class TestAttendance:
 
     def test_bulk_mark_attendance(self, hr_client, employee):
         res = hr_client.post(self.url, {
-            "records": [
-                {
-                    "employee_id": str(employee.id),
-                    "date": "2026-05-01",
-                    "status": "present",
-                },
-                {
-                    "employee_id": str(employee.id),
-                    "date": "2026-05-02",
-                    "status": "present",
-                },
-            ]
+            "shop_id": str(employee.shop_id),
+            "employee_ids": [str(employee.id)],
+            "date_from": "2026-05-01",
+            "date_to": "2026-05-02",
+            "status": "present",
         }, format="json")
         assert res.status_code == status.HTTP_201_CREATED
         assert res.data["created"] == 2
 
     def test_duplicate_date_upserts_not_errors(self, hr_client, employee):
         """Re-submitting the same date updates the record."""
-        hr_client.post(self.url, {"records": [{
-            "employee_id": str(employee.id),
-            "date": "2026-05-03",
+        hr_client.post(self.url, {
+            "shop_id": str(employee.shop_id),
+            "employee_ids": [str(employee.id)],
+            "date_from": "2026-05-03",
+            "date_to": "2026-05-03",
             "status": "present",
-        }]}, format="json")
-        res = hr_client.post(self.url, {"records": [{
-            "employee_id": str(employee.id),
-            "date": "2026-05-03",
+        }, format="json")
+        res = hr_client.post(self.url, {
+            "shop_id": str(employee.shop_id),
+            "employee_ids": [str(employee.id)],
+            "date_from": "2026-05-03",
+            "date_to": "2026-05-03",
             "status": "absent",
-        }]}, format="json")
+        }, format="json")
         assert res.status_code == status.HTTP_201_CREATED
 
         from hr.models import AttendanceRecord
@@ -347,7 +344,7 @@ class TestSalaryGeneration:
             "employee_ids": [str(employee.id)],
         }, format="json")
         assert res.status_code == status.HTTP_201_CREATED
-        slip = res.data[0]
+        slip = res.data["slips"][0]
         assert Decimal(slip["net_salary"]) > Decimal("0")
         assert slip["status"] == "draft"
 
@@ -369,7 +366,7 @@ class TestSalaryGeneration:
             "employee_ids": [str(employee.id)],
         }, format="json")
         assert res.status_code == status.HTTP_201_CREATED
-        slip = res.data[0]
+        slip = res.data["slips"][0]
 
         assert Decimal(slip["basic_earned"]) == Decimal("10000.00")
         assert Decimal(slip["hra_earned"]) == Decimal("4000.00")
@@ -392,7 +389,7 @@ class TestSalaryGeneration:
             "employee_ids": [str(employee.id)],
         }, format="json")
         assert res.status_code == status.HTTP_201_CREATED
-        slip = res.data[0]
+        slip = res.data["slips"][0]
         assert Decimal(slip["basic_earned"]) == Decimal("10000.00")
 
     def test_overtime_amount_formula(self, hr_client, employee, shop, db):
@@ -408,7 +405,7 @@ class TestSalaryGeneration:
             "employee_ids": [str(employee.id)],
         }, format="json")
         assert res.status_code == status.HTTP_201_CREATED
-        slip = res.data[0]
+        slip = res.data["slips"][0]
         # 22 wd × 2 OT = 44 hrs; 44 × (20000/176) = 5000.00
         assert Decimal(slip["overtime_amount"]) == Decimal("5000.00")
 
@@ -436,7 +433,7 @@ class TestSalaryGeneration:
             "employee_ids": [str(employee.id), str(employee2.id)],
         }, format="json")
         assert res.status_code == status.HTTP_201_CREATED
-        assert len(res.data) == 2
+        assert len(res.data["slips"]) == 2
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -455,7 +452,7 @@ class TestSalarySlipStatusTransitions:
             "employee_ids": [str(employee.id)],
         }, format="json")
         assert res.status_code == status.HTTP_201_CREATED
-        return res.data[0]
+        return res.data["slips"][0]
 
     def test_approve_slip(self, hr_client, employee, shop, db):
         slip = self._generate(hr_client, employee, shop)

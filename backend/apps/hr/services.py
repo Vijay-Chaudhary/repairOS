@@ -23,12 +23,14 @@ _TWO = Decimal("0.01")
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def bulk_mark_attendance(records: list[dict]) -> int:
+def bulk_mark_attendance(records: list[dict]) -> tuple[int, int]:
     """
-    Upsert attendance records. Returns count of rows created (not updated).
+    Upsert attendance records.
+    Returns (created_count, updated_count).
     Uses update_or_create so re-submission corrects existing records.
     """
     created_count = 0
+    updated_count = 0
     for rec in records:
         _, created = AttendanceRecord.objects.update_or_create(
             employee_id=rec["employee_id"],
@@ -43,7 +45,9 @@ def bulk_mark_attendance(records: list[dict]) -> int:
         )
         if created:
             created_count += 1
-    return created_count
+        else:
+            updated_count += 1
+    return created_count, updated_count
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -89,13 +93,14 @@ def _mark_leave_attendance(leave: LeaveRequest) -> None:
 def generate_salary_slips(shop, month: int, year: int, employee_ids: list) -> list[SalarySlip]:
     from core.exceptions import BusinessRuleViolation
 
-    employees = Employee.objects.filter(
-        pk__in=employee_ids, shop=shop
-    ).exclude(deleted_at__isnull=False)
-
-    # Guard: all requested employees exist
-    if employees.count() != len(employee_ids):
-        raise BusinessRuleViolation("One or more employee IDs are invalid for this shop.")
+    if employee_ids:
+        employees = Employee.objects.filter(
+            pk__in=employee_ids, shop=shop, deleted_at__isnull=True
+        )
+        if employees.count() != len(employee_ids):
+            raise BusinessRuleViolation("One or more employee IDs are invalid for this shop.")
+    else:
+        employees = Employee.objects.filter(shop=shop, deleted_at__isnull=True)
 
     # Guard: check for existing slips
     existing = SalarySlip.objects.filter(
