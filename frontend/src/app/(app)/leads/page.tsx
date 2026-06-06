@@ -155,9 +155,11 @@ export default function LeadsPage() {
       </div>
 
       {/* Board / List */}
-      <div className="flex-1 overflow-auto p-4 md:p-6">
+      <div className="flex-1 overflow-hidden p-4 md:p-6 flex flex-col min-h-0">
         {view === 'kanban' ? (
-          <LeadBoard columns={kanbanColumns} />
+          <div className="overflow-auto flex-1">
+            <LeadBoard columns={kanbanColumns} />
+          </div>
         ) : (
           <DataTable
             columns={LIST_COLUMNS}
@@ -174,6 +176,7 @@ export default function LeadsPage() {
             onNextPage={() => setListCursor(listQuery.data?.meta?.next_cursor ?? undefined)}
             onPrevPage={() => setListCursor(undefined)}
             totalCount={listQuery.data?.meta?.count}
+            className="flex-1 min-h-0"
           />
         )}
       </div>

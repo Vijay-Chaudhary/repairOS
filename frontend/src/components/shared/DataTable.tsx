@@ -55,8 +55,8 @@ export function DataTable<T>({
   }
 
   return (
-    <div className={cn('space-y-3', className)}>
-      <div className="rounded-lg border border-[var(--border)] overflow-hidden">
+    <div className={cn('flex flex-col h-full gap-3', className)}>
+      <div className="flex-1 min-h-0 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--surface)]">
         <Table>
           <TableHeader>
             <TableRow>
@@ -94,9 +94,9 @@ export function DataTable<T>({
       </div>
 
       {(onNextPage || onPrevPage) && (
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 shrink-0 border-t border-[var(--border)] pt-3">
           <span className="text-xs text-[var(--text-muted)]">
-            {totalCount !== undefined ? `${totalCount} total` : ''}
+            {totalCount !== undefined ? `${totalCount} record${totalCount !== 1 ? 's' : ''}` : ''}
           </span>
           <div className="flex items-center gap-2">
             <Button
