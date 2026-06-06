@@ -18,7 +18,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from authentication.permissions import require_permission
-from core.pagination import RepairOSCursorPagination
+from core.pagination import RepairOSCursorPagination, RepairOSPageNumberPagination
 
 from . import services
 from .models import (
@@ -89,7 +89,7 @@ class LeadViewSet(ShopScopedMixin, ModelViewSet):
     POST   /leads/{id}/status/   — change status
     """
 
-    pagination_class = RepairOSCursorPagination
+    pagination_class = RepairOSPageNumberPagination
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_permissions(self):
@@ -126,7 +126,7 @@ class LeadViewSet(ShopScopedMixin, ModelViewSet):
         if shop_id:
             qs = qs.filter(shop_id=shop_id)
 
-        return qs
+        return qs.order_by("-created_at")
 
     def get_serializer_class(self):
         if self.action == "change_status":

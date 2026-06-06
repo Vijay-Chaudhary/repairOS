@@ -125,7 +125,7 @@ export interface LeadFilters {
   date_from?: string;
   date_to?: string;
   search?: string;
-  cursor?: string;
+  page?: number;
 }
 
 export interface CustomerFilters {

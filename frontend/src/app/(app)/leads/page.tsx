@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -73,9 +73,10 @@ export default function LeadsPage() {
   const [view, setView] = useState<ViewMode>('kanban');
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
-  const [listCursor, setListCursor] = useState<string | undefined>(undefined);
+  const [listPage, setListPage] = useState(1);
 
   const debouncedSearch = useDebounce(search, 350);
+  React.useEffect(() => { setListPage(1); }, [debouncedSearch]);
 
   const baseFilters = {
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
@@ -101,8 +102,8 @@ export default function LeadsPage() {
 
   // List: paginated
   const listQuery = useQuery({
-    queryKey: qk.leads({ ...baseFilters, cursor: listCursor }),
-    queryFn: () => crmApi.listLeads({ ...baseFilters, cursor: listCursor }),
+    queryKey: qk.leads({ ...baseFilters, page: listPage }),
+    queryFn: () => crmApi.listLeads({ ...baseFilters, page: listPage }),
     staleTime: 30_000,
     enabled: view === 'list',
   });
@@ -171,10 +172,9 @@ export default function LeadsPage() {
             emptyTitle="No leads yet"
             emptyDescription="Add your first lead to start the pipeline."
             emptyAction={{ label: 'New Lead', onClick: () => setCreateOpen(true) }}
-            hasNextPage={!!listQuery.data?.meta?.next_cursor}
-            hasPrevPage={!!listCursor}
-            onNextPage={() => setListCursor(listQuery.data?.meta?.next_cursor ?? undefined)}
-            onPrevPage={() => setListCursor(undefined)}
+            page={listPage}
+            totalPages={listQuery.data?.meta?.total_pages}
+            onPageChange={setListPage}
             totalCount={listQuery.data?.meta?.count}
             className="flex-1 min-h-0"
           />

@@ -22,8 +22,13 @@ type Err = { success: false; error: { code: string; message: string; fields?: Re
 
 export interface PageMeta {
   count: number;
-  next_cursor: string | null;
-  previous_cursor: string | null;
+  // Cursor-based pagination
+  next_cursor?: string | null;
+  previous_cursor?: string | null;
+  // Page-number pagination
+  total_pages?: number;
+  page?: number;
+  page_size?: number;
 }
 
 type ApiResponse<T> = Ok<T> | Err;
