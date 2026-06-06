@@ -29,7 +29,7 @@ export function LeadBoard({ columns }: LeadBoardProps) {
   const colMap = new Map(columns.map((c) => [c.status, c]));
 
   return (
-    <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-4 -mx-4 px-4 md:mx-0 md:px-0">
+    <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-4 -mx-4 px-4 md:mx-0 md:px-0 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-[var(--surface-2)] [&::-webkit-scrollbar-thumb]:bg-[var(--border)] [&::-webkit-scrollbar-thumb]:rounded-full scrollbar-thin">
       {LEAD_PIPELINE_COLS.map(({ status, label }) => {
         const col = colMap.get(status) ?? { status, leads: [], isLoading: false, count: 0 };
 

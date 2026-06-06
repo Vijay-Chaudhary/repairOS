@@ -32,6 +32,7 @@ interface DataTableProps<T> {
   hasPrevPage?: boolean;
   onNextPage?: () => void;
   onPrevPage?: () => void;
+  totalCount?: number;
   className?: string;
 }
 
@@ -39,7 +40,7 @@ export function DataTable<T>({
   columns, data, loading, error, keyExtractor, onRowClick,
   emptyTitle = 'No data', emptyDescription, emptyAction,
   hasNextPage, hasPrevPage, onNextPage, onPrevPage,
-  className,
+  totalCount, className,
 }: DataTableProps<T>) {
   if (error) {
     return (
@@ -92,24 +93,29 @@ export function DataTable<T>({
         </Table>
       </div>
 
-      {(hasNextPage || hasPrevPage) && (
-        <div className="flex items-center justify-end gap-2">
-          <Button
-            variant="outline" size="sm"
-            onClick={onPrevPage}
-            disabled={!hasPrevPage || loading}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Prev
-          </Button>
-          <Button
-            variant="outline" size="sm"
-            onClick={onNextPage}
-            disabled={!hasNextPage || loading}
-          >
-            Next
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+      {(onNextPage || onPrevPage) && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-[var(--text-muted)]">
+            {totalCount !== undefined ? `${totalCount} total` : ''}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline" size="sm"
+              onClick={onPrevPage}
+              disabled={!hasPrevPage || loading}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Prev
+            </Button>
+            <Button
+              variant="outline" size="sm"
+              onClick={onNextPage}
+              disabled={!hasNextPage || loading}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       )}
     </div>

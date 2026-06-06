@@ -173,6 +173,7 @@ export default function LeadsPage() {
             hasPrevPage={!!listCursor}
             onNextPage={() => setListCursor(listQuery.data?.meta?.next_cursor ?? undefined)}
             onPrevPage={() => setListCursor(undefined)}
+            totalCount={listQuery.data?.meta?.count}
           />
         )}
       </div>
