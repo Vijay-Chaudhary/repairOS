@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from authentication.permissions import require_permission
+from core.pagination import RepairOSCursorPagination
 
 from . import services
 from .models import CommissionRule, TechnicianCommission
@@ -37,7 +38,7 @@ class CommissionRulesView(APIView):
 
     def get(self, request: Request) -> Response:
         rules = CommissionRule.objects.all().order_by("-effective_from")
-        return Response(CommissionRuleSerializer(rules, many=True).data)
+        return Response({"items": CommissionRuleSerializer(rules, many=True).data})
 
     def post(self, request: Request) -> Response:
         serializer = CommissionRuleSerializer(data=request.data)
@@ -81,7 +82,10 @@ class CommissionPayoutView(APIView):
             qs = qs.filter(technician_id=tech_id)
         if s := request.query_params.get("status"):
             qs = qs.filter(status=s)
-        return Response(CommissionPayoutSerializer(qs, many=True).data)
+        paginator = RepairOSCursorPagination()
+        page = paginator.paginate_queryset(qs, request)
+        data = CommissionPayoutSerializer(page, many=True).data
+        return paginator.get_paginated_response(data)
 
     def post(self, request: Request) -> Response:
         serializer = CreatePayoutSerializer(data=request.data)

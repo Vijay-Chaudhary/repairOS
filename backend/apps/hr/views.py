@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from authentication.permissions import require_permission
+from core.pagination import RepairOSCursorPagination
 
 from . import services
 from .models import Employee, LeaveRequest, SalarySlip
@@ -50,7 +51,10 @@ class EmployeeListCreateView(APIView):
         if et := request.query_params.get("employment_type"):
             qs = qs.filter(employment_type=et)
 
-        return Response(EmployeeSerializer(qs, many=True).data)
+        paginator = RepairOSCursorPagination()
+        page = paginator.paginate_queryset(qs, request)
+        data = EmployeeSerializer(page, many=True).data
+        return paginator.get_paginated_response(data)
 
     def post(self, request: Request) -> Response:
         serializer = CreateEmployeeSerializer(data=request.data)
@@ -135,7 +139,10 @@ class LeaveRequestListCreateView(APIView):
         if emp_id := request.query_params.get("employee_id"):
             qs = qs.filter(employee_id=emp_id)
 
-        return Response(LeaveRequestSerializer(qs, many=True).data)
+        paginator = RepairOSCursorPagination()
+        page = paginator.paginate_queryset(qs, request)
+        data = LeaveRequestSerializer(page, many=True).data
+        return paginator.get_paginated_response(data)
 
     def post(self, request: Request) -> Response:
         serializer = CreateLeaveRequestSerializer(data=request.data)
@@ -197,7 +204,10 @@ class SalarySlipListView(APIView):
         if s := request.query_params.get("status"):
             qs = qs.filter(status=s)
 
-        return Response(SalarySlipSerializer(qs, many=True).data)
+        paginator = RepairOSCursorPagination()
+        page = paginator.paginate_queryset(qs, request)
+        data = SalarySlipSerializer(page, many=True).data
+        return paginator.get_paginated_response(data)
 
 
 class GenerateSalarySlipsView(APIView):

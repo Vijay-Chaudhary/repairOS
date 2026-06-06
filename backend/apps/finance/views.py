@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from authentication.permissions import require_permission
+from core.pagination import RepairOSCursorPagination
 
 from . import services
 from .models import BudgetHead, Expense, PettyCashAccount, ShopAsset
@@ -62,7 +63,10 @@ class BudgetHeadListView(APIView):
 
     def get(self, request: Request) -> Response:
         heads = BudgetHead.objects.select_related("shop").all()
-        return Response(BudgetHeadSerializer(heads, many=True).data)
+        paginator = RepairOSCursorPagination()
+        page = paginator.paginate_queryset(heads, request)
+        data = BudgetHeadSerializer(page, many=True).data
+        return paginator.get_paginated_response(data)
 
 
 class BudgetAllocationView(APIView):
@@ -105,7 +109,10 @@ class ExpenseListCreateView(APIView):
 
     def get(self, request: Request) -> Response:
         expenses = Expense.objects.select_related("shop", "budget_head").order_by("-date")
-        return Response(ExpenseSerializer(expenses, many=True).data)
+        paginator = RepairOSCursorPagination()
+        page = paginator.paginate_queryset(expenses, request)
+        data = ExpenseSerializer(page, many=True).data
+        return paginator.get_paginated_response(data)
 
     def post(self, request: Request) -> Response:
         serializer = CreateExpenseSerializer(data=request.data)
@@ -127,7 +134,10 @@ class AssetListCreateView(APIView):
 
     def get(self, request: Request) -> Response:
         assets = ShopAsset.objects.filter(is_active=True).select_related("shop")
-        return Response(ShopAssetSerializer(assets, many=True).data)
+        paginator = RepairOSCursorPagination()
+        page = paginator.paginate_queryset(assets, request)
+        data = ShopAssetSerializer(page, many=True).data
+        return paginator.get_paginated_response(data)
 
     def post(self, request: Request) -> Response:
         serializer = CreateAssetSerializer(data=request.data)

@@ -334,7 +334,10 @@ class ExportJobListView(APIView):
         ).order_by("-created_at").values(
             "id", "report_type", "format", "status", "file_url", "created_at"
         )
-        return Response(list(jobs))
+        from core.pagination import RepairOSCursorPagination
+        paginator = RepairOSCursorPagination()
+        page = paginator.paginate_queryset(jobs, request)
+        return paginator.get_paginated_response(list(page))
 
 
 class GSTR1View(APIView):

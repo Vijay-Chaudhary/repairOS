@@ -64,7 +64,10 @@ class SupplierView(APIView):
         if q := request.query_params.get("q"):
             from django.db.models import Q
             qs = qs.filter(Q(name__icontains=q) | Q(phone__icontains=q))
-        return Response(SupplierSerializer(qs, many=True).data)
+        paginator = RepairOSCursorPagination()
+        page = paginator.paginate_queryset(qs, request)
+        data = SupplierSerializer(page, many=True).data
+        return paginator.get_paginated_response(data)
 
     def post(self, request):
         serializer = SupplierSerializer(data=request.data)
