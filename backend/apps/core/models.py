@@ -86,6 +86,7 @@ class DocumentCounter(models.Model):
         SALES_INVOICE = "sales_invoice", "Sales Invoice"
         SALES_RETURN = "sales_return", "Sales Return"
         PURCHASE_ORDER = "purchase_order", "Purchase Order"
+        PURCHASE_RETURN = "purchase_return", "Purchase Return"
         GRN = "grn", "GRN"
         AMC = "amc", "AMC Contract"
         CREDIT_NOTE = "credit_note", "Credit Note"

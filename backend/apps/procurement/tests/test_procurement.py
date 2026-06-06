@@ -233,7 +233,7 @@ class TestSupplierCRUD:
     def test_list_suppliers(self, admin_client, supplier):
         res = admin_client.get(self.url)
         assert res.status_code == status.HTTP_200_OK
-        assert len(res.data) >= 1
+        assert len(res.data["items"]) >= 1
 
     def test_supplier_detail(self, admin_client, supplier):
         res = admin_client.get(f"{self.url}{supplier.id}/")
@@ -260,14 +260,18 @@ class TestSupplierLedger:
     def test_empty_ledger(self, admin_client, supplier):
         res = admin_client.get(f"/api/v1/procurement/suppliers/{supplier.id}/ledger/")
         assert res.status_code == status.HTTP_200_OK
-        assert res.data["total_invoiced"] == "0.00"
-        assert res.data["outstanding"] == "0.00"
+        assert res.data["balance"] == 0.0
+        assert res.data["items"] == []
 
     def test_ledger_after_invoice(self, admin_client, supplier, purchase_invoice):
         res = admin_client.get(f"/api/v1/procurement/suppliers/{supplier.id}/ledger/")
         assert res.status_code == status.HTTP_200_OK
-        assert Decimal(res.data["total_invoiced"]) > 0
-        assert len(res.data["invoices"]) == 1
+        assert res.data["balance"] > 0
+        assert len(res.data["items"]) == 1
+        entry = res.data["items"][0]
+        assert entry["type"] == "invoice"
+        assert entry["debit"] > 0
+        assert entry["credit"] == 0.0
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -778,8 +782,10 @@ class TestE2E:
         stock.refresh_from_db()
         assert stock.quantity_in_stock == Decimal("15")  # 18 - 3
 
-        # 10. Supplier ledger shows the invoice
+        # 10. Supplier ledger shows the invoice (fully paid, so balance == 0 after payments)
         ledger_res = admin_client.get(f"/api/v1/procurement/suppliers/{supplier.id}/ledger/")
         assert ledger_res.status_code == 200
-        assert len(ledger_res.data["invoices"]) == 1
-        assert Decimal(ledger_res.data["total_invoiced"]) == grand_total
+        # At least the invoice entry; payments add more rows
+        invoice_entries = [e for e in ledger_res.data["items"] if e["type"] == "invoice"]
+        assert len(invoice_entries) == 1
+        assert Decimal(str(invoice_entries[0]["debit"])) == grand_total

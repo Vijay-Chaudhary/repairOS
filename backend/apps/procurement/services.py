@@ -59,29 +59,64 @@ def update_supplier(supplier: Supplier, data: dict, user) -> Supplier:
 
 
 def get_supplier_ledger(supplier: Supplier) -> dict:
-    invoices = supplier.invoices.select_related("grn").order_by("-bill_date")
-    rows = []
-    total_invoiced = Decimal("0")
-    total_paid = Decimal("0")
+    """
+    Return a double-entry style ledger: invoices as debit entries, payments as
+    credit entries, sorted by date with a running balance.
+    Response shape: { items: [...], balance: float, total_invoiced: str, total_paid: str }
+    """
+    invoices = list(supplier.invoices.order_by("bill_date", "created_at"))
+    payments = list(
+        PurchasePayment.objects.filter(
+            purchase_invoice__supplier=supplier
+        ).select_related("purchase_invoice").order_by("paid_at")
+    )
 
+    entries = []
     for inv in invoices:
-        rows.append({
-            "invoice_id": str(inv.id),
-            "bill_number": inv.bill_number,
-            "bill_date": str(inv.bill_date),
-            "grand_total": str(inv.grand_total),
-            "amount_paid": str(inv.amount_paid),
-            "outstanding": str(inv.grand_total - inv.amount_paid),
-            "payment_status": inv.payment_status,
+        entries.append({
+            "id": str(inv.id),
+            "type": "invoice",
+            "date": inv.bill_date,
+            "reference": inv.bill_number,
+            "debit": inv.grand_total,
+            "credit": Decimal("0"),
         })
-        total_invoiced += inv.grand_total
-        total_paid += inv.amount_paid
+    for pay in payments:
+        ref = pay.reference_id or f"PMT-{str(pay.id)[:8].upper()}"
+        entries.append({
+            "id": str(pay.id),
+            "type": "payment",
+            "date": pay.paid_at.date(),
+            "reference": ref,
+            "debit": Decimal("0"),
+            "credit": pay.amount,
+        })
+
+    entries.sort(key=lambda e: e["date"])
+
+    running = Decimal("0")
+    rows = []
+    for e in entries:
+        running += e["debit"] - e["credit"]
+        rows.append({
+            "id": e["id"],
+            "type": e["type"],
+            "date": str(e["date"]),
+            "reference": e["reference"],
+            "debit": float(e["debit"]),
+            "credit": float(e["credit"]),
+            "balance": float(running.quantize(_TWO_PLACES)),
+        })
+
+    total_invoiced = sum((e["debit"] for e in entries), Decimal("0"))
+    total_paid = sum((e["credit"] for e in entries), Decimal("0"))
+    outstanding = (total_invoiced - total_paid).quantize(_TWO_PLACES)
 
     return {
-        "invoices": rows,
+        "items": rows,
+        "balance": float(outstanding),
         "total_invoiced": str(total_invoiced.quantize(_TWO_PLACES)),
         "total_paid": str(total_paid.quantize(_TWO_PLACES)),
-        "outstanding": str((total_invoiced - total_paid).quantize(_TWO_PLACES)),
     }
 
 
@@ -367,8 +402,7 @@ def create_purchase_return(invoice: PurchaseInvoice, data: dict, user) -> Purcha
 
     shop = invoice.shop
     now = timezone.now()
-    # Return number: shop-PR-YYYY-NNNN (using PURCHASE_ORDER counter family; or a dedicated key)
-    seq = DocumentCounter.next(shop, now.year, DocumentCounter.DocType.PURCHASE_ORDER)
+    seq = DocumentCounter.next(shop, now.year, DocumentCounter.DocType.PURCHASE_RETURN)
     return_number = f"{shop.code}-PR-{now.year}-{seq:04d}"
 
     with transaction.atomic():

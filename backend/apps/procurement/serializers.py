@@ -29,6 +29,7 @@ class SupplierSerializer(serializers.ModelSerializer):
     bank_account_number = serializers.CharField(
         write_only=True, required=False, allow_blank=True, default=""
     )
+    bank_account_masked = serializers.SerializerMethodField()
 
     class Meta:
         model = Supplier
@@ -36,11 +37,18 @@ class SupplierSerializer(serializers.ModelSerializer):
             "id", "name", "contact_person", "phone", "email",
             "address", "state", "state_code", "gstin",
             "payment_terms_days", "credit_limit",
-            "bank_account_number",  # write-only (encrypted on save)
+            "bank_account_number",   # write-only (encrypted on save)
+            "bank_account_masked",   # read-only masked view
             "bank_ifsc", "is_active",
             "created_at",
         ]
-        read_only_fields = ["id", "created_at"]
+        read_only_fields = ["id", "bank_account_masked", "created_at"]
+
+    def get_bank_account_masked(self, obj):
+        full = obj.get_bank_account()
+        if not full:
+            return None
+        return "••••" + full[-4:] if len(full) >= 4 else "••••"
 
     def create(self, validated_data):
         bank_number = validated_data.pop("bank_account_number", "")
@@ -58,13 +66,6 @@ class SupplierSerializer(serializers.ModelSerializer):
         return instance
 
 
-class SupplierLedgerSerializer(serializers.Serializer):
-    invoices = serializers.ListField()
-    total_invoiced = serializers.DecimalField(max_digits=14, decimal_places=2)
-    total_paid = serializers.DecimalField(max_digits=14, decimal_places=2)
-    outstanding = serializers.DecimalField(max_digits=14, decimal_places=2)
-
-
 # ──────────────────────────────────────────────────────────────────────────────
 # Purchase Order
 # ──────────────────────────────────────────────────────────────────────────────
@@ -72,14 +73,23 @@ class SupplierLedgerSerializer(serializers.Serializer):
 
 class POItemSerializer(serializers.ModelSerializer):
     variant_id = serializers.UUIDField(source="variant.id", read_only=True)
+    variant_name = serializers.CharField(source="variant.variant_name", read_only=True, default="")
+    product_name = serializers.CharField(source="variant.product.name", read_only=True, default="")
+    quantity_received = serializers.SerializerMethodField()
 
     class Meta:
         model = PurchaseOrderItem
         fields = [
-            "id", "variant_id", "quantity_ordered",
+            "id", "variant_id", "variant_name", "product_name",
+            "quantity_ordered", "quantity_received",
             "unit_cost", "tax_rate", "hsn_code", "line_total",
         ]
-        read_only_fields = ["id", "variant_id", "line_total"]
+        read_only_fields = ["id", "variant_id", "variant_name", "product_name", "quantity_received", "line_total"]
+
+    def get_quantity_received(self, obj):
+        from django.db.models import Sum
+        result = obj.grn_items.aggregate(total=Sum("quantity_accepted"))
+        return float(result["total"] or 0)
 
 
 class POItemCreateSerializer(serializers.Serializer):
@@ -92,16 +102,25 @@ class POItemCreateSerializer(serializers.Serializer):
 
 class PurchaseOrderSerializer(serializers.ModelSerializer):
     items = POItemSerializer(many=True, read_only=True)
+    shop_id = serializers.UUIDField(read_only=True)
+    supplier_id = serializers.UUIDField(read_only=True)
     supplier_name = serializers.CharField(source="supplier.name", read_only=True)
+    grand_total = serializers.SerializerMethodField()
 
     class Meta:
         model = PurchaseOrder
         fields = [
-            "id", "shop", "supplier", "supplier_name", "po_number",
-            "status", "expected_delivery_date", "notes", "items",
+            "id", "shop_id", "supplier_id", "supplier_name", "po_number",
+            "status", "expected_delivery_date", "notes", "grand_total", "items",
             "created_at",
         ]
-        read_only_fields = ["id", "po_number", "status", "supplier_name", "items", "created_at"]
+        read_only_fields = [
+            "id", "shop_id", "supplier_id", "supplier_name", "po_number",
+            "status", "grand_total", "items", "created_at",
+        ]
+
+    def get_grand_total(self, obj):
+        return float(sum(item.line_total for item in obj.items.all()))
 
 
 class CreatePurchaseOrderSerializer(serializers.Serializer):
@@ -169,15 +188,17 @@ class GRNItemSerializer(serializers.ModelSerializer):
 
 class GRNSerializer(serializers.ModelSerializer):
     items = GRNItemSerializer(many=True, read_only=True)
+    po_id = serializers.UUIDField(read_only=True)
+    received_by_name = serializers.CharField(source="received_by.get_full_name", read_only=True, default="")
 
     class Meta:
         model = GoodsReceiptNote
         fields = [
-            "id", "shop", "po", "grn_number", "received_date",
-            "received_by", "challan_number", "notes", "items",
+            "id", "po_id", "grn_number", "received_date",
+            "received_by_name", "challan_number", "notes", "items",
             "created_at",
         ]
-        read_only_fields = ["id", "grn_number", "received_by", "created_at"]
+        read_only_fields = ["id", "po_id", "grn_number", "received_by_name", "created_at"]
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -186,21 +207,29 @@ class GRNSerializer(serializers.ModelSerializer):
 
 
 class PurchaseInvoiceSerializer(serializers.ModelSerializer):
+    shop_id = serializers.UUIDField(read_only=True)
+    supplier_id = serializers.UUIDField(read_only=True)
     supplier_name = serializers.CharField(source="supplier.name", read_only=True)
+    grn_id = serializers.UUIDField(allow_null=True, read_only=True)
+    amount_outstanding = serializers.SerializerMethodField()
 
     class Meta:
         model = PurchaseInvoice
         fields = [
-            "id", "shop", "supplier", "supplier_name", "grn",
+            "id", "shop_id", "supplier_id", "supplier_name", "grn_id",
             "bill_number", "bill_date",
             "subtotal", "cgst", "sgst", "igst", "grand_total",
-            "payment_status", "due_date", "amount_paid",
+            "payment_status", "due_date", "amount_paid", "amount_outstanding",
             "created_at",
         ]
         read_only_fields = [
-            "id", "supplier_name", "subtotal", "cgst", "sgst", "igst",
-            "grand_total", "payment_status", "amount_paid", "created_at",
+            "id", "shop_id", "supplier_id", "supplier_name", "grn_id",
+            "subtotal", "cgst", "sgst", "igst",
+            "grand_total", "payment_status", "amount_paid", "amount_outstanding", "created_at",
         ]
+
+    def get_amount_outstanding(self, obj):
+        return float(obj.grand_total - obj.amount_paid)
 
 
 class CreatePurchaseInvoiceSerializer(serializers.Serializer):
@@ -220,10 +249,16 @@ class CreatePurchaseInvoiceSerializer(serializers.Serializer):
 
 
 class PurchasePaymentSerializer(serializers.ModelSerializer):
+    purchase_invoice_id = serializers.UUIDField(read_only=True)
+    recorded_by_name = serializers.CharField(source="recorded_by.get_full_name", read_only=True, default="")
+
     class Meta:
         model = PurchasePayment
-        fields = ["id", "purchase_invoice", "amount", "method", "reference_id", "paid_at", "created_at"]
-        read_only_fields = ["id", "paid_at", "created_at"]
+        fields = [
+            "id", "purchase_invoice_id", "amount", "method",
+            "reference_id", "paid_at", "recorded_by_name", "created_at",
+        ]
+        read_only_fields = ["id", "purchase_invoice_id", "paid_at", "recorded_by_name", "created_at"]
 
 
 class CreatePurchasePaymentSerializer(serializers.Serializer):

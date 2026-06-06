@@ -61,9 +61,9 @@ class SupplierView(APIView):
 
     def get(self, request):
         qs = Supplier.objects.filter(is_active=True).order_by("name")
-        if q := request.query_params.get("q"):
+        if search := request.query_params.get("search"):
             from django.db.models import Q
-            qs = qs.filter(Q(name__icontains=q) | Q(phone__icontains=q))
+            qs = qs.filter(Q(name__icontains=search) | Q(phone__icontains=search))
         paginator = RepairOSCursorPagination()
         page = paginator.paginate_queryset(qs, request)
         data = SupplierSerializer(page, many=True).data
@@ -128,7 +128,9 @@ class PurchaseOrderView(APIView):
         from django.db.models import Q
         token = getattr(request, "auth", None)
         shop_ids = token.get("shop_ids", []) if token else []
-        base = PurchaseOrder.objects.select_related("supplier", "shop").order_by("-created_at")
+        base = PurchaseOrder.objects.select_related("supplier", "shop").prefetch_related(
+            "items__variant__product", "items__grn_items"
+        ).order_by("-created_at")
         qs = base.filter(shop_id__in=shop_ids) if shop_ids else base
 
         if s := request.query_params.get("status"):
@@ -177,7 +179,9 @@ class PurchaseOrderDetailView(APIView):
 
     def _get_po(self, pk):
         try:
-            return PurchaseOrder.objects.prefetch_related("items__variant__product").get(pk=pk)
+            return PurchaseOrder.objects.select_related("supplier").prefetch_related(
+                "items__variant__product", "items__grn_items"
+            ).get(pk=pk)
         except PurchaseOrder.DoesNotExist:
             from rest_framework.exceptions import NotFound
             raise NotFound("Purchase order not found.")
@@ -225,6 +229,27 @@ class GRNView(APIView):
 class PurchaseInvoiceView(APIView):
     def get_permissions(self):
         return [require_permission("erp.purchase_invoices.record")()]
+
+    def get(self, request):
+        from django.db.models import Q
+        token = getattr(request, "auth", None)
+        shop_ids = token.get("shop_ids", []) if token else []
+        qs = PurchaseInvoice.objects.select_related("supplier").order_by("-created_at")
+        if shop_ids:
+            qs = qs.filter(shop_id__in=shop_ids)
+
+        if supplier_id := request.query_params.get("supplier_id"):
+            qs = qs.filter(supplier_id=supplier_id)
+        if payment_status := request.query_params.get("payment_status"):
+            qs = qs.filter(payment_status=payment_status)
+
+        paginator = RepairOSCursorPagination()
+        page = paginator.paginate_queryset(qs, request)
+        data = PurchaseInvoiceSerializer(page if page is not None else qs, many=True).data
+        if page is not None:
+            return paginator.get_paginated_response(data)
+        from rest_framework.response import Response
+        return Response(data)
 
     def post(self, request):
         from core.models import Shop
@@ -302,8 +327,13 @@ class PurchaseReturnDispatchView(APIView):
         return [require_permission("erp.purchase_returns.create")()]
 
     def patch(self, request, pk):
+        token = getattr(request, "auth", None)
+        shop_ids = token.get("shop_ids", []) if token else []
         try:
-            ret = PurchaseReturn.objects.get(pk=pk)
+            qs = PurchaseReturn.objects.all()
+            if shop_ids:
+                qs = qs.filter(purchase_invoice__shop_id__in=shop_ids)
+            ret = qs.get(pk=pk)
         except PurchaseReturn.DoesNotExist:
             from rest_framework.exceptions import NotFound
             raise NotFound("Purchase return not found.")
