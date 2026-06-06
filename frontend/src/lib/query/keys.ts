@@ -30,6 +30,7 @@ export const qk = {
   leads:           listKey('leads'),
   lead:            (id: string) => ['lead', id] as const,
   leadComms:       (id: string) => ['lead', id, 'comms'] as const,
+  leadQuotes:      (id: string) => ['lead', id, 'quotes'] as const,
   tasks:           listKey('tasks'),
   segments:        () => ['segments'] as const,
 

@@ -81,6 +81,7 @@ class DocumentCounter(models.Model):
     class DocType(models.TextChoices):
         JOB = "job", "Job Ticket"
         ESTIMATE = "estimate", "Estimate"
+        LEAD_QUOTE = "lead_quote", "Lead Quote"
         REPAIR_INVOICE = "repair_invoice", "Repair Invoice"
         SALES_INVOICE = "sales_invoice", "Sales Invoice"
         SALES_RETURN = "sales_return", "Sales Return"

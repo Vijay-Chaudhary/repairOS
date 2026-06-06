@@ -32,14 +32,20 @@ export function LeadBoard({ columns }: LeadBoardProps) {
     <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-4 -mx-4 px-4 md:mx-0 md:px-0">
       {LEAD_PIPELINE_COLS.map(({ status, label }) => {
         const col = colMap.get(status) ?? { status, leads: [], isLoading: false, count: 0 };
+        const isLost = status === 'lost';
 
         return (
           <div key={status} className="flex-none w-[256px] snap-center">
             <div className="flex items-center justify-between mb-2 px-0.5">
-              <h3 className="text-body-sm font-semibold text-[var(--text)]">{label}</h3>
+              <h3 className={cn(
+                'text-body-sm font-semibold',
+                isLost ? 'text-[var(--text-muted)]' : 'text-[var(--text)]',
+              )}>{label}</h3>
               <span className={cn(
                 'min-w-[20px] h-5 rounded-full text-[10px] font-semibold px-1.5 flex items-center justify-center',
-                col.count > 0
+                isLost && col.count > 0
+                  ? 'bg-[var(--danger)]/10 text-[var(--danger)]'
+                  : col.count > 0
                   ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
                   : 'bg-[var(--surface-2)] text-[var(--text-muted)]',
               )}>
@@ -47,7 +53,10 @@ export function LeadBoard({ columns }: LeadBoardProps) {
               </span>
             </div>
 
-            <div className="bg-[var(--surface-2)] rounded-lg p-2 min-h-[120px] space-y-2">
+            <div className={cn(
+              'rounded-lg p-2 min-h-[120px] space-y-2',
+              isLost ? 'bg-[var(--danger)]/5' : 'bg-[var(--surface-2)]',
+            )}>
               {col.isLoading ? (
                 <ColumnSkeleton />
               ) : col.leads.length === 0 ? (

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Phone, Wrench, ChevronRight, MoreVertical, UserCheck } from 'lucide-react';
+import { Phone, Wrench, ChevronRight, MoreVertical, UserCheck, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Can } from '@/components/shared/Can';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { LogCommunicationSheet } from './LogCommunicationSheet';
-import { crmApi, LEAD_TRANSITIONS, SOURCE_LABELS, type Lead } from '@/lib/api/crm';
+import { crmApi, LEAD_TRANSITIONS, SOURCE_LABELS, type Lead, type QuoteItem } from '@/lib/api/crm';
 import { qk } from '@/lib/query/keys';
 import { ApiError } from '@/lib/api/client';
 import { formatDate } from '@/lib/format/date';
@@ -30,6 +30,10 @@ export function LeadCard({ lead }: LeadCardProps) {
   const [lostDialogOpen, setLostDialogOpen] = useState(false);
   const [lostReason, setLostReason] = useState('');
   const [convertConfirmOpen, setConvertConfirmOpen] = useState(false);
+  const [quoteOpen, setQuoteOpen] = useState(false);
+  const [quoteItems, setQuoteItems] = useState<QuoteItem[]>([{ description: '', amount: '' }]);
+  const [quoteValidUntil, setQuoteValidUntil] = useState('');
+  const [quoteNotes, setQuoteNotes] = useState('');
 
   const transitions = LEAD_TRANSITIONS[lead.status] ?? [];
   const primaryTransition = transitions[0];
@@ -55,6 +59,24 @@ export function LeadCard({ lead }: LeadCardProps) {
     onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Conversion failed'),
   });
 
+  const quoteMutation = useMutation({
+    mutationFn: () => crmApi.sendQuote(lead.id, {
+      items: quoteItems.filter(i => i.description.trim() && i.amount),
+      valid_until: quoteValidUntil,
+      notes: quoteNotes,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: qk.leads() });
+      queryClient.invalidateQueries({ queryKey: qk.leadQuotes(lead.id) });
+      toast.success('Quote sent');
+      setQuoteOpen(false);
+      setQuoteItems([{ description: '', amount: '' }]);
+      setQuoteValidUntil('');
+      setQuoteNotes('');
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Failed to send quote'),
+  });
+
   function handleAdvance() {
     if (lead.status === 'lost') {
       if (lead.status_before_lost) {
@@ -66,7 +88,7 @@ export function LeadCard({ lead }: LeadCardProps) {
     if (primaryTransition.to === 'converted') {
       setConvertConfirmOpen(true);
     } else if (primaryTransition.requiresQuote) {
-      router.push(`/leads/${lead.id}`);
+      setQuoteOpen(true);
     } else {
       advanceMutation.mutate({ status: primaryTransition.to });
     }
@@ -205,6 +227,114 @@ export function LeadCard({ lead }: LeadCardProps) {
         onConfirm={() => convertMutation.mutate()}
         loading={convertMutation.isPending}
       />
+
+      {/* Send quote dialog */}
+      <Dialog open={quoteOpen} onOpenChange={setQuoteOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Send quote to {lead.name}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            {/* Line items */}
+            <div>
+              <p className="text-body-sm font-medium text-[var(--text)] mb-2">Items</p>
+              <div className="space-y-2">
+                {quoteItems.map((item, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <Input
+                      placeholder="Description"
+                      className="flex-1"
+                      value={item.description}
+                      onChange={(e) => {
+                        const next = [...quoteItems];
+                        next[idx] = { ...next[idx], description: e.target.value };
+                        setQuoteItems(next);
+                      }}
+                    />
+                    <Input
+                      placeholder="Amount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-28"
+                      value={item.amount}
+                      onChange={(e) => {
+                        const next = [...quoteItems];
+                        next[idx] = { ...next[idx], amount: e.target.value };
+                        setQuoteItems(next);
+                      }}
+                    />
+                    {quoteItems.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 text-[var(--text-muted)]"
+                        onClick={() => setQuoteItems(quoteItems.filter((_, i) => i !== idx))}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-2 text-xs text-[var(--accent)] h-7 px-2"
+                onClick={() => setQuoteItems([...quoteItems, { description: '', amount: '' }])}
+              >
+                <Plus className="h-3 w-3 mr-1" /> Add item
+              </Button>
+            </div>
+
+            {/* Total */}
+            {quoteItems.some(i => i.amount) && (
+              <p className="text-body-sm text-right text-[var(--text)]">
+                Total: <span className="font-semibold">
+                  ₹{quoteItems.reduce((sum, i) => sum + (parseFloat(i.amount) || 0), 0).toFixed(2)}
+                </span>
+              </p>
+            )}
+
+            {/* Valid until */}
+            <div>
+              <label className="text-body-sm font-medium text-[var(--text)] block mb-1">
+                Valid until <span className="text-[var(--danger)]">*</span>
+              </label>
+              <Input
+                type="date"
+                value={quoteValidUntil}
+                onChange={(e) => setQuoteValidUntil(e.target.value)}
+              />
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="text-body-sm font-medium text-[var(--text)] block mb-1">Notes</label>
+              <textarea
+                className="flex min-h-[64px] w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-body text-[var(--text)] placeholder:text-[var(--text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] resize-none"
+                placeholder="Any additional notes…"
+                value={quoteNotes}
+                onChange={(e) => setQuoteNotes(e.target.value)}
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setQuoteOpen(false)}>Cancel</Button>
+              <Button
+                className="flex-1"
+                disabled={
+                  !quoteValidUntil ||
+                  !quoteItems.some(i => i.description.trim() && i.amount) ||
+                  quoteMutation.isPending
+                }
+                onClick={() => quoteMutation.mutate()}
+              >
+                <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                {quoteMutation.isPending ? 'Sending…' : 'Send quote'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

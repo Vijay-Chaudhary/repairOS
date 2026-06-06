@@ -37,8 +37,10 @@ from .serializers import (
     CustomerSegmentSerializer,
     CustomerSerializer,
     FollowUpTaskSerializer,
+    LeadQuoteSerializer,
     LeadSerializer,
     LeadStatusSerializer,
+    SendQuoteSerializer,
     TaskCompleteSerializer,
 )
 
@@ -163,6 +165,23 @@ class LeadViewSet(ShopScopedMixin, ModelViewSet):
             serializer.validated_data.get("reason", ""),
         )
         return Response(LeadSerializer(lead).data)
+
+    @action(detail=True, methods=["post"], url_path="quote",
+            permission_classes=[])
+    def send_quote(self, request, pk=None):
+        self.permission_classes = [require_permission("crm.leads.edit")]
+        self.check_permissions(request)
+        lead = self.get_object()
+        serializer = SendQuoteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        quote = services.send_quote(lead, serializer.validated_data, request.user)
+        return Response(LeadQuoteSerializer(quote).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get"], url_path="quotes")
+    def list_quotes(self, request, pk=None):
+        lead = self.get_object()
+        quotes = lead.quotes.select_related("sent_by").order_by("-created_at")
+        return Response(LeadQuoteSerializer(quotes, many=True).data)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
