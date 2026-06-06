@@ -138,7 +138,12 @@ class SalesReturnViewSet(GenericViewSet):
         return [require_permission("pos.returns.approve")()]
 
     def get_queryset(self):
-        return SalesReturn.objects.all()
+        qs = SalesReturn.objects.select_related("sale__shop")
+        token = getattr(self.request, "auth", None)
+        if token and not token.get("is_tenant_wide") and not token.get("is_platform_admin"):
+            shop_ids = token.get("shop_ids", [])
+            qs = qs.filter(sale__shop_id__in=shop_ids)
+        return qs
 
     def partial_update(self, request, pk=None):
         try:

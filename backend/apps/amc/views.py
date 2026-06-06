@@ -151,7 +151,12 @@ class AMCVisitViewSet(GenericViewSet):
         return [require_permission("amc.visits.complete")()]
 
     def get_queryset(self):
-        return AMCVisit.objects.select_related("contract", "technician")
+        qs = AMCVisit.objects.select_related("contract__shop", "technician")
+        token = getattr(self.request, "auth", None)
+        if token and not token.get("is_tenant_wide") and not token.get("is_platform_admin"):
+            shop_ids = token.get("shop_ids", [])
+            qs = qs.filter(contract__shop_id__in=shop_ids)
+        return qs
 
     @action(detail=True, methods=["post"], url_path="complete")
     def complete(self, request, pk=None):

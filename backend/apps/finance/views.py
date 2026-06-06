@@ -178,8 +178,12 @@ class AssetDetailView(APIView):
         serializer = UpdateAssetSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        qs = ShopAsset.objects.all()
+        token = getattr(request, "auth", None)
+        if token and not token.get("is_tenant_wide") and not token.get("is_platform_admin"):
+            qs = qs.filter(shop_id__in=token.get("shop_ids", []))
         try:
-            asset = ShopAsset.objects.get(id=asset_id)
+            asset = qs.get(id=asset_id)
         except ShopAsset.DoesNotExist:
             return Response({"detail": "Asset not found."}, status=status.HTTP_404_NOT_FOUND)
 

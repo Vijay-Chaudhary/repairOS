@@ -106,8 +106,12 @@ class EmployeeDetailView(APIView):
     permission_classes = [IsAuthenticated, require_permission("hr.employees.view")]
 
     def get(self, request: Request, employee_id) -> Response:
+        qs = Employee.objects.filter(deleted_at__isnull=True)
+        token = getattr(request, "auth", None)
+        if token and not token.get("is_tenant_wide") and not token.get("is_platform_admin"):
+            qs = qs.filter(shop_id__in=token.get("shop_ids", []))
         try:
-            emp = Employee.objects.get(id=employee_id, deleted_at__isnull=True)
+            emp = qs.get(id=employee_id)
         except Employee.DoesNotExist:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(EmployeeSerializer(emp).data)
@@ -172,8 +176,12 @@ class LeaveRequestDetailView(APIView):
         serializer = UpdateLeaveStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        qs = LeaveRequest.objects.select_related("employee")
+        token = getattr(request, "auth", None)
+        if token and not token.get("is_tenant_wide") and not token.get("is_platform_admin"):
+            qs = qs.filter(employee__shop_id__in=token.get("shop_ids", []))
         try:
-            leave = LeaveRequest.objects.get(id=leave_id)
+            leave = qs.get(id=leave_id)
         except LeaveRequest.DoesNotExist:
             return Response({"detail": "Leave request not found."}, status=status.HTTP_404_NOT_FOUND)
 
@@ -240,10 +248,19 @@ class SalarySlipDetailView(APIView):
             return [IsAuthenticated(), require_permission("hr.salary.generate")()]
         return [IsAuthenticated(), require_permission("hr.salary.view")()]
 
-    def get(self, request: Request, slip_id) -> Response:
+    def _get_slip(self, request: Request, slip_id):
+        qs = SalarySlip.objects.select_related("employee")
+        token = getattr(request, "auth", None)
+        if token and not token.get("is_tenant_wide") and not token.get("is_platform_admin"):
+            qs = qs.filter(employee__shop_id__in=token.get("shop_ids", []))
         try:
-            slip = SalarySlip.objects.select_related("employee").get(id=slip_id)
+            return qs.get(id=slip_id)
         except SalarySlip.DoesNotExist:
+            return None
+
+    def get(self, request: Request, slip_id) -> Response:
+        slip = self._get_slip(request, slip_id)
+        if not slip:
             return Response({"detail": "Salary slip not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(SalarySlipSerializer(slip).data)
 
@@ -251,9 +268,8 @@ class SalarySlipDetailView(APIView):
         serializer = UpdateSlipStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        try:
-            slip = SalarySlip.objects.get(id=slip_id)
-        except SalarySlip.DoesNotExist:
+        slip = self._get_slip(request, slip_id)
+        if not slip:
             return Response({"detail": "Salary slip not found."}, status=status.HTTP_404_NOT_FOUND)
 
         slip = services.update_slip_status(slip, serializer.validated_data["status"])
