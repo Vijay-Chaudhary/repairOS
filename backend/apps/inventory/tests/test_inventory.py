@@ -131,7 +131,7 @@ class TestProductCRUD:
     def test_list_products(self, admin_client, product):
         res = admin_client.get(self.url)
         assert res.status_code == status.HTTP_200_OK
-        assert len(res.data["data"]) >= 1
+        assert len(res.data["items"]) >= 1
 
     def test_filter_for_sale(self, admin_client, product):
         res = admin_client.get(self.url + "?is_for_sale=true")
@@ -140,7 +140,7 @@ class TestProductCRUD:
     def test_soft_deleted_product_excluded(self, admin_client, product):
         product.soft_delete()
         res = admin_client.get(self.url)
-        skus = [p["sku"] for p in res.data["data"]]
+        skus = [p["sku"] for p in res.data["items"]]
         assert product.sku not in skus
 
     def test_add_variant_to_product(self, admin_client, product):
@@ -245,7 +245,7 @@ class TestStockAdjustment:
             "note": "Found extra items",
         }, format="json")
         assert res.status_code == status.HTTP_201_CREATED
-        assert res.data["quantity_in_stock"] == "60.000"
+        assert res.data["new_qty"] == 60.0
 
     def test_negative_adjustment_decreases_stock(self, admin_client, admin_user, shop, variant):
         self._seed(shop, variant, admin_user, 50)
@@ -256,7 +256,7 @@ class TestStockAdjustment:
             "note": "Damaged in storage",
         }, format="json")
         assert res.status_code == status.HTTP_201_CREATED
-        assert res.data["quantity_in_stock"] == "45.000"
+        assert res.data["new_qty"] == 45.0
 
     def test_insufficient_stock_returns_400(self, admin_client, admin_user, shop, variant):
         self._seed(shop, variant, admin_user, 10)
@@ -416,7 +416,7 @@ class TestLedgerEndpoint:
 
         res = admin_client.get(self.url)
         assert res.status_code == status.HTTP_200_OK
-        assert len(res.data["data"]) >= 1
+        assert len(res.data["items"]) >= 1
 
 
 # ──────────────────────────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ Stock never goes negative (service + DB CHECK enforce this).
 import csv
 import io
 import logging
+import uuid
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -117,27 +118,30 @@ def opening_stock(shop, variant: ProductVariant, qty: Decimal, user) -> Inventor
 
 def adjust_stock(
     shop, variant: ProductVariant, quantity_delta: Decimal, note: str, user
-) -> InventoryStock:
-    stock, _ = update_stock(
+) -> tuple[InventoryStock, Decimal]:
+    stock, new_qty = update_stock(
         shop=shop, variant=variant, quantity_delta=quantity_delta,
         txn_type=InventoryTransaction.TxnType.ADJUSTMENT,
         reference_type=InventoryTransaction.RefType.ADJUSTMENT,
         note=note, user=user,
     )
-    return stock
+    return stock, new_qty
 
 
 def inter_shop_transfer(
     source_shop, dest_shop, variant: ProductVariant,
     qty: Decimal, note: str, user
-) -> tuple[InventoryStock, InventoryStock]:
+) -> tuple[InventoryStock, InventoryStock, UUID]:
     """
     Post paired transfer_out (source) + transfer_in (dest) in one DB transaction.
 
     OQ-06 (receiving shop confirms receipt before transfer_in posts) is not yet
     implemented; both legs post immediately.
+
+    Returns (src_stock, dst_stock, transfer_ref) so the caller can look up both
+    ledger entries by reference_id.
     """
-    transfer_ref = __import__("uuid").uuid4()
+    transfer_ref = uuid.uuid4()
 
     with transaction.atomic():
         src_stock, _ = update_stock(
@@ -155,7 +159,7 @@ def inter_shop_transfer(
             note=f"Transfer from {source_shop.code}: {note}", user=user,
         )
 
-    return src_stock, dst_stock
+    return src_stock, dst_stock, transfer_ref
 
 
 def record_sale_out(shop, variant: ProductVariant, qty: Decimal, sale_id: UUID, user) -> None:

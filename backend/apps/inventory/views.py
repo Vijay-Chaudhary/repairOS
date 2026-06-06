@@ -16,7 +16,7 @@ GET       /inventory/transactions/            — ledger (read-only)
 
 import logging
 
-from django.db.models import Q
+from django.db.models import Count, Q
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
@@ -29,7 +29,7 @@ from core.pagination import RepairOSCursorPagination
 from crm.views import ShopScopedMixin
 
 from . import services
-from .models import InventoryStock, InventoryTransaction, Product, ProductVariant
+from .models import InventoryStock, InventoryTransaction, Product, ProductCategory, ProductVariant
 from .serializers import (
     AdjustmentSerializer,
     BarcodeLookupSerializer,
@@ -37,6 +37,7 @@ from .serializers import (
     InventoryStockSerializer,
     InventoryTransactionSerializer,
     OpeningStockSerializer,
+    ProductCategorySerializer,
     ProductSerializer,
     ProductVariantSerializer,
     TransferSerializer,
@@ -60,11 +61,15 @@ class ProductViewSet(GenericViewSet):
         return [require_permission("erp.inventory.adjust")()]
 
     def get_queryset(self):
-        qs = Product.objects.prefetch_related("variants")
+        qs = Product.objects.select_related("category").prefetch_related("variants").annotate(
+            variant_count=Count("variants")
+        )
 
         qp = self.request.query_params
-        if q := qp.get("q"):
+        if q := qp.get("search"):
             qs = qs.filter(Q(name__icontains=q) | Q(sku__icontains=q))
+        if cat_id := qp.get("category_id"):
+            qs = qs.filter(category_id=cat_id)
         if is_sale := qp.get("is_for_sale"):
             qs = qs.filter(is_for_sale=is_sale.lower() == "true")
         if is_repair := qp.get("is_for_repair_use"):
@@ -190,10 +195,16 @@ class InventoryStockViewSet(ShopScopedMixin, GenericViewSet):
             qs = qs.filter(shop_id=shop_id)
         if variant_id := qp.get("variant_id"):
             qs = qs.filter(variant_id=variant_id)
-        if low := qp.get("low_stock"):
+        if low := qp.get("low_stock") or qp.get("low_stock_only"):
             if low.lower() == "true":
                 from django.db.models import F
                 qs = qs.filter(quantity_in_stock__lt=F("reorder_level"))
+        if q := qp.get("search"):
+            qs = qs.filter(
+                Q(variant__product__name__icontains=q) | Q(variant__product__sku__icontains=q)
+            )
+        if cat_id := qp.get("category_id"):
+            qs = qs.filter(variant__product__category_id=cat_id)
         return qs
 
     def list(self, request, *args, **kwargs):
@@ -240,12 +251,28 @@ class AdjustmentView(APIView):
         serializer = AdjustmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         vd = serializer.validated_data
-        stock = services.adjust_stock(
+        stock, new_qty = services.adjust_stock(
             shop=vd["shop"], variant=vd["variant"],
             quantity_delta=vd["quantity"], note=vd["note"],
             user=request.user,
         )
-        return Response(InventoryStockSerializer(stock).data, status=status.HTTP_201_CREATED)
+        txn = (
+            InventoryTransaction.objects.select_related("variant__product", "created_by")
+            .filter(
+                shop=vd["shop"],
+                variant=vd["variant"],
+                type=InventoryTransaction.TxnType.ADJUSTMENT,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        return Response(
+            {
+                "new_qty": float(new_qty),
+                "transaction": InventoryTransactionSerializer(txn).data if txn else None,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class TransferView(APIView):
@@ -256,7 +283,7 @@ class TransferView(APIView):
         serializer = TransferSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         vd = serializer.validated_data
-        src_stock, dst_stock = services.inter_shop_transfer(
+        _src_stock, _dst_stock, transfer_ref = services.inter_shop_transfer(
             source_shop=vd["source_shop"],
             dest_shop=vd["dest_shop"],
             variant=vd["variant"],
@@ -264,11 +291,11 @@ class TransferView(APIView):
             note=vd.get("note", ""),
             user=request.user,
         )
+        txns = InventoryTransaction.objects.select_related(
+            "variant__product", "created_by"
+        ).filter(reference_id=transfer_ref)
         return Response(
-            {
-                "source": InventoryStockSerializer(src_stock).data,
-                "destination": InventoryStockSerializer(dst_stock).data,
-            },
+            {"transactions": InventoryTransactionSerializer(txns, many=True).data},
             status=status.HTTP_201_CREATED,
         )
 
@@ -318,3 +345,17 @@ class InventoryTransactionViewSet(ShopScopedMixin, GenericViewSet):
             from core.models import Shop
             return Shop.objects.values_list("id", flat=True)
         return token.get("shop_ids", []) if token else []
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Categories
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class CategoryListView(APIView):
+    def get_permissions(self):
+        return [require_permission("erp.inventory.view")()]
+
+    def get(self, request):
+        categories = ProductCategory.objects.select_related("parent").order_by("name")
+        return Response({"items": ProductCategorySerializer(categories, many=True).data})

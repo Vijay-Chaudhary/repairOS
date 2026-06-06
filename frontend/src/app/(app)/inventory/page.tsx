@@ -31,7 +31,7 @@ export default function InventoryPage() {
   };
 
   const { data, isLoading } = useQuery({
-    queryKey: qk.stock(activeShopId),
+    queryKey: qk.stock(filters),
     queryFn: () => inventoryApi.listStock(filters),
     staleTime: 30_000,
   });

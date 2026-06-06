@@ -46,9 +46,10 @@ export const qk = {
   // Inventory
   products:      listKey('products'),
   product:       (id: string) => ['product', id] as const,
-  stock:         (shopId: string | null) => ['stock', shopId] as const,
+  stock:         listKey('stock'),
   stockMovements:listKey('stock-movements'),
   stockAlerts:   (shopId: string | null) => ['stock-alerts', shopId] as const,
+  categories:    () => ['categories'] as const,
 
   // Procurement
   purchaseOrders: listKey('purchase-orders'),

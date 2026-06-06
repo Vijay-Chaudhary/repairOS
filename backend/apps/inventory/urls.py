@@ -5,6 +5,7 @@ from .views import (
     AdjustmentView,
     BarcodeView,
     BulkImportView,
+    CategoryListView,
     InventoryStockViewSet,
     InventoryTransactionViewSet,
     OpeningStockView,
@@ -21,6 +22,7 @@ router.register("transactions", InventoryTransactionViewSet, basename="inventory
 # Specific paths MUST come before router include; the router's <pk> converter
 # would otherwise match "bulk-import", "barcode", etc. as a product pk.
 urlpatterns = [
+    path("categories/", CategoryListView.as_view(), name="product-categories"),
     path("products/barcode/<str:barcode>/", BarcodeView.as_view(), name="product-barcode"),
     path("products/bulk-import/", BulkImportView.as_view(), name="product-bulk-import"),
     path("products/variants/<uuid:pk>/", ProductVariantUpdateView.as_view(), name="variant-update"),

@@ -55,7 +55,7 @@ export function GrnReceiveForm({ po, onSuccess, onCancel }: GrnReceiveFormProps)
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: qk.purchaseOrder(po.id) });
       queryClient.invalidateQueries({ queryKey: qk.purchaseOrders() });
-      queryClient.invalidateQueries({ queryKey: qk.stock(null) });
+      queryClient.invalidateQueries({ queryKey: qk.stock() });
       toast.success('Goods receipt recorded — stock updated for accepted items');
       onSuccess();
     },

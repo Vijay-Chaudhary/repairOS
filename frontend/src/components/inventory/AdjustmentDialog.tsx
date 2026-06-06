@@ -54,7 +54,7 @@ export function AdjustmentDialog({ open, onOpenChange, record }: AdjustmentDialo
         note: values.note,
       }),
     onSuccess: ({ new_qty }) => {
-      queryClient.invalidateQueries({ queryKey: qk.stock(activeShopId ?? null) });
+      queryClient.invalidateQueries({ queryKey: qk.stock() });
       queryClient.invalidateQueries({ queryKey: qk.stockMovements() });
       toast.success(`Stock adjusted to ${new_qty} units`);
       form.reset({ quantity: 1, note: '' });

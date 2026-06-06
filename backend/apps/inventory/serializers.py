@@ -25,6 +25,7 @@ class ProductCategorySerializer(serializers.ModelSerializer):
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
+    product_id = serializers.UUIDField(read_only=True)
     product_name = serializers.CharField(source="product.name", read_only=True)
     hsn_code = serializers.CharField(source="product.hsn_code", read_only=True)
     tax_rate = serializers.DecimalField(
@@ -34,13 +35,13 @@ class ProductVariantSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductVariant
         fields = [
-            "id", "product", "product_name", "variant_name", "attributes",
+            "id", "product_id", "product_name", "variant_name", "attributes",
             "barcode", "cost_price", "selling_price", "wholesale_price",
             "minimum_order_qty", "is_active",
             "hsn_code", "tax_rate",
             "created_at",
         ]
-        read_only_fields = ["id", "product", "created_at"]
+        read_only_fields = ["id", "product_id", "created_at"]
         extra_kwargs = {
             # barcode is nullable-unique; suppress DRF's auto-UniqueValidator
             "barcode": {"validators": []},
@@ -58,18 +59,26 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    category_id = serializers.UUIDField(read_only=True, allow_null=True)
+    category_name = serializers.CharField(source="category.name", read_only=True, allow_null=True, default=None)
+    variant_count = serializers.SerializerMethodField()
     variants = ProductVariantSerializer(many=True, read_only=True)
 
     class Meta:
         model = Product
         fields = [
-            "id", "category", "name", "sku", "brand", "description",
+            "id", "category_id", "category_name", "name", "sku", "brand", "description",
             "hsn_code", "default_tax_rate",
             "is_for_sale", "is_for_repair_use", "is_active",
-            "variants", "created_at",
+            "variant_count", "variants", "created_at",
         ]
-        read_only_fields = ["id", "variants", "created_at"]
+        read_only_fields = ["id", "category_id", "category_name", "variant_count", "variants", "created_at"]
         extra_kwargs = {"sku": {"validators": []}}
+
+    def get_variant_count(self, obj) -> int:
+        if hasattr(obj, "variant_count"):
+            return obj.variant_count
+        return obj.variants.count()
 
     def validate_sku(self, value):
         qs = Product.objects.filter(sku=value)
@@ -125,16 +134,28 @@ class BarcodeLookupSerializer(serializers.ModelSerializer):
 
 
 class InventoryStockSerializer(serializers.ModelSerializer):
+    shop_id = serializers.UUIDField(read_only=True)
+    variant_id = serializers.UUIDField(read_only=True)
+    product_id = serializers.UUIDField(source="variant.product_id", read_only=True)
     variant_name = serializers.CharField(source="variant.variant_name", read_only=True)
     product_name = serializers.CharField(source="variant.product.name", read_only=True)
+    sku = serializers.CharField(source="variant.product.sku", read_only=True)
     barcode = serializers.CharField(source="variant.barcode", read_only=True)
+    is_low_stock = serializers.SerializerMethodField()
+    cost_price = serializers.DecimalField(source="variant.cost_price", max_digits=12, decimal_places=2, read_only=True)
+    selling_price = serializers.DecimalField(source="variant.selling_price", max_digits=12, decimal_places=2, read_only=True)
 
     class Meta:
         model = InventoryStock
         fields = [
-            "id", "shop", "variant", "variant_name", "product_name", "barcode",
+            "id", "shop_id", "variant_id", "product_id",
+            "variant_name", "product_name", "sku", "barcode",
             "quantity_in_stock", "reorder_level",
+            "is_low_stock", "cost_price", "selling_price",
         ]
+
+    def get_is_low_stock(self, obj) -> bool:
+        return obj.quantity_in_stock < obj.reorder_level
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -191,6 +212,8 @@ class OpeningStockSerializer(serializers.Serializer):
 
 
 class InventoryTransactionSerializer(serializers.ModelSerializer):
+    shop_id = serializers.UUIDField(read_only=True)
+    variant_id = serializers.UUIDField(read_only=True)
     variant_name = serializers.CharField(source="variant.variant_name", read_only=True)
     product_name = serializers.CharField(source="variant.product.name", read_only=True)
     created_by_name = serializers.CharField(source="created_by.full_name", read_only=True)
@@ -198,7 +221,7 @@ class InventoryTransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = InventoryTransaction
         fields = [
-            "id", "shop", "variant", "variant_name", "product_name",
+            "id", "shop_id", "variant_id", "variant_name", "product_name",
             "type", "quantity", "reference_type", "reference_id",
-            "note", "created_by", "created_by_name", "created_at",
+            "note", "created_by_name", "created_at",
         ]
