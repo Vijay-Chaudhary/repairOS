@@ -68,7 +68,7 @@ class LeadStatusSerializer(serializers.Serializer):
 
 class CustomerSerializer(serializers.ModelSerializer):
     shop_id = serializers.PrimaryKeyRelatedField(source="shop", queryset=Shop.objects.all())
-    source_lead_id = serializers.UUIDField(source="source_lead_id", read_only=True, allow_null=True)
+    source_lead_id = serializers.UUIDField(read_only=True, allow_null=True)
 
     class Meta:
         model = Customer
@@ -116,12 +116,16 @@ class CommunicationLogSerializer(serializers.ModelSerializer):
     # Accept _id suffix variants that the frontend sends
     customer_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
     lead_id = serializers.UUIDField(write_only=True, required=False, allow_null=True)
+    # EntityTimeline aliases: `description` maps to `summary`, `actor` maps to actor name
+    description = serializers.CharField(source="summary", read_only=True)
+    actor = serializers.CharField(source="logged_by.full_name", read_only=True, default="")
 
     class Meta:
         model = CommunicationLog
         fields = [
             "id", "customer", "customer_id", "lead", "lead_id", "type", "direction",
-            "summary", "duration_minutes", "logged_by", "logged_by_name", "logged_at",
+            "summary", "description", "duration_minutes",
+            "logged_by", "logged_by_name", "actor", "logged_at",
             "created_at",
         ]
         read_only_fields = ["id", "customer", "lead", "logged_by", "created_at"]
@@ -196,8 +200,8 @@ class SendQuoteSerializer(serializers.Serializer):
 
 class FollowUpTaskSerializer(serializers.ModelSerializer):
     assigned_to_name = serializers.CharField(source="assigned_to.full_name", read_only=True)
-    customer_id = serializers.UUIDField(source="customer_id", read_only=True, allow_null=True)
-    lead_id = serializers.UUIDField(source="lead_id", read_only=True, allow_null=True)
+    customer_id = serializers.UUIDField(read_only=True, allow_null=True)
+    lead_id = serializers.UUIDField(read_only=True, allow_null=True)
 
     class Meta:
         model = FollowUpTask
@@ -234,10 +238,17 @@ class TaskCompleteSerializer(serializers.Serializer):
 
 
 class CustomerSegmentSerializer(serializers.ModelSerializer):
+    member_count = serializers.SerializerMethodField()
+
     class Meta:
         model = CustomerSegment
-        fields = ["id", "name", "description", "filter_rules", "is_dynamic", "created_at", "updated_at"]
+        fields = ["id", "name", "description", "filter_rules", "is_dynamic", "member_count", "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at"]
+
+    def get_member_count(self, obj):
+        if obj.is_dynamic:
+            return None  # expensive to compute inline; clients should call /members/
+        return obj.members.count()
 
 
 class CustomerSegmentMemberSerializer(serializers.ModelSerializer):

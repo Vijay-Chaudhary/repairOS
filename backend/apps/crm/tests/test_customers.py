@@ -114,18 +114,18 @@ class TestCustomerCreate:
     def test_list_customers(self, admin_client, customer):
         res = admin_client.get(self.url)
         assert res.status_code == status.HTTP_200_OK
-        assert len(res.data["data"]) >= 1
+        assert len(res.data["items"]) >= 1
 
     def test_search_by_name(self, admin_client, customer):
         res = admin_client.get(self.url + "?q=Ravi")
         assert res.status_code == status.HTTP_200_OK
-        names = [c["name"] for c in res.data["data"]]
+        names = [c["name"] for c in res.data["items"]]
         assert any("Ravi" in n for n in names)
 
     def test_search_by_phone(self, admin_client, customer):
         res = admin_client.get(self.url + f"?q={customer.phone[-6:]}")
         assert res.status_code == status.HTTP_200_OK
-        assert len(res.data["data"]) >= 1
+        assert len(res.data["items"]) >= 1
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -198,7 +198,7 @@ class TestTimeline:
         )
         res = admin_client.get(f"/api/v1/crm/customers/{customer.id}/timeline/")
         assert res.status_code == status.HTTP_200_OK
-        assert len(res.data["data"]) >= 1
+        assert len(res.data["items"]) >= 1
 
     def test_timeline_filter_by_type(self, admin_client, customer, tenant_admin):
         from crm.models import CommunicationLog
@@ -215,7 +215,7 @@ class TestTimeline:
 
         res = admin_client.get(f"/api/v1/crm/customers/{customer.id}/timeline/?type=note")
         assert res.status_code == status.HTTP_200_OK
-        for item in res.data["data"]:
+        for item in res.data["items"]:
             assert item["type"] == "note"
 
 
@@ -299,7 +299,7 @@ class TestSegments:
         res = admin_client.get(f"{self.url}{segment.id}/members/")
         assert res.status_code == status.HTTP_200_OK
         # Only the rich customer should be in the segment
-        names = [c["name"] for c in res.data["data"]]
+        names = [c["name"] for c in res.data["items"]]
         assert "Rich" in names
         assert "Poor" not in names
 
@@ -315,7 +315,7 @@ class TestIsolation:
         customer.soft_delete()
         res = admin_client.get("/api/v1/crm/customers/")
         assert res.status_code == status.HTTP_200_OK
-        ids = [c["id"] for c in res.data["data"]]
+        ids = [c["id"] for c in res.data["items"]]
         assert str(customer.id) not in ids
 
     def test_soft_deleted_customer_returns_404(self, admin_client, customer):

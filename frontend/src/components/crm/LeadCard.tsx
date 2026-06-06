@@ -122,8 +122,8 @@ export function LeadCard({ lead }: LeadCardProps) {
   }
 
   function handleAdvance() {
-    if (lead.status === 'lost') {
-      advanceMutation.mutate({ status: lead.status_before_lost ?? 'new' });
+    if (canReopen) {
+      advanceMutation.mutate({ status: lead.status_before_lost! });
       return;
     }
     if (!primaryTransition) return;
@@ -138,7 +138,9 @@ export function LeadCard({ lead }: LeadCardProps) {
 
   const isInterested = lead.status === 'interested';
   const isLost = lead.status === 'lost';
-  const showPrimary = (primaryTransition || isLost) && lead.status !== 'converted';
+  // Re-open only when status_before_lost is set; legacy rows without it would get a 422
+  const canReopen = isLost && !!lead.status_before_lost;
+  const showPrimary = (primaryTransition || canReopen) && lead.status !== 'converted';
 
   return (
     <div className="bg-[var(--surface)] rounded-md border border-[var(--border)] p-3 pt-0 space-y-2 select-none">
@@ -259,7 +261,7 @@ export function LeadCard({ lead }: LeadCardProps) {
               onClick={handleAdvance}
               disabled={advanceMutation.isPending || convertMutation.isPending}
             >
-              {isLost ? 'Re-open' : primaryTransition!.label}
+              {canReopen ? 'Re-open' : primaryTransition!.label}
               <ChevronRight className="h-3 w-3 ml-1" />
             </Button>
           )}

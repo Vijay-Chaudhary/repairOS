@@ -386,14 +386,14 @@ function BulkWhatsappDialog({
   onOpenChange: (v: boolean) => void;
   segment: Segment;
 }) {
-  const [templateId, setTemplateId] = useState('');
+  const [templateName, setTemplateName] = useState('');
 
   const mutation = useMutation({
-    mutationFn: () => crmApi.bulkWhatsapp(segment.id, { template_id: templateId }),
+    mutationFn: () => crmApi.bulkWhatsapp(segment.id, { template_name: templateName }),
     onSuccess: (result) => {
       toast.success(`Queued ${result.queued} messages (${result.excluded_optout} excluded — opted out)`);
       onOpenChange(false);
-      setTemplateId('');
+      setTemplateName('');
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Failed'),
   });
@@ -409,18 +409,18 @@ function BulkWhatsappDialog({
             Sends to all segment members. Customers who have opted out of WhatsApp will be excluded automatically.
           </p>
           <div>
-            <label className="text-body-sm font-medium text-[var(--text)] block mb-1">Template ID *</label>
+            <label className="text-body-sm font-medium text-[var(--text)] block mb-1">Template name *</label>
             <Input
-              placeholder="whatsapp_template_id"
-              value={templateId}
-              onChange={(e) => setTemplateId(e.target.value)}
+              placeholder="e.g. promo_june_2026"
+              value={templateName}
+              onChange={(e) => setTemplateName(e.target.value)}
             />
           </div>
           <div className="flex gap-3">
             <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button
               className="flex-1"
-              disabled={!templateId.trim() || mutation.isPending}
+              disabled={!templateName.trim() || mutation.isPending}
               onClick={() => mutation.mutate()}
             >
               {mutation.isPending ? 'Sending…' : 'Send'}

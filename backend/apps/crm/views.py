@@ -169,10 +169,8 @@ class LeadViewSet(ShopScopedMixin, ModelViewSet):
         return Response(LeadSerializer(lead).data)
 
     @action(detail=True, methods=["post"], url_path="quote",
-            permission_classes=[])
+            permission_classes=[require_permission("crm.leads.edit")])
     def send_quote(self, request, pk=None):
-        self.permission_classes = [require_permission("crm.leads.edit")]
-        self.check_permissions(request)
         lead = self.get_object()
         serializer = SendQuoteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -436,20 +434,22 @@ class CustomerSegmentViewSet(ModelViewSet):
         serializer = BulkWhatsAppSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # Get opted-in customers
+        # Get opted-in customers and count excluded
         if segment.is_dynamic:
+            all_qs = services.evaluate_segment(segment)
+            total = all_qs.count()
             customer_ids = list(
-                services.evaluate_segment(segment)
-                .filter(whatsapp_optout=False)
-                .values_list("id", flat=True)
+                all_qs.filter(whatsapp_optout=False).values_list("id", flat=True)
             )
         else:
+            total = CustomerSegmentMember.objects.filter(segment=segment).count()
             customer_ids = list(
                 CustomerSegmentMember.objects.filter(segment=segment)
-                .select_related("customer")
                 .filter(customer__whatsapp_optout=False)
                 .values_list("customer_id", flat=True)
             )
+
+        excluded_count = total - len(customer_ids)
 
         send_bulk_whatsapp_segment.delay(
             customer_ids=[str(cid) for cid in customer_ids],
@@ -458,6 +458,6 @@ class CustomerSegmentViewSet(ModelViewSet):
         )
 
         return Response(
-            {"message": f"Bulk WhatsApp queued for {len(customer_ids)} customer(s)."},
+            {"queued": len(customer_ids), "excluded_optout": excluded_count},
             status=status.HTTP_202_ACCEPTED,
         )

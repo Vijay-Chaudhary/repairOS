@@ -224,7 +224,7 @@ export const crmApi = {
     apiPost<Customer>('/crm/customers/merge/', body),
 
   getCustomerTimeline: (id: string, type?: CommType) =>
-    apiGet<{ items: Array<{ id: string; type: string; actor?: string; description: string; created_at: string }> }>(
+    apiGet<{ items: Array<{ id: string; type: string; summary: string; description: string; logged_by_name?: string; actor?: string; created_at: string }> }>(
       `/crm/customers/${id}/timeline/`,
       type ? { type } : {},
     ),
@@ -267,7 +267,7 @@ export const crmApi = {
   }>) => apiPatch<Task>(`/crm/tasks/${id}/`, body),
 
   completeTask: (id: string) =>
-    apiPatch<Task>(`/crm/tasks/${id}/`, { status: 'completed' }),
+    apiPost<Task>(`/crm/tasks/${id}/complete/`, {}),
 
   getTask: (id: string) =>
     apiGet<Task>(`/crm/tasks/${id}/`),
@@ -303,7 +303,7 @@ export const crmApi = {
   getSegment: (id: string) =>
     apiGet<Segment>(`/crm/segments/${id}/`),
 
-  bulkWhatsapp: (id: string, body: { template_id: string; variables?: Record<string, string> }) =>
+  bulkWhatsapp: (id: string, body: { template_name: string; variables?: Record<string, string> }) =>
     apiPost<{ queued: number; excluded_optout: number }>(`/crm/segments/${id}/bulk-whatsapp/`, body),
 
   // Lead status
