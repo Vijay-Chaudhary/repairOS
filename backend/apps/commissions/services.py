@@ -74,14 +74,13 @@ def _resolve_rule(closed_date, device_type: str) -> CommissionRule | None:
     Precedence: specific job_type match > generic (NULL) match.
     Within same specificity: most recent effective_from wins.
     """
+    from django.db.models import Q
+    # Single filter with Q() avoids the Django QuerySet union which doesn't
+    # support chaining .filter() after .union() in Django 4.2+.
     qs = CommissionRule.objects.filter(
         effective_from__lte=closed_date,
     ).filter(
-        # effective_to IS NULL or effective_to > closed_date
-        effective_to__isnull=True,
-    ) | CommissionRule.objects.filter(
-        effective_from__lte=closed_date,
-        effective_to__gt=closed_date,
+        Q(effective_to__isnull=True) | Q(effective_to__gt=closed_date)
     )
 
     specific = qs.filter(applies_to_job_type=device_type).order_by("-effective_from").first()
@@ -166,11 +165,14 @@ def create_payout(technician, period_start, period_end, created_by) -> Commissio
 
     _db = get_tenant_db_alias() or "default"
 
+    # Filter by commission.created_at (set atomically at job closure) not
+    # job.created_at (job open date), so commissions are attributed to the
+    # period in which the job was actually closed.
     unpaid = TechnicianCommission.objects.filter(
         technician=technician,
         is_paid=False,
-        job__created_at__date__gte=period_start,
-        job__created_at__date__lte=period_end,
+        created_at__date__gte=period_start,
+        created_at__date__lte=period_end,
     ).select_for_update()
 
     with transaction.atomic(using=_db):

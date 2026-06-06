@@ -62,6 +62,15 @@ export default function CommissionsPage() {
     onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Failed'),
   });
 
+  const advanceMutation = useMutation({
+    mutationFn: (payoutId: string) => commissionsApi.advancePayout(payoutId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: qk.commissions() });
+      toast.success('Payout status updated');
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Failed'),
+  });
+
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
 
   return (
@@ -230,6 +239,19 @@ export default function CommissionsPage() {
                     <div className="flex items-center gap-3">
                       <Money amount={p.total_commission} className="font-semibold tabular-nums" />
                       <StatusBadge status={p.status} />
+                      <Can permission="hr.salary.generate">
+                        {p.status !== 'paid' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            disabled={advanceMutation.isPending}
+                            onClick={() => advanceMutation.mutate(p.id)}
+                          >
+                            {p.status === 'draft' ? 'Approve' : 'Mark paid'}
+                          </Button>
+                        )}
+                      </Can>
                       {p.pdf_url && (
                         <a href={p.pdf_url} target="_blank" rel="noreferrer">
                           <Button size="sm" variant="ghost" className="h-7 w-7 p-0">

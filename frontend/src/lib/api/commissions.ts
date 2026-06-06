@@ -1,4 +1,4 @@
-import { apiGet, apiPost, type PageMeta } from './client';
+import { apiGet, apiPost, apiPatch, type PageMeta } from './client';
 
 export type PayoutStatus = 'draft' | 'approved' | 'paid';
 
@@ -84,4 +84,8 @@ export const commissionsApi = {
     period_start: string;
     period_end: string;
   }) => apiPost<CommissionPayout>('/commissions/payouts/', body),
+
+  // Advance payout status: draft → approved → paid
+  advancePayout: (payoutId: string) =>
+    apiPatch<CommissionPayout>(`/commissions/payouts/${payoutId}/`, {}),
 };

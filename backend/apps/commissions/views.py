@@ -32,6 +32,17 @@ _PAYOUT_STATUS_TRANSITIONS = {
     "approved": "paid",
 }
 
+_ZERO = Decimal("0.00")
+
+
+def _shop_ids_for_request(token) -> tuple[list, bool]:
+    """Returns (shop_ids, is_wide). is_wide=True means no shop filter should apply."""
+    if not token:
+        return [], False
+    if token.get("is_tenant_wide") or token.get("is_platform_admin"):
+        return [], True
+    return token.get("shop_ids", []), False
+
 
 class CommissionRulesView(APIView):
     permission_classes = [IsAuthenticated, require_permission("settings.commission_rules.manage")]
@@ -48,7 +59,13 @@ class CommissionRulesView(APIView):
 
 
 class TechnicianLedgerView(APIView):
-    permission_classes = [IsAuthenticated, require_permission("hr.salary.view")]
+
+    def get_permissions(self):
+        # Technicians may view their own ledger without hr.salary.view
+        tech_id = self.kwargs.get("technician_id")
+        if self.request.method == "GET" and str(self.request.user.id) == str(tech_id):
+            return [IsAuthenticated()]
+        return [IsAuthenticated(), require_permission("hr.salary.view")()]
 
     def get(self, request: Request, technician_id: str) -> Response:
         from authentication.models import User
@@ -57,17 +74,26 @@ class TechnicianLedgerView(APIView):
         except User.DoesNotExist:
             return Response({"detail": "Technician not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        commissions = TechnicianCommission.objects.filter(
+        qs = TechnicianCommission.objects.filter(
             technician=technician
         ).select_related("job", "payout").order_by("-created_at")
 
-        total_unpaid = sum(
-            c.commission_amount for c in commissions if not c.is_paid
-        )
+        if ps := request.query_params.get("period_start"):
+            qs = qs.filter(created_at__date__gte=ps)
+        if pe := request.query_params.get("period_end"):
+            qs = qs.filter(created_at__date__lte=pe)
+
+        commissions = list(qs)
+        total_earned = sum((c.commission_amount for c in commissions), _ZERO)
+        total_paid = sum((c.commission_amount for c in commissions if c.is_paid), _ZERO)
+        total_unpaid = total_earned - total_paid
 
         return Response({
             "technician_id": str(technician_id),
-            "total_unpaid": str(total_unpaid.quantize(Decimal("0.01"))),
+            "technician_name": technician.full_name,
+            "total_earned": float(total_earned),
+            "total_paid": float(total_paid),
+            "total_unpaid": float(total_unpaid),
             "commissions": TechnicianCommissionSerializer(commissions, many=True).data,
         })
 
@@ -77,7 +103,12 @@ class CommissionPayoutView(APIView):
 
     def get(self, request: Request) -> Response:
         from .models import CommissionPayout
+        token = getattr(request, "auth", None)
+        shop_ids, is_wide = _shop_ids_for_request(token)
+
         qs = CommissionPayout.objects.select_related("technician").order_by("-period_end")
+        if not is_wide:
+            qs = qs.filter(technician__shop_access__shop_id__in=shop_ids)
         if tech_id := request.query_params.get("technician_id"):
             qs = qs.filter(technician_id=tech_id)
         if s := request.query_params.get("status"):

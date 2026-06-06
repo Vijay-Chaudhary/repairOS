@@ -14,28 +14,31 @@ class CommissionRuleSerializer(serializers.ModelSerializer):
 
 class TechnicianCommissionSerializer(serializers.ModelSerializer):
     job_number = serializers.CharField(source="job.job_number", read_only=True)
+    # commission.created_at is set atomically during job closure — it is the closure timestamp
+    job_closed_at = serializers.DateTimeField(source="created_at", read_only=True)
 
     class Meta:
         model = TechnicianCommission
         fields = [
-            "id", "job_number", "sc_amount", "rate", "commission_amount",
+            "id", "job_number", "job_closed_at", "sc_amount", "rate", "commission_amount",
             "is_lead", "is_paid", "payout_id",
         ]
 
 
 class CommissionPayoutSerializer(serializers.ModelSerializer):
+    technician_id = serializers.UUIDField(read_only=True)
     technician_name = serializers.SerializerMethodField()
 
     class Meta:
         model = CommissionPayout
         fields = [
-            "id", "technician", "technician_name",
+            "id", "technician_id", "technician_name",
             "period_start", "period_end",
             "total_commission", "status", "paid_at", "pdf_url",
         ]
 
     def get_technician_name(self, obj) -> str:
-        return getattr(obj.technician, "name", "") or ""
+        return obj.technician.full_name if obj.technician else ""
 
 
 class CreatePayoutSerializer(serializers.Serializer):

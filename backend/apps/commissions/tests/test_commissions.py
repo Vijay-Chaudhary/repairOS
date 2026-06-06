@@ -408,7 +408,7 @@ class TestRulesAPI:
     def test_list_rules(self, admin_client, rule):
         res = admin_client.get(self.url)
         assert res.status_code == status.HTTP_200_OK
-        assert len(res.data) >= 1
+        assert len(res.data["items"]) >= 1
 
     def test_create_rule_requires_manage_permission(self, db):
         from rest_framework.test import APIClient
@@ -426,8 +426,28 @@ class TestTechnicianLedgerAPI:
 
         res = admin_client.get(f"/api/v1/commissions/technician/{tech1.id}/")
         assert res.status_code == status.HTTP_200_OK
-        assert res.data["total_unpaid"] == "300.00"
+        # total_unpaid is now a float (was Decimal string "300.00")
+        assert res.data["total_unpaid"] == pytest.approx(300.0)
+        assert res.data["total_earned"] == pytest.approx(300.0)
+        assert res.data["total_paid"] == pytest.approx(0.0)
+        assert res.data["technician_name"] == tech1.full_name
         assert len(res.data["commissions"]) == 1
+        assert res.data["commissions"][0]["job_closed_at"] is not None
+
+    def test_get_technician_ledger_period_filter(self, admin_client, shop, customer, tech1, rule, db):
+        from commissions import services
+        job = make_job(shop, customer, tech1, Decimal("1000.00"), "TST-LED-002")
+        add_stage(job, tech1, 1)
+        services.accrue_commission(job)
+
+        # Filter to a future period — commission should be excluded
+        res = admin_client.get(
+            f"/api/v1/commissions/technician/{tech1.id}/",
+            {"period_start": "2030-01-01", "period_end": "2030-12-31"},
+        )
+        assert res.status_code == status.HTTP_200_OK
+        assert len(res.data["commissions"]) == 0
+        assert res.data["total_earned"] == pytest.approx(0.0)
 
 
 class TestPayoutAPI:
