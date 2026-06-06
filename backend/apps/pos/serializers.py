@@ -54,6 +54,26 @@ class SalePaymentSerializer(serializers.ModelSerializer):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Returns (defined before Sale so SaleSerializer can reference it)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class SalesReturnSerializer(serializers.ModelSerializer):
+    credit_note_number = serializers.CharField(
+        source="credit_note.credit_note_number", read_only=True, default=""
+    )
+
+    class Meta:
+        model = SalesReturn
+        fields = [
+            "id", "return_number", "reason", "status",
+            "total_refund_amount", "refund_method",
+            "approved_by", "approved_at", "credit_note_number",
+            "created_at",
+        ]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Sale
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -100,17 +120,19 @@ class CreateSaleSerializer(serializers.Serializer):
 class SaleSerializer(serializers.ModelSerializer):
     items = SaleItemSerializer(many=True, read_only=True)
     payments = SalePaymentSerializer(many=True, read_only=True)
+    returns = SalesReturnSerializer(many=True, read_only=True)
+    customer_id = serializers.UUIDField(read_only=True, allow_null=True)
     customer_name = serializers.CharField(source="customer.name", read_only=True, default="")
 
     class Meta:
         model = Sale
         fields = [
             "id", "sale_number", "sale_type", "status",
-            "customer", "customer_name", "job_id",
+            "customer_id", "customer_name", "job_id",
             "subtotal", "discount_type", "discount_value", "discount_amount",
             "cgst", "sgst", "igst", "grand_total",
             "amount_paid", "amount_outstanding",
-            "sale_date", "notes", "items", "payments",
+            "sale_date", "notes", "items", "payments", "returns",
         ]
 
 
@@ -135,29 +157,30 @@ class AddPaymentSerializer(SalePaymentInputSerializer):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Returns
+# Returns input
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+class ReturnItemInputSerializer(serializers.Serializer):
+    sale_item_id = serializers.UUIDField()
+    quantity = serializers.DecimalField(max_digits=10, decimal_places=3, min_value=Decimal("0.001"))
+
+
 class CreateReturnSerializer(serializers.Serializer):
+    items = ReturnItemInputSerializer(many=True, required=False, default=list)
     reason = serializers.CharField(min_length=5)
-    total_refund_amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"))
+    total_refund_amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.01"),
+        required=False, allow_null=True, default=None,
+    )
     refund_method = serializers.ChoiceField(choices=SalesReturn.RefundMethod.choices)
 
-
-class SalesReturnSerializer(serializers.ModelSerializer):
-    credit_note_number = serializers.CharField(
-        source="credit_note.credit_note_number", read_only=True, default=""
-    )
-
-    class Meta:
-        model = SalesReturn
-        fields = [
-            "id", "return_number", "reason", "status",
-            "total_refund_amount", "refund_method",
-            "approved_by", "approved_at", "credit_note_number",
-            "created_at",
-        ]
+    def validate(self, attrs):
+        if attrs.get("total_refund_amount") is None and not attrs.get("items"):
+            raise serializers.ValidationError(
+                "Provide either 'items' (line items to return) or 'total_refund_amount'."
+            )
+        return attrs
 
 
 class ReviewReturnSerializer(serializers.Serializer):

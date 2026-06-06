@@ -540,5 +540,5 @@ class TestSaleRetrieval:
         )
         sale.soft_delete()
         res = admin_client.get(self.url)
-        ids = [s["id"] for s in res.data["data"]]
+        ids = [s["id"] for s in res.data["items"]]
         assert str(sale.id) not in ids

@@ -186,6 +186,10 @@ export const posApi = {
       job_id?: string | null;
       items: Array<{
         variant_id: string;
+        product_name_snapshot: string;
+        variant_name_snapshot?: string | null;
+        hsn_code?: string | null;
+        tax_rate: number;
         quantity: number;
         unit_price: number;
         discount_per_unit: number;
@@ -217,7 +221,7 @@ export const posApi = {
   ) => apiPost<SaleReturn>(`/pos/sales/${saleId}/return/`, body),
 
   reviewReturn: (returnId: string, status: 'approved' | 'rejected') =>
-    apiPatch<SaleReturn>(`/pos/sales/returns/${returnId}/`, { status }),
+    apiPatch<SaleReturn>(`/pos/sales/returns/${returnId}/`, { action: status === 'approved' ? 'approve' : 'reject' }),
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────

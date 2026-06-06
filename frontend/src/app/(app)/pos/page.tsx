@@ -124,6 +124,10 @@ export default function PosPage() {
           customer_id: customer?.id ?? null,
           items: items.map((i) => ({
             variant_id: i.variant_id,
+            product_name_snapshot: i.product_name,
+            variant_name_snapshot: i.variant_name ?? '',
+            hsn_code: i.hsn_code ?? '',
+            tax_rate: i.tax_rate,
             quantity: i.quantity,
             unit_price: i.unit_price,
             discount_per_unit: i.discount_per_unit,

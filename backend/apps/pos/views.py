@@ -88,15 +88,13 @@ class SaleViewSet(ShopScopedMixin, GenericViewSet):
 
         shop = vd.pop("shop")
         sale = services.create_sale(shop, vd, request.user)
-        return Response(
-            {
-                "sale_number": sale.sale_number,
-                "grand_total": str(sale.grand_total),
-                "status": sale.status,
-                "id": str(sale.id),
-            },
-            status=status.HTTP_201_CREATED,
+        sale = (
+            Sale.objects
+            .prefetch_related("items", "payments", "returns")
+            .select_related("customer")
+            .get(pk=sale.pk)
         )
+        return Response(SaleSerializer(sale).data, status=status.HTTP_201_CREATED)
 
     def retrieve(self, request, pk=None):
         sale = self._get_sale(pk)
@@ -120,7 +118,12 @@ class SaleViewSet(ShopScopedMixin, GenericViewSet):
 
     def _get_sale(self, pk):
         try:
-            return self.get_queryset().get(pk=pk)
+            return (
+                Sale.objects.filter(self._shop_filter())
+                .prefetch_related("items", "payments", "returns")
+                .select_related("customer")
+                .get(pk=pk)
+            )
         except Sale.DoesNotExist:
             from rest_framework.exceptions import NotFound
             raise NotFound("Sale not found.")
@@ -174,7 +177,10 @@ class BarcodeView(APIView):
         return [require_permission("pos.counter_sale.create")()]
 
     def get(self, request, barcode):
-        # When inventory module is built, look up product_variant by barcode here.
-        from rest_framework.exceptions import NotFound
-        raise NotFound(f"Product with barcode '{barcode}' not found. "
-                       "(Inventory module not yet built.)")
+        return Response(
+            {
+                "code": "FEATURE_PENDING",
+                "message": "Barcode lookup requires the inventory module, which is not yet active.",
+            },
+            status=status.HTTP_501_NOT_IMPLEMENTED,
+        )

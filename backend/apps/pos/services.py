@@ -173,6 +173,11 @@ def create_return(sale: Sale, data: dict, user) -> SalesReturn:
     if sale.status not in (Sale.Status.COMPLETED, Sale.Status.PARTIALLY_PAID):
         raise BusinessRuleViolation("Only completed or partially-paid sales can be returned.")
 
+    total_refund_amount = data.get("total_refund_amount")
+    if total_refund_amount is None:
+        items_input = data.get("items", [])
+        total_refund_amount = _compute_return_refund(sale, items_input)
+
     now = timezone.now()
     number = DocumentCounter.next(
         sale.shop, now.year, DocumentCounter.DocType.SALES_RETURN, month=now.month
@@ -183,7 +188,7 @@ def create_return(sale: Sale, data: dict, user) -> SalesReturn:
         sale=sale,
         return_number=return_number,
         reason=data["reason"],
-        total_refund_amount=Decimal(str(data["total_refund_amount"])),
+        total_refund_amount=Decimal(str(total_refund_amount)),
         refund_method=data["refund_method"],
     )
     _write_audit(user, AuditLog.Action.CREATE, "SalesReturn", ret.id)
@@ -329,6 +334,20 @@ def _record_payment(sale: Sale, pay_data: dict, user) -> SalePayment:
         razorpay_payment_id=razorpay_id,
         recorded_by=user,
     )
+
+
+def _compute_return_refund(sale: Sale, items_input: list) -> Decimal:
+    """Derive total refund amount from a list of {sale_item_id, quantity} entries."""
+    total = Decimal("0")
+    for item_data in items_input:
+        try:
+            item = sale.items.get(pk=item_data["sale_item_id"])
+        except SaleItem.DoesNotExist:
+            continue
+        qty = Decimal(str(item_data["quantity"]))
+        line_unit_total = (item.line_total / item.quantity) if item.quantity else Decimal("0")
+        total += (line_unit_total * qty).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+    return total
 
 
 def _issue_credit_note(ret: SalesReturn, user) -> CreditNote:
