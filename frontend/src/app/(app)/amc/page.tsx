@@ -86,6 +86,7 @@ export default function AmcPage() {
   const filters = {
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
     status: statusFilter === 'all' ? undefined : statusFilter,
+    search: debouncedSearch || undefined,
   };
 
   const { data, isLoading, error } = useQuery({

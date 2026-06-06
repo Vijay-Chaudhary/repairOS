@@ -2,6 +2,8 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 
+from celery.schedules import crontab
+
 import environ
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -162,6 +164,44 @@ CELERY_TASK_ROUTES = {
     "*.tasks.generate_pdf_*": {"queue": "high"},
     "*.tasks.generate_report_*": {"queue": "low"},
     "master.tasks.*": {"queue": "low"},
+}
+CELERY_BEAT_SCHEDULE = {
+    # CRM
+    "crm-mark-overdue-tasks": {
+        "task": "crm.mark_overdue_tasks",
+        "schedule": crontab(hour=0, minute=0),
+    },
+    "crm-send-task-daily-digest": {
+        "task": "crm.send_task_daily_digest",
+        "schedule": crontab(hour=8, minute=0),
+    },
+    # Repair
+    "repair-send-warranty-expiry-reminders": {
+        "task": "repair.send_warranty_expiry_reminders",
+        "schedule": crontab(hour=6, minute=0),
+    },
+    # POS
+    "pos-send-wholesale-payment-reminders": {
+        "task": "pos.send_wholesale_payment_reminders",
+        "schedule": crontab(hour=6, minute=30),
+    },
+    # AMC
+    "amc-mark-missed-visits": {
+        "task": "amc.mark_missed_visits",
+        "schedule": crontab(hour=0, minute=30),
+    },
+    "amc-send-renewal-reminders": {
+        "task": "amc.send_renewal_reminders",
+        "schedule": crontab(hour=8, minute=0),
+    },
+    "amc-send-visit-reminders": {
+        "task": "amc.send_visit_reminders",
+        "schedule": crontab(hour=8, minute=15),
+    },
+    "amc-process-auto-renewals": {
+        "task": "amc.process_auto_renewals",
+        "schedule": crontab(hour=1, minute=0, day_of_month="1"),
+    },
 }
 
 # ──────────────────────────────────────────────────────────────────────────────

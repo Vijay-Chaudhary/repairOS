@@ -28,6 +28,8 @@ export default function AmcContractPage() {
   const queryClient = useQueryClient();
 
   const [selectedVisit, setSelectedVisit] = useState<AmcVisit | null>(null);
+  const [rescheduleVisit, setRescheduleVisit] = useState<AmcVisit | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
   const [renewOpen, setRenewOpen] = useState(false);
   const [renewEndDate, setRenewEndDate] = useState('');
   const [renewValue, setRenewValue] = useState(0);
@@ -70,6 +72,18 @@ export default function AmcContractPage() {
       setSignature(null);
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Failed'),
+  });
+
+  const rescheduleMutation = useMutation({
+    mutationFn: () =>
+      amcApi.rescheduleVisit(rescheduleVisit!.id, { new_date: rescheduleDate }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: qk.amcVisits(id) });
+      toast.success('Visit rescheduled');
+      setRescheduleVisit(null);
+      setRescheduleDate('');
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Reschedule failed'),
   });
 
   const renewMutation = useMutation({
@@ -206,6 +220,13 @@ export default function AmcContractPage() {
                           </Button>
                         </Can>
                       )}
+                      {(visit.status === 'scheduled' || visit.status === 'missed') && (
+                        <Can permission="amc.visits.schedule">
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setRescheduleVisit(visit); setRescheduleDate(''); }}>
+                            Reschedule
+                          </Button>
+                        </Can>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -259,13 +280,38 @@ export default function AmcContractPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Reschedule visit dialog */}
+      <Dialog open={!!rescheduleVisit} onOpenChange={(v) => !v && setRescheduleVisit(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reschedule visit {rescheduleVisit?.visit_number}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-body-sm font-medium text-[var(--text)] block mb-1">New date *</label>
+              <Input type="date" value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} />
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setRescheduleVisit(null)}>Cancel</Button>
+              <Button
+                className="flex-1"
+                disabled={!rescheduleDate || rescheduleMutation.isPending}
+                onClick={() => rescheduleMutation.mutate()}
+              >
+                {rescheduleMutation.isPending ? 'Saving…' : 'Reschedule'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Renew dialog */}
       <Dialog open={renewOpen} onOpenChange={setRenewOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Renew contract</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <p className="text-body-sm text-[var(--text-muted)]">
-              Current expiry: {formatDate(contract.end_date)}. Renewal will generate an invoice.
+              Current expiry: {formatDate(contract.end_date)}. Renewal extends the contract and schedules new visits.
             </p>
             <div>
               <label className="text-body-sm font-medium text-[var(--text)] block mb-1">New end date *</label>

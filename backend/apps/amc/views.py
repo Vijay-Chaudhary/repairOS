@@ -10,6 +10,7 @@ POST      /amc/contracts/{id}/renew/    — manual renewal
 
 import logging
 
+from django.db.models import DateField, OuterRef, Q, Subquery
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -26,6 +27,7 @@ from .serializers import (
     AMCContractSerializer,
     AMCVisitSerializer,
     CompleteVisitSerializer,
+    RenewContractSerializer,
     RescheduleVisitSerializer,
 )
 
@@ -59,9 +61,14 @@ class AMCContractViewSet(ShopScopedMixin, GenericViewSet):
         return [require_permission("amc.contracts.view")()]
 
     def get_queryset(self):
+        next_visit_sq = AMCVisit.objects.filter(
+            contract_id=OuterRef("pk"),
+            status=AMCVisit.Status.SCHEDULED,
+        ).order_by("scheduled_date").values("scheduled_date")[:1]
+
         qs = AMCContract.objects.filter(self._shop_filter()).select_related(
             "customer", "shop", "assigned_technician"
-        )
+        ).annotate(next_visit_date=Subquery(next_visit_sq, output_field=DateField()))
 
         qp = self.request.query_params
         if s := qp.get("status"):
@@ -70,6 +77,12 @@ class AMCContractViewSet(ShopScopedMixin, GenericViewSet):
             qs = qs.filter(customer_id=cid)
         if shop_id := qp.get("shop_id"):
             qs = qs.filter(shop_id=shop_id)
+        if q := qp.get("search"):
+            qs = qs.filter(
+                Q(title__icontains=q)
+                | Q(customer__name__icontains=q)
+                | Q(contract_number__icontains=q)
+            )
         return qs
 
     def list(self, request, *args, **kwargs):
@@ -124,7 +137,14 @@ class AMCContractViewSet(ShopScopedMixin, GenericViewSet):
     @action(detail=True, methods=["post"], url_path="renew")
     def renew(self, request, pk=None):
         contract = self._get_contract(pk)
-        contract = services.renew_contract(contract, request.user)
+        serializer = RenewContractSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        contract = services.renew_contract(
+            contract,
+            request.user,
+            new_end_date=serializer.validated_data.get("new_end_date"),
+            new_value=serializer.validated_data.get("new_value"),
+        )
         return Response(AMCContractSerializer(contract).data)
 
     def _get_contract(self, pk):

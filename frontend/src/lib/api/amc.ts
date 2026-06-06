@@ -52,6 +52,7 @@ export const amcApi = {
     shop_id?: string;
     status?: ContractStatus;
     customer_id?: string;
+    search?: string;
     expiring_days?: number;
     cursor?: string;
   } = {}) =>
@@ -100,8 +101,12 @@ export const amcApi = {
     customer_signature_url?: string | null;
     photos?: string[];
     job_id?: string;
-    next_visit_date?: string;
   }) => apiPost<AmcVisit>(`/amc/visits/${visitId}/complete/`, body),
+
+  rescheduleVisit: (visitId: string, body: {
+    new_date: string;
+    reason?: string;
+  }) => apiPost<AmcVisit>(`/amc/visits/${visitId}/reschedule/`, body),
 
   renewContract: (contractId: string, body: {
     new_end_date: string;

@@ -92,7 +92,8 @@ def complete_visit(visit: AMCVisit, data: dict, user) -> AMCVisit:
 
     contract = visit.contract
     today = date.today()
-    next_date = today + timedelta(days=contract.visit_interval_days)
+    # Compute next visit from scheduled_date (not today) to prevent cumulative drift
+    next_date = visit.scheduled_date + timedelta(days=contract.visit_interval_days)
 
     with transaction.atomic():
         visit.status = AMCVisit.Status.COMPLETED
@@ -179,13 +180,14 @@ def reschedule_visit(visit: AMCVisit, new_date: date, user) -> AMCVisit:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def renew_contract(contract: AMCContract, user) -> AMCContract:
+def renew_contract(contract: AMCContract, user, new_end_date=None, new_value=None) -> AMCContract:
     """
     Manually renew a contract:
     1. Create an AMCRenewalInvoice (invoice_id stub until billing is built).
-    2. Roll contract dates forward by the original contract duration.
-    3. Schedule visits for the new period.
-    4. Set status to active.
+    2. Roll contract dates forward: use new_end_date if provided, else original duration.
+    3. Optionally update contract value.
+    4. Schedule visits for the new period.
+    5. Set status to active.
     """
     from core.exceptions import BusinessRuleViolation
 
@@ -196,7 +198,7 @@ def renew_contract(contract: AMCContract, user) -> AMCContract:
 
     with transaction.atomic():
         new_start = contract.end_date + timedelta(days=1)
-        new_end = new_start + timedelta(days=original_duration)
+        new_end = new_end_date or (new_start + timedelta(days=original_duration))
 
         renewal = AMCRenewalInvoice.objects.create(
             contract=contract,
@@ -207,10 +209,12 @@ def renew_contract(contract: AMCContract, user) -> AMCContract:
 
         contract.start_date = new_start
         contract.end_date = new_end
+        if new_value is not None:
+            contract.value = new_value
         contract.status = AMCContract.Status.ACTIVE
         contract.next_renewal_notified_at = None  # reset reminder flag
         contract.save(
-            update_fields=["start_date", "end_date", "status", "next_renewal_notified_at", "updated_at"]
+            update_fields=["start_date", "end_date", "value", "status", "next_renewal_notified_at", "updated_at"]
         )
 
         _schedule_visits(contract)

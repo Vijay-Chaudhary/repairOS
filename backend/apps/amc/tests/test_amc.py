@@ -131,7 +131,7 @@ class TestContractCreate:
         contract_id = res.data["id"]
         visits_res = admin_client.get(f"{self.url}{contract_id}/visits/")
         assert visits_res.status_code == status.HTTP_200_OK
-        visits = visits_res.data["data"]
+        visits = visits_res.data["items"]
         assert len(visits) == 4
 
     def test_visit_dates_at_correct_intervals(self, admin_client, shop, customer):
@@ -141,7 +141,7 @@ class TestContractCreate:
         )
         contract_id = res.data["id"]
         visits_res = admin_client.get(f"{self.url}{contract_id}/visits/")
-        visits = sorted(visits_res.data["data"], key=lambda v: v["visit_number"])
+        visits = sorted(visits_res.data["items"], key=lambda v: v["visit_number"])
 
         for i, visit in enumerate(visits):
             expected_date = today + datetime.timedelta(days=i * 91)
@@ -153,7 +153,7 @@ class TestContractCreate:
         )
         contract_id = res.data["id"]
         visits_res = admin_client.get(f"{self.url}{contract_id}/visits/")
-        assert len(visits_res.data["data"]) == 0
+        assert len(visits_res.data["items"]) == 0
 
     def test_end_date_must_be_after_start(self, admin_client, shop, customer):
         today = datetime.date.today()
@@ -180,7 +180,7 @@ class TestVisitCompletion:
 
     def _get_first_visit(self, admin_client, contract_id):
         res = admin_client.get(f"/api/v1/amc/contracts/{contract_id}/visits/")
-        visits = sorted(res.data["data"], key=lambda v: v["visit_number"])
+        visits = sorted(res.data["items"], key=lambda v: v["visit_number"])
         return visits[0]
 
     def test_complete_visit(self, admin_client, shop, customer):
@@ -255,7 +255,7 @@ class TestRescheduleVisit:
         )
         contract_id = res.data["id"]
         visits_res = admin_client.get(f"/api/v1/amc/contracts/{contract_id}/visits/")
-        visit_id = visits_res.data["data"][0]["id"]
+        visit_id = visits_res.data["items"][0]["id"]
 
         new_date = datetime.date.today() + datetime.timedelta(days=10)
         res = admin_client.post(
@@ -458,5 +458,5 @@ class TestSoftDeleteAndList:
         contract.soft_delete()
 
         res = admin_client.get("/api/v1/amc/contracts/")
-        ids = [c["id"] for c in res.data["data"]]
+        ids = [c["id"] for c in res.data["items"]]
         assert str(contract.id) not in ids

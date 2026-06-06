@@ -11,8 +11,8 @@ from .models import AMCContract, AMCRenewalInvoice, AMCVisit
 
 
 class AMCVisitSerializer(serializers.ModelSerializer):
-    contract_id = serializers.UUIDField(source="contract_id", read_only=True)
-    technician_id = serializers.UUIDField(source="technician_id", read_only=True, allow_null=True)
+    contract_id = serializers.UUIDField(read_only=True)
+    technician_id = serializers.UUIDField(read_only=True, allow_null=True)
     technician_name = serializers.CharField(
         source="technician.full_name", read_only=True, default=""
     )
@@ -21,7 +21,7 @@ class AMCVisitSerializer(serializers.ModelSerializer):
         model = AMCVisit
         fields = [
             "id", "contract_id", "visit_number", "scheduled_date", "actual_date",
-            "status", "technician", "technician_id", "technician_name",
+            "status", "technician_id", "technician_name",
             "work_done", "issues_found", "next_visit_date",
             "customer_signature_url", "photos", "job_id",
             "created_at",
@@ -46,6 +46,14 @@ class CompleteVisitSerializer(serializers.Serializer):
 
 class RescheduleVisitSerializer(serializers.Serializer):
     new_date = serializers.DateField()
+    reason = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class RenewContractSerializer(serializers.Serializer):
+    new_end_date = serializers.DateField(required=False, allow_null=True)
+    new_value = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, allow_null=True
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -112,11 +120,13 @@ class AMCContractSerializer(serializers.ModelSerializer):
 
 class AMCContractListSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(source="customer.name", read_only=True)
+    # next_visit_date is injected as a queryset annotation in AMCContractViewSet.get_queryset
+    next_visit_date = serializers.DateField(read_only=True, allow_null=True)
 
     class Meta:
         model = AMCContract
         fields = [
             "id", "contract_number", "title", "status",
             "customer_name", "start_date", "end_date", "value",
-            "visits_per_year",
+            "visits_per_year", "next_visit_date",
         ]
