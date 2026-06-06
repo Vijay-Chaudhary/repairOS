@@ -142,24 +142,15 @@ export function LeadCard({ lead }: LeadCardProps) {
 
   return (
     <div className="bg-[var(--surface)] rounded-md border border-[var(--border)] p-3 space-y-2 select-none">
-      {/* Header row */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
+      {/* Header row: name + menu on one line, phone below */}
+      <div>
+        <div className="flex items-center justify-between gap-2">
           <Link
             href={`/leads/${lead.id}`}
-            className="text-body-sm font-medium text-[var(--text)] hover:underline truncate block"
+            className="text-body-sm font-medium text-[var(--text)] hover:underline truncate capitalize"
           >
             {lead.name}
           </Link>
-          <a
-            href={`tel:${lead.phone}`}
-            className="flex items-center gap-1 text-xs text-[var(--accent)] hover:underline mt-0.5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Phone className="h-3 w-3" />{formatPhone(lead.phone)}
-          </a>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
           <Can anyOf={['crm.leads.edit', 'crm.leads.convert']}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -209,6 +200,13 @@ export function LeadCard({ lead }: LeadCardProps) {
             </DropdownMenu>
           </Can>
         </div>
+        <a
+          href={`tel:${lead.phone}`}
+          className="flex items-center gap-1 text-xs text-[var(--accent)] hover:underline mt-0.5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Phone className="h-3 w-3" />{formatPhone(lead.phone)}
+        </a>
       </div>
 
       {/* Meta */}
@@ -246,7 +244,6 @@ export function LeadCard({ lead }: LeadCardProps) {
                 disabled={advanceMutation.isPending}
               >
                 Mark as quoted
-                <ChevronRight className="h-3 w-3 ml-1" />
               </Button>
             </div>
           ) : (

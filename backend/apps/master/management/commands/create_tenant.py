@@ -183,7 +183,8 @@ class Command(BaseCommand):
         permissions_catalogue = [
             # crm
             ("crm.leads.view", "crm"), ("crm.leads.create", "crm"), ("crm.leads.edit", "crm"),
-            ("crm.leads.convert", "crm"), ("crm.customers.view", "crm"), ("crm.customers.create", "crm"),
+            ("crm.leads.delete", "crm"), ("crm.leads.convert", "crm"),
+            ("crm.customers.view", "crm"), ("crm.customers.create", "crm"),
             ("crm.customers.edit", "crm"), ("crm.customers.merge", "crm"),
             ("crm.communications.log", "crm"), ("crm.tasks.manage", "crm"), ("crm.segments.manage", "crm"),
             # repair
