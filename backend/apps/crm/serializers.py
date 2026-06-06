@@ -68,6 +68,7 @@ class LeadStatusSerializer(serializers.Serializer):
 
 class CustomerSerializer(serializers.ModelSerializer):
     shop_id = serializers.PrimaryKeyRelatedField(source="shop", queryset=Shop.objects.all())
+    source_lead_id = serializers.UUIDField(source="source_lead_id", read_only=True, allow_null=True)
 
     class Meta:
         model = Customer
@@ -75,15 +76,12 @@ class CustomerSerializer(serializers.ModelSerializer):
             "id", "shop_id", "name", "phone", "alternate_phone", "email",
             "address", "city", "gstin", "customer_type", "credit_limit",
             "tags", "total_jobs", "total_billed", "total_outstanding",
-            "whatsapp_optout", "source_lead", "created_at", "updated_at",
+            "whatsapp_optout", "source_lead_id", "created_at", "updated_at",
         ]
         read_only_fields = [
             "id", "total_jobs", "total_billed", "total_outstanding",
             "created_at", "updated_at",
         ]
-        # DRF 3.15 auto-generates a UniqueValidator from the UniqueConstraint.
-        # We disable it here and check uniqueness in the view (create/partial_update)
-        # so we can return the spec-required DUPLICATE_PHONE error code.
         extra_kwargs = {"phone": {"validators": []}}
 
     def validate_phone(self, value):
@@ -198,11 +196,13 @@ class SendQuoteSerializer(serializers.Serializer):
 
 class FollowUpTaskSerializer(serializers.ModelSerializer):
     assigned_to_name = serializers.CharField(source="assigned_to.full_name", read_only=True)
+    customer_id = serializers.UUIDField(source="customer_id", read_only=True, allow_null=True)
+    lead_id = serializers.UUIDField(source="lead_id", read_only=True, allow_null=True)
 
     class Meta:
         model = FollowUpTask
         fields = [
-            "id", "customer", "lead", "job_id", "title", "description",
+            "id", "customer", "lead", "customer_id", "lead_id", "job_id", "title", "description",
             "due_date", "due_time", "status", "priority",
             "assigned_to", "assigned_to_name",
             "completed_at", "completed_by", "created_at", "updated_at",
@@ -241,12 +241,13 @@ class CustomerSegmentSerializer(serializers.ModelSerializer):
 
 
 class CustomerSegmentMemberSerializer(serializers.ModelSerializer):
+    customer_id = serializers.UUIDField(source="customer_id", read_only=True)
     customer_name = serializers.CharField(source="customer.name", read_only=True)
     customer_phone = serializers.CharField(source="customer.phone", read_only=True)
 
     class Meta:
         model = CustomerSegmentMember
-        fields = ["id", "customer", "customer_name", "customer_phone", "added_at"]
+        fields = ["id", "customer_id", "customer_name", "customer_phone", "added_at"]
         read_only_fields = ["id", "added_at"]
 
 

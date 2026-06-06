@@ -10,28 +10,33 @@ class EmployeeSerializer(serializers.ModelSerializer):
     Safe output serializer — never exposes encrypted fields or their ciphertexts.
     Encrypted fields are masked as 'XXXX' to confirm they exist without leaking values.
     """
-    bank_account_number = serializers.SerializerMethodField()
-    pan_number = serializers.SerializerMethodField()
-    aadhar_number = serializers.SerializerMethodField()
+    shop_id = serializers.UUIDField(source="shop_id", read_only=True)
+    is_active = serializers.SerializerMethodField()
+    bank_account_masked = serializers.SerializerMethodField()
+    pan_masked = serializers.SerializerMethodField()
+    aadhar_masked = serializers.SerializerMethodField()
 
     class Meta:
         model = Employee
         fields = [
-            "id", "shop", "employee_code", "full_name", "designation", "department",
+            "id", "shop_id", "employee_code", "full_name", "designation", "department",
             "date_of_joining", "date_of_leaving", "employment_type",
             "basic_salary", "hra", "other_allowances", "gross_salary",
             "pf_employee", "pf_employer", "esic_employee", "esic_employer",
-            "bank_ifsc",
-            "bank_account_number", "pan_number", "aadhar_number",
+            "bank_ifsc", "is_active",
+            "bank_account_masked", "pan_masked", "aadhar_masked",
         ]
 
-    def get_bank_account_number(self, obj) -> str:
+    def get_is_active(self, obj) -> bool:
+        return obj.deleted_at is None
+
+    def get_bank_account_masked(self, obj) -> str:
         return "****" if obj.bank_account_number_encrypted else ""
 
-    def get_pan_number(self, obj) -> str:
+    def get_pan_masked(self, obj) -> str:
         return "****" if obj.pan_number_encrypted else ""
 
-    def get_aadhar_number(self, obj) -> str:
+    def get_aadhar_masked(self, obj) -> str:
         return "****" if obj.aadhar_number_encrypted else ""
 
 
@@ -76,10 +81,13 @@ class BulkAttendanceSerializer(serializers.Serializer):
 
 
 class LeaveRequestSerializer(serializers.ModelSerializer):
+    employee_id = serializers.UUIDField(source="employee_id", read_only=True)
+    employee_name = serializers.CharField(source="employee.full_name", read_only=True)
+
     class Meta:
         model = LeaveRequest
         fields = [
-            "id", "employee", "leave_type", "from_date", "to_date",
+            "id", "employee_id", "employee_name", "leave_type", "from_date", "to_date",
             "days", "reason", "status", "approved_by", "approved_at",
         ]
 
@@ -106,10 +114,13 @@ class UpdateLeaveStatusSerializer(serializers.Serializer):
 
 
 class SalarySlipSerializer(serializers.ModelSerializer):
+    employee_id = serializers.UUIDField(source="employee_id", read_only=True)
+    employee_name = serializers.CharField(source="employee.full_name", read_only=True)
+
     class Meta:
         model = SalarySlip
         fields = [
-            "id", "employee", "month", "year", "working_days",
+            "id", "employee_id", "employee_name", "month", "year", "working_days",
             "present_days", "leave_days", "absent_days", "overtime_hours",
             "basic_earned", "hra_earned", "allowances_earned", "overtime_amount",
             "gross_earned", "pf_deduction", "esic_deduction",

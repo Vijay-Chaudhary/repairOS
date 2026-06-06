@@ -11,6 +11,8 @@ from .models import AMCContract, AMCRenewalInvoice, AMCVisit
 
 
 class AMCVisitSerializer(serializers.ModelSerializer):
+    contract_id = serializers.UUIDField(source="contract_id", read_only=True)
+    technician_id = serializers.UUIDField(source="technician_id", read_only=True, allow_null=True)
     technician_name = serializers.CharField(
         source="technician.full_name", read_only=True, default=""
     )
@@ -18,14 +20,14 @@ class AMCVisitSerializer(serializers.ModelSerializer):
     class Meta:
         model = AMCVisit
         fields = [
-            "id", "visit_number", "scheduled_date", "actual_date",
-            "status", "technician", "technician_name",
+            "id", "contract_id", "visit_number", "scheduled_date", "actual_date",
+            "status", "technician", "technician_id", "technician_name",
             "work_done", "issues_found", "next_visit_date",
             "customer_signature_url", "photos", "job_id",
             "created_at",
         ]
         read_only_fields = [
-            "id", "visit_number", "actual_date", "status",
+            "id", "contract_id", "visit_number", "actual_date", "status",
             "next_visit_date", "created_at",
         ]
 
@@ -64,6 +66,15 @@ class AMCContractSerializer(serializers.ModelSerializer):
         queryset=__import__("crm.models", fromlist=["Customer"]).Customer.objects.all(),
     )
     customer_name = serializers.CharField(source="customer.name", read_only=True)
+    assigned_technician_id = serializers.PrimaryKeyRelatedField(
+        source="assigned_technician",
+        queryset=__import__("authentication.models", fromlist=["User"]).User.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    assigned_technician_name = serializers.CharField(
+        source="assigned_technician.full_name", read_only=True, default="", allow_null=True
+    )
     visits_count = serializers.IntegerField(source="visits.count", read_only=True)
     renewal_invoices = AMCRenewalInvoiceSerializer(many=True, read_only=True)
 
@@ -76,7 +87,7 @@ class AMCContractSerializer(serializers.ModelSerializer):
             "visits_per_year", "visit_interval_days",
             "auto_renew", "renewal_reminder_days",
             "location_address", "location_lat", "location_lng",
-            "assigned_technician", "notes",
+            "assigned_technician_id", "assigned_technician_name", "notes",
             "visits_count", "renewal_invoices",
             "created_at", "updated_at",
         ]
