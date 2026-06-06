@@ -90,7 +90,7 @@ class LeadViewSet(ShopScopedMixin, ModelViewSet):
     """
 
     pagination_class = RepairOSCursorPagination
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_permissions(self):
         if self.action in ("list", "retrieve"):
@@ -99,6 +99,8 @@ class LeadViewSet(ShopScopedMixin, ModelViewSet):
             return [require_permission("crm.leads.create")()]
         if self.action in ("partial_update",):
             return [require_permission("crm.leads.edit")()]
+        if self.action == "destroy":
+            return [require_permission("crm.leads.delete")()]
         if self.action == "convert":
             return [require_permission("crm.leads.convert")()]
         if self.action == "change_status":

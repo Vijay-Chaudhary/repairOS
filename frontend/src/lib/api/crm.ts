@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPatch, type PageMeta } from './client';
+import { apiGet, apiPost, apiPatch, apiDelete, type PageMeta } from './client';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -178,6 +178,9 @@ export const crmApi = {
     notes: string;
     assigned_to: string;
   }>) => apiPatch<Lead>(`/crm/leads/${id}/`, body),
+
+  deleteLead: (id: string) =>
+    apiDelete<void>(`/crm/leads/${id}/`),
 
   convertLead: (id: string) =>
     apiPost<Customer>(`/crm/leads/${id}/convert/`, {}),
