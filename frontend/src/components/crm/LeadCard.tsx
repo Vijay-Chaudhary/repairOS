@@ -141,16 +141,19 @@ export function LeadCard({ lead }: LeadCardProps) {
   const showPrimary = (primaryTransition || isLost) && lead.status !== 'converted';
 
   return (
-    <div className="bg-[var(--surface)] rounded-md border border-[var(--border)] p-3 space-y-2 select-none">
+    <div className="bg-[var(--surface)] rounded-md border border-[var(--border)] p-3 pt-0 space-y-2 select-none">
       {/* Header row: name + menu on one line, phone below */}
       <div>
         <div className="flex items-center justify-between gap-2">
+          <div className="">
           <Link
             href={`/leads/${lead.id}`}
             className="text-body-sm font-medium text-[var(--text)] hover:underline truncate capitalize"
           >
             {lead.name}
           </Link>
+          </div>
+          <div className="">
           <Can anyOf={['crm.leads.edit', 'crm.leads.convert']}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -199,6 +202,7 @@ export function LeadCard({ lead }: LeadCardProps) {
               </DropdownMenuContent>
             </DropdownMenu>
           </Can>
+          </div>
         </div>
         <a
           href={`tel:${lead.phone}`}
@@ -243,7 +247,8 @@ export function LeadCard({ lead }: LeadCardProps) {
                 onClick={() => advanceMutation.mutate({ status: 'quoted' })}
                 disabled={advanceMutation.isPending}
               >
-                Mark as quoted
+                 Quoted
+                <ChevronRight className="h-3 w-3 ml-1" />
               </Button>
             </div>
           ) : (
