@@ -131,15 +131,37 @@ def _build_line_items(job) -> list[dict]:
         })
 
     # Component lines — only received/approved spare part requests
-    received_parts = job.spare_part_requests.filter(
-        status=JobSparePartRequest.RequestStatus.RECEIVED
-    ).select_related()
+    received_parts = list(
+        job.spare_part_requests.filter(status=JobSparePartRequest.RequestStatus.RECEIVED)
+    )
+
+    # Bulk-fetch variant info for all parts that reference an inventory variant
+    variant_ids = {p.variant_id for p in received_parts if p.variant_id}
+    variant_map: dict = {}
+    if variant_ids:
+        try:
+            from inventory.models import ProductVariant
+            variant_map = {
+                str(v.id): v
+                for v in ProductVariant.objects.filter(id__in=variant_ids)
+            }
+        except Exception:
+            pass  # inventory module not yet available; fall back to ₹0
 
     for part in received_parts:
-        description = part.custom_part_name or f"Part (variant {part.variant_id})"
-        # No unit_cost on spare part requests; use 0 as placeholder (variant cost lookup
-        # would require inventory module integration)
-        unit_price = Decimal("0")
+        variant = variant_map.get(str(part.variant_id)) if part.variant_id else None
+
+        # Prefer explicit custom name; fall back to variant name, never expose raw UUID
+        if part.custom_part_name:
+            description = part.custom_part_name
+        elif variant:
+            description = variant.variant_name
+        else:
+            description = "Part"
+
+        # Use variant cost_price so invoice and GSTR-1 reflect actual parts cost
+        unit_price = variant.cost_price if variant else Decimal("0")
+        line_subtotal = (unit_price * Decimal(str(part.quantity))).quantize(_TWO_PLACES)
         items.append({
             "item_type": RepairInvoiceItem.ItemType.COMPONENT,
             "description": description,
@@ -147,7 +169,7 @@ def _build_line_items(job) -> list[dict]:
             "quantity": Decimal(str(part.quantity)),
             "unit_price": unit_price,
             "tax_rate": Decimal("0"),
-            "line_subtotal": Decimal("0"),
+            "line_subtotal": line_subtotal,
             "line_tax": Decimal("0"),
         })
 
@@ -199,6 +221,8 @@ def record_payment(invoice: RepairInvoice, data: dict, user) -> Payment:
             f"Payment {amount} exceeds outstanding {outstanding}."
         )
 
+    paid_at = data.get("paid_at") or timezone.now()
+
     with transaction.atomic():
         payment = Payment.objects.create(
             invoice=invoice,
@@ -207,6 +231,7 @@ def record_payment(invoice: RepairInvoice, data: dict, user) -> Payment:
             reference_id=data.get("reference_id", ""),
             razorpay_payment_id=razorpay_id,
             razorpay_order_id=data.get("razorpay_order_id", ""),
+            paid_at=paid_at,
             recorded_by=user,
             notes=data.get("notes", ""),
         )
@@ -279,9 +304,17 @@ def handle_razorpay_webhook(payload: bytes, signature: str) -> Payment | None:
         logger.error("Razorpay webhook: invoice %s not found", invoice_id)
         return None
 
+    _METHOD_MAP = {
+        "upi": Payment.Method.UPI,
+        "card": Payment.Method.CARD,
+        "netbanking": Payment.Method.NEFT,
+        "cheque": Payment.Method.CHEQUE,
+    }
+    method = _METHOD_MAP.get(entity.get("method", ""), Payment.Method.OTHER)
+
     return record_payment(invoice, {
         "amount": str(amount),
-        "method": Payment.Method.UPI,
+        "method": method,
         "razorpay_payment_id": razorpay_payment_id,
         "razorpay_order_id": razorpay_order_id,
     }, user=None)

@@ -30,23 +30,35 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
+def _shop_ids_from_token(token) -> list | None:
+    """Return shop_ids list from JWT, or None if tenant-wide (no filter needed)."""
+    if token is None:
+        return []
+    if token.get("is_tenant_wide") or token.get("is_platform_admin"):
+        return None
+    return token.get("shop_ids", [])
+
+
 class RepairInvoiceView(APIView):
-    permission_classes = [IsAuthenticated, require_permission("billing.repair_invoices.create")]
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [IsAuthenticated(), require_permission("billing.repair_invoices.view")()]
+        return [IsAuthenticated(), require_permission("billing.repair_invoices.create")()]
 
     def get(self, request: Request) -> Response:
         """List repair invoices for the authenticated user's shops."""
         token = getattr(request, "auth", None)
-        shop_ids = token.get("shop_ids", []) if token else []
-        # Allow explicit shop_id override from query params
+        shop_ids = _shop_ids_from_token(token)
+
+        # Explicit shop_id override from query params (allowed for all roles)
         if qp_shop := request.query_params.get("shop_id"):
             shop_ids = [qp_shop]
 
-        qs = (
-            RepairInvoice.objects.select_related("customer", "job", "shop")
-            .prefetch_related("payment_set")
-            .filter(shop_id__in=shop_ids)
-            .order_by("-created_at")
-        )
+        qs = RepairInvoice.objects.select_related("customer", "job", "shop").order_by("-created_at")
+
+        if shop_ids is not None:
+            qs = qs.filter(shop_id__in=shop_ids)
 
         # Filters
         status_filter = request.query_params.get("status")
@@ -56,6 +68,10 @@ class RepairInvoiceView(APIView):
         customer_id = request.query_params.get("customer_id")
         if customer_id:
             qs = qs.filter(customer_id=customer_id)
+
+        outstanding_only = request.query_params.get("outstanding_only", "").lower()
+        if outstanding_only == "true":
+            qs = qs.filter(amount_outstanding__gt=0)
 
         search = request.query_params.get("search", "").strip()
         if search:
@@ -96,21 +112,110 @@ class RepairInvoiceView(APIView):
 
 
 class RepairInvoiceDetailView(APIView):
-    permission_classes = [IsAuthenticated, require_permission("billing.repair_invoices.create")]
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [IsAuthenticated(), require_permission("billing.repair_invoices.view")()]
+        return [IsAuthenticated(), require_permission("billing.repair_invoices.create")()]
+
+    def _get_invoice(self, request: Request, invoice_id: str):
+        """Fetch invoice scoped to the caller's shops. Returns (invoice, error_response)."""
+        token = getattr(request, "auth", None)
+        shop_ids = _shop_ids_from_token(token)
+
+        qs = RepairInvoice.objects.select_related("customer", "job", "shop").prefetch_related(
+            "items", "payments"
+        )
+        if shop_ids is not None:
+            qs = qs.filter(shop_id__in=shop_ids)
+
+        try:
+            return qs.get(id=invoice_id), None
+        except RepairInvoice.DoesNotExist:
+            return None, Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
     def get(self, request: Request, invoice_id: str) -> Response:
+        invoice, err = self._get_invoice(request, invoice_id)
+        if err:
+            return err
+        return Response(RepairInvoiceDetailSerializer(invoice).data)
+
+
+class RepairInvoicePdfView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("billing.repair_invoices.view")]
+
+    def get(self, request: Request, invoice_id: str) -> Response:
+        token = getattr(request, "auth", None)
+        shop_ids = _shop_ids_from_token(token)
+
+        qs = RepairInvoice.objects.only("id", "pdf_url", "shop_id")
+        if shop_ids is not None:
+            qs = qs.filter(shop_id__in=shop_ids)
+
         try:
-            invoice = RepairInvoice.objects.select_related(
-                "customer", "job", "shop"
-            ).prefetch_related("items", "payment_set").get(id=invoice_id)
+            invoice = qs.get(id=invoice_id)
         except RepairInvoice.DoesNotExist:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        return Response(RepairInvoiceDetailSerializer(invoice).data)
+        return Response({"pdf_url": invoice.pdf_url or ""})
+
+
+class RepairInvoiceSendWhatsappView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("billing.repair_invoices.create")]
+
+    def post(self, request: Request, invoice_id: str) -> Response:
+        token = getattr(request, "auth", None)
+        shop_ids = _shop_ids_from_token(token)
+
+        qs = RepairInvoice.objects.select_related("customer", "shop")
+        if shop_ids is not None:
+            qs = qs.filter(shop_id__in=shop_ids)
+
+        try:
+            invoice = qs.get(id=invoice_id)
+        except RepairInvoice.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        logger.info(
+            "WhatsApp send requested for invoice %s to %s",
+            invoice.invoice_number,
+            invoice.customer.phone,
+        )
+        return Response({"queued": True})
 
 
 class PaymentView(APIView):
     permission_classes = [IsAuthenticated, require_permission("billing.payments.record")]
+
+    def get(self, request: Request) -> Response:
+        """List payments scoped to the caller's shops."""
+        token = getattr(request, "auth", None)
+        shop_ids = _shop_ids_from_token(token)
+
+        qs = Payment.objects.select_related("invoice__shop", "recorded_by").order_by("-paid_at")
+        if shop_ids is not None:
+            qs = qs.filter(invoice__shop_id__in=shop_ids)
+
+        invoice_id = request.query_params.get("invoice_id")
+        if invoice_id:
+            qs = qs.filter(invoice_id=invoice_id)
+
+        method = request.query_params.get("method")
+        if method:
+            qs = qs.filter(method=method)
+
+        date_from = request.query_params.get("date_from")
+        if date_from:
+            qs = qs.filter(paid_at__date__gte=date_from)
+
+        date_to = request.query_params.get("date_to")
+        if date_to:
+            qs = qs.filter(paid_at__date__lte=date_to)
+
+        paginator = RepairOSCursorPagination()
+        page = paginator.paginate_queryset(qs, request)
+        serializer = PaymentSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
 
     def post(self, request: Request) -> Response:
         serializer = CreatePaymentSerializer(data=request.data)
@@ -128,13 +233,23 @@ class PaymentView(APIView):
         return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
 
 
+class RazorpayCreateLinkView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("billing.payments.record")]
+
+    def post(self, request: Request) -> Response:
+        return Response(
+            {"code": "FEATURE_PENDING", "detail": "Razorpay payment link creation is not yet implemented."},
+            status=status.HTTP_501_NOT_IMPLEMENTED,
+        )
+
+
 class RazorpayWebhookView(APIView):
     permission_classes = []  # HMAC-authenticated, not JWT
 
     def post(self, request: Request) -> Response:
         signature = request.META.get("HTTP_X_RAZORPAY_SIGNATURE", "")
         try:
-            payment = services.handle_razorpay_webhook(request.body, signature)
+            services.handle_razorpay_webhook(request.body, signature)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"status": "ok"}, status=status.HTTP_200_OK)

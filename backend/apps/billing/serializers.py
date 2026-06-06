@@ -15,16 +15,31 @@ class RepairInvoiceItemSerializer(serializers.ModelSerializer):
 
 
 class PaymentSerializer(serializers.ModelSerializer):
+    # FK field aliases expected by the FE contract
+    # (source omitted — field name 'invoice_id' maps to Payment.invoice_id directly)
+    invoice_id = serializers.UUIDField(read_only=True)
+    recorded_by_name = serializers.SerializerMethodField()
+
     class Meta:
         model = Payment
         fields = [
-            "id", "invoice", "amount", "method", "reference_id",
+            "id", "invoice_id", "amount", "method", "reference_id",
             "razorpay_payment_id", "razorpay_order_id", "paid_at", "notes",
+            "recorded_by_name",
         ]
+
+    def get_recorded_by_name(self, obj) -> str:
+        if obj.recorded_by:
+            return obj.recorded_by.full_name or ""
+        return ""
 
 
 class RepairInvoiceListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for invoice list views — no line items."""
+    # FK _id aliases: field name matches the Django FK _id attrib — no source needed
+    shop_id = serializers.UUIDField(read_only=True)
+    job_id = serializers.UUIDField(read_only=True)
+    customer_id = serializers.UUIDField(read_only=True)
     customer_name = serializers.CharField(source="customer.name", read_only=True)
     customer_phone = serializers.CharField(source="customer.phone", read_only=True)
     job_number = serializers.CharField(source="job.job_number", read_only=True)
@@ -33,6 +48,7 @@ class RepairInvoiceListSerializer(serializers.ModelSerializer):
         model = RepairInvoice
         fields = [
             "id", "invoice_number", "status",
+            "shop_id", "job_id", "customer_id",
             "customer_name", "customer_phone", "job_number",
             "grand_total", "amount_paid", "amount_outstanding",
             "due_date", "pdf_url", "created_at",
@@ -42,7 +58,12 @@ class RepairInvoiceListSerializer(serializers.ModelSerializer):
 class RepairInvoiceDetailSerializer(serializers.ModelSerializer):
     """Full serializer for invoice detail view — includes items and payments."""
     items = RepairInvoiceItemSerializer(many=True, read_only=True)
-    payments = PaymentSerializer(many=True, read_only=True, source="payment_set")
+    # related_name="payments" on Payment.invoice — field name matches, no source needed
+    payments = PaymentSerializer(many=True, read_only=True)
+    # FK _id aliases: field name matches the Django FK _id attrib — no source needed
+    shop_id = serializers.UUIDField(read_only=True)
+    job_id = serializers.UUIDField(read_only=True)
+    customer_id = serializers.UUIDField(read_only=True)
     customer_name = serializers.CharField(source="customer.name", read_only=True)
     customer_phone = serializers.CharField(source="customer.phone", read_only=True)
     customer_gstin = serializers.CharField(source="customer.gstin", read_only=True)
@@ -53,6 +74,7 @@ class RepairInvoiceDetailSerializer(serializers.ModelSerializer):
         model = RepairInvoice
         fields = [
             "id", "invoice_number", "status",
+            "shop_id", "job_id", "customer_id",
             "customer_name", "customer_phone", "customer_gstin",
             "job_number", "shop_name",
             "subtotal", "discount_amount", "cgst", "sgst", "igst",
@@ -80,3 +102,4 @@ class CreatePaymentSerializer(serializers.Serializer):
     method = serializers.ChoiceField(choices=Payment.Method.choices)
     reference_id = serializers.CharField(required=False, default="", allow_blank=True)
     notes = serializers.CharField(required=False, default="", allow_blank=True)
+    paid_at = serializers.DateTimeField(required=False, allow_null=True)
