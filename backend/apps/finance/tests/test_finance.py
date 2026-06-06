@@ -120,10 +120,17 @@ class TestPettyCash:
         assert res.status_code == status.HTTP_200_OK
         assert Decimal(res.data["current_balance"]) == Decimal("1000.00")
 
+    def test_list_transactions(self, fin_client, petty_cash_account):
+        """GET /petty-cash/transactions/ returns paginated {items, meta}."""
+        res = fin_client.get(self.txn_url, {"account_id": str(petty_cash_account.id)})
+        assert res.status_code == status.HTTP_200_OK
+        assert "items" in res.data
+        assert "meta" in res.data
+
     def test_credit_increases_balance(self, fin_client, petty_cash_account, admin_user):
         res = fin_client.post(self.txn_url, {
             "account_id": str(petty_cash_account.id),
-            "txn_type": "credit",
+            "type": "credit",
             "amount": "500.00",
             "category": "Replenishment",
             "description": "Cash top-up",
@@ -137,7 +144,7 @@ class TestPettyCash:
     def test_debit_decreases_balance(self, fin_client, petty_cash_account):
         res = fin_client.post(self.txn_url, {
             "account_id": str(petty_cash_account.id),
-            "txn_type": "debit",
+            "type": "debit",
             "amount": "300.00",
             "category": "Office Supplies",
             "description": "Printer ink",
@@ -153,19 +160,19 @@ class TestPettyCash:
         # Start: 1000
         fin_client.post(self.txn_url, {
             "account_id": str(petty_cash_account.id),
-            "txn_type": "debit", "amount": "200.00",
+            "type": "debit", "amount": "200.00",
             "category": "X", "description": "", "date": "2026-06-01",
         }, format="json")   # → 800
 
         fin_client.post(self.txn_url, {
             "account_id": str(petty_cash_account.id),
-            "txn_type": "credit", "amount": "500.00",
+            "type": "credit", "amount": "500.00",
             "category": "X", "description": "", "date": "2026-06-02",
         }, format="json")   # → 1300
 
         res = fin_client.post(self.txn_url, {
             "account_id": str(petty_cash_account.id),
-            "txn_type": "debit", "amount": "100.00",
+            "type": "debit", "amount": "100.00",
             "category": "X", "description": "", "date": "2026-06-03",
         }, format="json")   # → 1200
         assert Decimal(res.data["balance_after"]) == Decimal("1200.00")
@@ -185,20 +192,31 @@ class TestPettyCash:
         """balance_after on old txns does not change when new txns are added."""
         res1 = fin_client.post(self.txn_url, {
             "account_id": str(petty_cash_account.id),
-            "txn_type": "debit", "amount": "100.00",
+            "type": "debit", "amount": "100.00",
             "category": "X", "description": "", "date": "2026-06-01",
         }, format="json")
         txn1_balance_after = Decimal(res1.data["balance_after"])
 
         fin_client.post(self.txn_url, {
             "account_id": str(petty_cash_account.id),
-            "txn_type": "debit", "amount": "200.00",
+            "type": "debit", "amount": "200.00",
             "category": "X", "description": "", "date": "2026-06-02",
         }, format="json")
 
         from finance.models import PettyCashTransaction
         txn1 = PettyCashTransaction.objects.get(id=res1.data["id"])
         assert txn1.balance_after == txn1_balance_after
+
+    def test_response_shape_has_type_field(self, fin_client, petty_cash_account):
+        """Transaction response exposes 'type' (not 'txn_type') matching the FE contract."""
+        res = fin_client.post(self.txn_url, {
+            "account_id": str(petty_cash_account.id),
+            "type": "credit", "amount": "50.00",
+            "category": "X", "description": "", "date": "2026-06-01",
+        }, format="json")
+        assert res.status_code == status.HTTP_201_CREATED
+        assert res.data["type"] == "credit"
+        assert "txn_type" not in res.data
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -224,15 +242,49 @@ class TestBudget:
     def test_list_budget_heads(self, fin_client, budget_head):
         res = fin_client.get("/api/v1/finance/budget/")
         assert res.status_code == status.HTTP_200_OK
-        assert len(res.data) >= 1
+        assert "items" in res.data
+        assert len(res.data["items"]) >= 1
 
-    def test_duplicate_allocation_blocked(self, fin_client, budget_allocation, budget_head):
+    def test_list_budget_allocations(self, fin_client, budget_allocation, budget_head):
+        res = fin_client.get(self.alloc_url)
+        assert res.status_code == status.HTTP_200_OK
+        assert "items" in res.data
+        assert len(res.data["items"]) >= 1
+        assert res.data["items"][0]["head_id"] is not None
+        assert res.data["items"][0]["head_name"] is not None
+
+    def test_upsert_allocation_updates_budgeted_amount(self, fin_client, budget_allocation, budget_head):
+        """POSTing an allocation that already exists upserts (updates) instead of 400."""
         res = fin_client.post(self.alloc_url, {
             "head_id": str(budget_head.id),
             "month": 6, "year": 2026,
             "budgeted_amount": "9999.00",
         }, format="json")
-        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        assert res.status_code == status.HTTP_200_OK
+        assert Decimal(res.data["budgeted_amount"]) == Decimal("9999.00")
+        budget_allocation.refresh_from_db()
+        assert budget_allocation.budgeted_amount == Decimal("9999.00")
+
+    def test_upsert_allocation_recomputes_variance(self, fin_client, budget_head, shop, fin_client_alias=None):
+        """When budgeted_amount is updated, variance is recomputed from existing actual."""
+        from finance.models import BudgetAllocation
+        # Create allocation with some actual spend already recorded
+        alloc = BudgetAllocation.objects.create(
+            head=budget_head, month=7, year=2026,
+            budgeted_amount=Decimal("5000.00"),
+            actual_amount=Decimal("3000.00"),
+            variance=Decimal("-2000.00"),
+        )
+        # Update budgeted_amount — variance should recompute
+        res = fin_client.post(self.alloc_url, {
+            "head_id": str(budget_head.id),
+            "month": 7, "year": 2026,
+            "budgeted_amount": "2500.00",
+        }, format="json")
+        assert res.status_code == status.HTTP_200_OK
+        alloc.refresh_from_db()
+        # variance = actual(3000) - new_budgeted(2500) = 500 (over budget)
+        assert alloc.variance == Decimal("500.00")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -301,13 +353,20 @@ class TestExpenses:
         budget_allocation.refresh_from_db()
         assert budget_allocation.actual_amount == Decimal("0.00")
 
-    def test_list_expenses(self, fin_client, shop, db):
+    def test_list_expenses_returns_paginated_shape(self, fin_client, shop, db):
         from finance import services
         from authentication.models import User
         u = User.objects.first()
         services.create_expense(shop, {"category": "X", "amount": "100", "date": datetime.date.today()}, u)
         res = fin_client.get(self.url)
         assert res.status_code == status.HTTP_200_OK
+        assert "items" in res.data
+        assert "meta" in res.data
+
+    def test_list_expenses_shop_filter(self, fin_client, shop):
+        res = fin_client.get(self.url, {"shop_id": str(shop.id)})
+        assert res.status_code == status.HTTP_200_OK
+        assert "items" in res.data
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -346,6 +405,25 @@ class TestAssets:
         res2 = fin_client.patch(f"{self.url}{asset_id}/", {"condition": "poor"}, format="json")
         assert res2.status_code == status.HTTP_200_OK
         assert res2.data["condition"] == "poor"
+
+    def test_update_asset_warranty_expiry(self, fin_client, shop, db):
+        """warranty_expiry update is accepted and persisted (H13 fix)."""
+        res = fin_client.post(self.url, {
+            "shop_id": str(shop.id),
+            "name": "Server", "category": "IT",
+            "asset_code": "FIN-ASSET-WRN",
+            "purchase_date": "2026-01-01",
+            "purchase_cost": "200000.00",
+        }, format="json")
+        asset_id = res.data["id"]
+
+        res2 = fin_client.patch(
+            f"{self.url}{asset_id}/",
+            {"warranty_expiry": "2028-12-31"},
+            format="json",
+        )
+        assert res2.status_code == status.HTTP_200_OK
+        assert res2.data["warranty_expiry"] == "2028-12-31"
 
     def test_dispose_asset_marks_inactive(self, fin_client, shop, db):
         res = fin_client.post(self.url, {
@@ -392,9 +470,30 @@ class TestAssets:
         )
 
         res = fin_client.get(self.url)
-        names = [a["name"] for a in res.data]
+        assert "items" in res.data
+        names = [a["name"] for a in res.data["items"]]
         assert "Active Asset" in names
         assert "Disposed Asset" not in names
+
+    def test_include_disposed_when_is_active_false(self, fin_client, shop, db):
+        """is_active=false query param includes disposed assets."""
+        res_d = fin_client.post(self.url, {
+            "shop_id": str(shop.id),
+            "name": "To Dispose", "category": "IT",
+            "asset_code": "FIN-DISP-002",
+            "purchase_date": "2026-01-01",
+            "purchase_cost": "1000.00",
+        }, format="json")
+        fin_client.patch(
+            f"{self.url}{res_d.data['id']}/",
+            {"condition": "disposed"},
+            format="json",
+        )
+
+        res = fin_client.get(self.url, {"is_active": "false"})
+        assert res.status_code == status.HTTP_200_OK
+        names = [a["name"] for a in res.data["items"]]
+        assert "To Dispose" in names
 
     def test_duplicate_asset_code_blocked(self, fin_client, shop, db):
         fin_client.post(self.url, {

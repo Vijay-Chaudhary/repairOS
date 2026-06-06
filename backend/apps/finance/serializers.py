@@ -13,7 +13,7 @@ from .models import (
 
 
 class PettyCashAccountSerializer(serializers.ModelSerializer):
-    shop_id = serializers.UUIDField(source="shop_id", read_only=True)
+    shop_id = serializers.UUIDField(read_only=True)
 
     class Meta:
         model = PettyCashAccount
@@ -22,7 +22,7 @@ class PettyCashAccountSerializer(serializers.ModelSerializer):
 
 class CreatePettyCashTxnSerializer(serializers.Serializer):
     account_id = serializers.UUIDField()
-    txn_type = serializers.ChoiceField(choices=PettyCashTransaction.TxnType.choices)
+    type = serializers.ChoiceField(choices=PettyCashTransaction.TxnType.choices)
     amount = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0.01"))
     category = serializers.CharField(required=False, default="", allow_blank=True)
     description = serializers.CharField(required=False, default="", allow_blank=True)
@@ -31,7 +31,8 @@ class CreatePettyCashTxnSerializer(serializers.Serializer):
 
 
 class PettyCashTransactionSerializer(serializers.ModelSerializer):
-    account_id = serializers.UUIDField(source="account_id", read_only=True)
+    account_id = serializers.UUIDField(read_only=True)
+    type = serializers.CharField(source="txn_type", read_only=True)
     recorded_by_name = serializers.CharField(
         source="recorded_by.full_name", read_only=True, default="", allow_null=True
     )
@@ -39,13 +40,13 @@ class PettyCashTransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = PettyCashTransaction
         fields = [
-            "id", "account_id", "txn_type", "amount", "category",
+            "id", "account_id", "type", "amount", "category",
             "description", "date", "balance_after", "recorded_by_name",
         ]
 
 
 class BudgetHeadSerializer(serializers.ModelSerializer):
-    shop_id = serializers.UUIDField(source="shop_id", read_only=True)
+    shop_id = serializers.UUIDField(read_only=True)
 
     class Meta:
         model = BudgetHead
@@ -53,7 +54,7 @@ class BudgetHeadSerializer(serializers.ModelSerializer):
 
 
 class BudgetAllocationSerializer(serializers.ModelSerializer):
-    head_id = serializers.UUIDField(source="head_id", read_only=True)
+    head_id = serializers.UUIDField(read_only=True)
     head_name = serializers.CharField(source="head.name", read_only=True)
     category = serializers.CharField(source="head.category", read_only=True)
 
@@ -83,8 +84,8 @@ class CreateExpenseSerializer(serializers.Serializer):
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
-    shop_id = serializers.UUIDField(source="shop_id", read_only=True)
-    budget_head_id = serializers.UUIDField(source="budget_head_id", read_only=True, allow_null=True)
+    shop_id = serializers.UUIDField(read_only=True)
+    budget_head_id = serializers.UUIDField(read_only=True, allow_null=True)
     budget_head_name = serializers.CharField(
         source="budget_head.name", read_only=True, default="", allow_null=True
     )
@@ -101,7 +102,11 @@ class ExpenseSerializer(serializers.ModelSerializer):
 
 
 class ShopAssetSerializer(serializers.ModelSerializer):
-    shop_id = serializers.UUIDField(source="shop_id", read_only=True)
+    shop_id = serializers.UUIDField(read_only=True)
+    supplier_id = serializers.UUIDField(read_only=True, allow_null=True)
+    supplier_name = serializers.CharField(
+        source="supplier.name", read_only=True, default="", allow_null=True
+    )
 
     class Meta:
         model = ShopAsset
@@ -109,6 +114,7 @@ class ShopAssetSerializer(serializers.ModelSerializer):
             "id", "shop_id", "name", "category", "asset_code",
             "purchase_date", "purchase_cost", "warranty_expiry",
             "condition", "location_description", "notes", "is_active",
+            "supplier_id", "supplier_name",
         ]
 
 
@@ -131,4 +137,5 @@ class UpdateAssetSerializer(serializers.Serializer):
     condition = serializers.ChoiceField(choices=ShopAsset.Condition.choices, required=False)
     location_description = serializers.CharField(required=False, allow_blank=True)
     notes = serializers.CharField(required=False, allow_blank=True)
+    warranty_expiry = serializers.DateField(required=False, allow_null=True)
     is_active = serializers.BooleanField(required=False)
