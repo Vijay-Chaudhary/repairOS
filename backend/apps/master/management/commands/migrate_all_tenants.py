@@ -67,14 +67,16 @@ class Command(BaseCommand):
         alias = f"tenant_{slug}"
 
         if alias not in connections.databases:
-            connections.databases[alias] = {
-                "ENGINE": "django.db.backends.postgresql",
+            base = dict(connections.databases["default"])
+            base.update({
                 "NAME": tenant_db.db_name,
                 "HOST": tenant_db.db_host,
                 "PORT": str(tenant_db.db_port),
                 "USER": tenant_db.db_user,
                 "PASSWORD": tenant_db.decrypt_password(),
                 "CONN_MAX_AGE": 0,
-            }
+                "OPTIONS": {},
+            })
+            connections.databases[alias] = base
 
         call_command("migrate", database=alias, verbosity=0)
