@@ -95,6 +95,7 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
         qs = (
             JobTicket.objects.filter(self._shop_filter())
             .select_related("customer", "shop", "created_by")
+            .prefetch_related("stages__assigned_technician")
         )
 
         # Technicians (no assign_tech permission) see only their own jobs
@@ -188,11 +189,14 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
         job = self._get_job(pk)
         serializer = JobStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        token = getattr(request, "auth", None) or {}
+        is_tenant_wide = token.get("is_tenant_wide", False) if hasattr(token, "get") else False
         job = services.transition_job(
             job,
             serializer.validated_data["to_status"],
             request.user,
             serializer.validated_data.get("reason", ""),
+            is_tenant_wide=is_tenant_wide,
         )
         return Response(JobTicketSerializer(job).data)
 
@@ -227,16 +231,10 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
         serializer.is_valid(raise_exception=True)
         estimate = services.create_estimate(job, dict(serializer.validated_data), request.user)
 
-        approval_link = f"https://app.repaiross.app/e/{estimate.id}"
-        return Response(
-            {
-                "estimate_number": estimate.estimate_number,
-                "total_estimate": str(estimate.total_estimate),
-                "status": estimate.status,
-                "approval_link": approval_link,
-            },
-            status=status.HTTP_201_CREATED,
-        )
+        from .serializers import JobEstimateSerializer as _JES
+        data = _JES(estimate).data
+        data["approval_link"] = f"https://app.repaiross.app/e/{estimate.id}"
+        return Response(data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], url_path="estimate/respond")
     def respond_estimate(self, request, pk=None):
@@ -281,6 +279,18 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
         # For now, return 200 with the provided key.
         key = request.data.get("key", "")
         return Response({"key": key, "message": "Attachment reference recorded."})
+
+    @action(detail=True, methods=["get"], url_path="timeline")
+    def timeline(self, request, pk=None):
+        job = self._get_job(pk)
+        from crm.models import CommunicationLog
+        from crm.serializers import CommunicationLogSerializer
+        qs = CommunicationLog.objects.filter(job_id=job.id).order_by("-logged_at")
+        page = self.paginate_queryset(qs)
+        data = CommunicationLogSerializer(page if page is not None else qs, many=True).data
+        if page is not None:
+            return self.get_paginated_response(data)
+        return Response({"items": data})
 
     # ── Helper ────────────────────────────────────────────────────────────────
 
@@ -336,10 +346,11 @@ class FaultTemplateViewSet(ShopScopedMixin, GenericViewSet):
     GET    /fault-templates/       — list
     POST   /fault-templates/       — create (body includes nested parts[])
     PATCH  /fault-templates/{id}/  — update
+    DELETE /fault-templates/{id}/  — soft-delete
     """
 
     pagination_class = RepairOSCursorPagination
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_permissions(self):
         return [require_permission("repair.templates.manage")()]
@@ -383,6 +394,16 @@ class FaultTemplateViewSet(ShopScopedMixin, GenericViewSet):
             setattr(template, attr, value)
         template.save()
         return Response(FaultTemplateSerializer(template).data)
+
+    def destroy(self, request, pk=None):
+        try:
+            template = self.get_queryset().get(pk=pk)
+        except FaultTemplate.DoesNotExist:
+            from rest_framework.exceptions import NotFound
+            raise NotFound("Fault template not found.")
+        template.is_active = False
+        template.save(update_fields=["is_active"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # Import inside action to avoid circular import at module level

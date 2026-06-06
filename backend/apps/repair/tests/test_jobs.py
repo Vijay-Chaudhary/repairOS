@@ -585,7 +585,7 @@ class TestTechnicianScoping:
 
         res = tech_client.get("/api/v1/repair/jobs/")
         assert res.status_code == status.HTTP_200_OK
-        job_ids = [j["id"] for j in res.data["data"]]
+        job_ids = [j["id"] for j in res.data["items"]]
         assert str(j2.id) in job_ids
         assert str(j1.id) not in job_ids
 
@@ -601,5 +601,5 @@ class TestSoftDelete:
         job.soft_delete()
         res = admin_client.get("/api/v1/repair/jobs/")
         assert res.status_code == status.HTTP_200_OK
-        ids = [j["id"] for j in res.data["data"]]
+        ids = [j["id"] for j in res.data["items"]]
         assert str(job.id) not in ids

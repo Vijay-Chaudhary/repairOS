@@ -110,7 +110,7 @@ export interface JobDetail extends JobListItem {
   created_by: string;
   created_at: string;
   checkin?: JobCheckin | null;
-  estimate?: JobEstimate | null;
+  estimates: JobEstimate[];
   stages: JobStage[];
   spare_part_requests: SparePartRequest[];
 }
@@ -208,7 +208,7 @@ export const repairApi = {
     stage_id?: string;
     action?: 'complete' | 'start' | 'skip';
     notes?: string;
-  }) => apiPost<{ stages: JobStage[] }>(`/jobs/${jobId}/stages/`, body),
+  }) => apiPost<{ message: string } | JobStage>(`/jobs/${jobId}/stages/`, body),
 
   createEstimate: (jobId: string, body: {
     labor_charge: number;

@@ -128,7 +128,7 @@ def create_job(shop, customer, data: dict, user) -> JobTicket:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def transition_job(job: JobTicket, to_status: str, user, reason: str = "") -> JobTicket:
+def transition_job(job: JobTicket, to_status: str, user, reason: str = "", is_tenant_wide: bool = False) -> JobTicket:
     from core.exceptions import BusinessRuleViolation, InvalidStatusTransition
 
     allowed = VALID_TRANSITIONS.get(job.status, set())
@@ -137,7 +137,7 @@ def transition_job(job: JobTicket, to_status: str, user, reason: str = "") -> Jo
 
     # Business-rule guards
     if to_status == JobTicket.Status.OPEN:
-        _guard_open(job, user, reason)
+        _guard_open(job, user, reason, is_tenant_wide)
 
     if to_status == JobTicket.Status.ON_HOLD and not reason:
         raise BusinessRuleViolation("A reason is required when placing a job on hold.")
@@ -170,15 +170,17 @@ def transition_job(job: JobTicket, to_status: str, user, reason: str = "") -> Jo
     return job
 
 
-def _guard_open(job: JobTicket, user, reason: str) -> None:
+def _guard_open(job: JobTicket, user, reason: str, is_tenant_wide: bool = False) -> None:
     from core.exceptions import BusinessRuleViolation
 
     has_checkin = JobCheckinCondition.objects.filter(job=job).exists()
     if has_checkin:
         return
 
-    # Allow admin override with a logged reason
+    # Only Tenant Admin may bypass the check-in requirement
     if reason:
+        if not is_tenant_wide:
+            raise BusinessRuleViolation("Only Tenant Admin may skip check-in.")
         _write_audit(user, AuditLog.Action.UPDATE, "JobTicket", job.id,
                      new_value={"bypass_checkin_reason": reason})
         return
@@ -221,6 +223,32 @@ def _on_close(job: JobTicket) -> None:
         accrue_commission(job)
     except Exception:
         logger.exception("Commission accrual failed for job %s", job.job_number)
+
+    # Deduct received spare parts from inventory stock
+    try:
+        from inventory.models import ProductVariant
+        from inventory.services import record_repair_out
+        received = job.spare_part_requests.filter(
+            status=JobSparePartRequest.RequestStatus.RECEIVED,
+            variant_id__isnull=False,
+        )
+        for req in received:
+            try:
+                variant = ProductVariant.objects.get(pk=req.variant_id)
+                record_repair_out(
+                    shop=job.shop,
+                    variant=variant,
+                    qty=Decimal(str(req.quantity)),
+                    job_id=job.id,
+                    user=job.created_by,
+                )
+            except ProductVariant.DoesNotExist:
+                logger.warning(
+                    "Variant %s not found for spare part request %s on job %s — skipping",
+                    req.variant_id, req.id, job.job_number,
+                )
+    except Exception:
+        logger.exception("Stock deduction failed for job %s", job.job_number)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

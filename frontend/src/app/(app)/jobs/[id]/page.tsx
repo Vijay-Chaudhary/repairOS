@@ -342,7 +342,7 @@ export default function JobDetailPage() {
           <TabsContent value="estimate" className="p-4 md:p-6 mt-0">
             <EstimateBuilder
               jobId={id}
-              estimate={job.estimate}
+              estimate={job.estimates.at(-1) ?? null}
               onSuccess={() => queryClient.invalidateQueries({ queryKey: qk.job(id) })}
             />
           </TabsContent>

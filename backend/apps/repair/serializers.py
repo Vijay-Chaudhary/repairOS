@@ -53,14 +53,28 @@ class FaultTemplateSerializer(serializers.ModelSerializer):
 
 
 class JobTicketListSerializer(serializers.ModelSerializer):
+    customer_id = serializers.UUIDField(read_only=True)
     customer_name = serializers.CharField(source="customer.name", read_only=True)
+    customer_phone = serializers.CharField(source="customer.phone", read_only=True, default="")
+    shop_id = serializers.UUIDField(read_only=True)
+    assigned_technician_name = serializers.SerializerMethodField()
 
     class Meta:
         model = JobTicket
         fields = [
-            "id", "job_number", "customer_name", "device_type", "status",
-            "priority", "service_charge", "intake_date",
+            "id", "job_number", "customer_id", "customer_name", "customer_phone",
+            "device_type", "device_brand", "device_model", "status", "priority",
+            "service_charge", "advance_paid", "intake_date", "expected_delivery_date",
+            "assigned_technician_name", "shop_id",
         ]
+
+    def get_assigned_technician_name(self, obj) -> str | None:
+        stage = obj.stages.filter(status="in_progress").first()
+        if stage is None:
+            stage = obj.stages.order_by("stage_order").first()
+        if stage and stage.assigned_technician:
+            return stage.assigned_technician.full_name
+        return None
 
 
 class JobTicketSerializer(serializers.ModelSerializer):
@@ -205,15 +219,16 @@ class EstimateResponseSerializer(serializers.Serializer):
 
 
 class JobStageSerializer(serializers.ModelSerializer):
+    assigned_technician_id = serializers.UUIDField(read_only=True)
     assigned_technician_name = serializers.CharField(
-        source="assigned_technician.full_name", read_only=True
+        source="assigned_technician.full_name", read_only=True, default=""
     )
 
     class Meta:
         model = JobStage
         fields = [
             "id", "stage_order", "stage_type",
-            "assigned_technician", "assigned_technician_name",
+            "assigned_technician_id", "assigned_technician_name",
             "status", "started_at", "completed_at", "notes",
         ]
         read_only_fields = ["id", "status", "started_at", "completed_at"]
