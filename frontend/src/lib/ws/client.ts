@@ -1,6 +1,5 @@
 import { queryClient } from '@/lib/query/client';
 import { qk } from '@/lib/query/keys';
-import { useOfflineQueueStore } from '@/lib/stores/offlineQueueStore';
 import { toast } from 'sonner';
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:8000';
@@ -54,7 +53,6 @@ class WsClient {
 
       this.socket.onopen = () => {
         this.reconnectDelay = 1000;
-        useOfflineQueueStore.getState().setOnline(true);
         if (this.activeShopId) {
           this.socket!.send(JSON.stringify({ action: 'subscribe', shop_id: this.activeShopId }));
         }
@@ -78,7 +76,10 @@ class WsClient {
       };
 
       this.socket.onerror = () => {
-        useOfflineQueueStore.getState().setOnline(false);
+        // Transport-level WS errors are not the same as the app being offline —
+        // `isOnline` is driven solely by the browser's online/offline events
+        // (see AppLayout). A down realtime channel must not block REST-based
+        // flows like job creation, invoicing, and payments.
       };
     } catch {
       if (this.shouldConnect) this.scheduleReconnect();
