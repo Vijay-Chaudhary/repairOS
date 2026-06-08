@@ -20,6 +20,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const refreshTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const bootstrapped = useRef(false);
 
   const scheduleProactiveRefresh = useCallback(() => {
     if (refreshTimer.current) clearInterval(refreshTimer.current);
@@ -54,6 +55,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [logout, pathname, router, scheduleProactiveRefresh, setAccessToken, setBootstrapping, setShops, setUser]);
 
   useEffect(() => {
+    if (bootstrapped.current) return;
+    bootstrapped.current = true;
+
     bootstrap();
     loadQueueFromDb();
 
