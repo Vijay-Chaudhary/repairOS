@@ -3,7 +3,7 @@ POS business logic.
 """
 
 import logging
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
 from typing import Optional
 
 from django.db import transaction
@@ -12,7 +12,7 @@ from django.utils import timezone
 from authentication.models import AuditLog
 from core.models import DocumentCounter
 
-from .models import CreditNote, Sale, SaleItem, SalePayment, SalesReturn
+from .models import CreditNote, Sale, SaleItem, SalePayment, SalesReturn, SalesReturnItem
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ def create_sale(shop, data: dict, user) -> Sale:
     if sale_type == Sale.SaleType.WHOLESALE:
         if not customer:
             raise BusinessRuleViolation("Wholesale sales require a customer.")
-        _check_credit_limit(customer, _calculate_grand_total_estimate(items_data, data))
+        _check_credit_limit(customer, _estimate_grand_total(shop, customer, items_data, data))
 
     # Job-linked requires job_id
     if sale_type == Sale.SaleType.JOB_LINKED and not job_id:
@@ -117,7 +117,7 @@ def create_sale(shop, data: dict, user) -> Sale:
 
         # ── Post-completion side-effects ──────────────────────────────────────
         if sale_status == Sale.Status.COMPLETED and sale_type != Sale.SaleType.JOB_LINKED:
-            _deduct_stock(items_built)
+            _deduct_stock(shop, items_built, sale.id, user)
 
         if sale_status == Sale.Status.COMPLETED and sale_type == Sale.SaleType.WHOLESALE:
             _update_customer_outstanding(customer, amount_outstanding)
@@ -153,7 +153,7 @@ def add_payment(sale: Sale, payment_data: dict, user) -> Sale:
         if sale.amount_paid >= sale.grand_total:
             sale.status = Sale.Status.COMPLETED
             sale.amount_outstanding = Decimal("0")
-            _deduct_stock_for_sale(sale)
+            _deduct_stock_for_sale(sale, user)
         else:
             sale.status = Sale.Status.PARTIALLY_PAID
 
@@ -173,10 +173,12 @@ def create_return(sale: Sale, data: dict, user) -> SalesReturn:
     if sale.status not in (Sale.Status.COMPLETED, Sale.Status.PARTIALLY_PAID):
         raise BusinessRuleViolation("Only completed or partially-paid sales can be returned.")
 
+    items_input = data.get("items", [])
+    return_items, computed_total = _build_return_items(sale, items_input)
+
     total_refund_amount = data.get("total_refund_amount")
     if total_refund_amount is None:
-        items_input = data.get("items", [])
-        total_refund_amount = _compute_return_refund(sale, items_input)
+        total_refund_amount = computed_total
 
     now = timezone.now()
     number = DocumentCounter.next(
@@ -184,13 +186,17 @@ def create_return(sale: Sale, data: dict, user) -> SalesReturn:
     )
     return_number = f"{sale.shop.code}-RET-{now.year}-{now.month:02d}-{number:04d}"
 
-    ret = SalesReturn.objects.create(
-        sale=sale,
-        return_number=return_number,
-        reason=data["reason"],
-        total_refund_amount=Decimal(str(total_refund_amount)),
-        refund_method=data["refund_method"],
-    )
+    with transaction.atomic():
+        ret = SalesReturn.objects.create(
+            sale=sale,
+            return_number=return_number,
+            reason=data["reason"],
+            total_refund_amount=Decimal(str(total_refund_amount)),
+            refund_method=data["refund_method"],
+        )
+        for line in return_items:
+            SalesReturnItem.objects.create(sales_return=ret, **line)
+
     _write_audit(user, AuditLog.Action.CREATE, "SalesReturn", ret.id)
     return ret
 
@@ -207,8 +213,8 @@ def approve_return(ret: SalesReturn, user) -> SalesReturn:
         ret.approved_at = timezone.now()
         ret.save(update_fields=["status", "approved_by", "approved_at", "updated_at"])
 
-        # Restock inventory (stub — wire to inventory module when built)
-        _restock_items(ret.sale)
+        # Restock inventory based on the persisted return line items
+        _restock_items(ret, user)
 
         # Issue credit note
         cn = _issue_credit_note(ret, user)
@@ -314,8 +320,11 @@ def _split_gst(shop, customer, items_built: list, discount_amount: Decimal, subt
         counterparty_state = shop_state  # default intra-state
 
     if counterparty_state == shop_state:
-        half = (total_tax / Decimal("2")).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
-        return half, total_tax - half, Decimal("0")
+        # Integer-paise floor division keeps CGST <= SGST and their sum exactly
+        # equal to total_tax — avoids the asymmetric split that ROUND_HALF_UP
+        # produces on odd-paise totals (e.g. ₹0.03 → ₹0.02 / ₹0.01).
+        cgst = ((total_tax * 100) // 2 / 100).quantize(_TWO_PLACES, rounding=ROUND_DOWN)
+        return cgst, total_tax - cgst, Decimal("0")
     else:
         return Decimal("0"), Decimal("0"), total_tax
 
@@ -336,8 +345,12 @@ def _record_payment(sale: Sale, pay_data: dict, user) -> SalePayment:
     )
 
 
-def _compute_return_refund(sale: Sale, items_input: list) -> Decimal:
-    """Derive total refund amount from a list of {sale_item_id, quantity} entries."""
+def _build_return_items(sale: Sale, items_input: list) -> tuple[list[dict], Decimal]:
+    """
+    Resolve {sale_item_id, quantity} entries into persistable SalesReturnItem
+    field dicts plus their summed refund total.
+    """
+    built = []
     total = Decimal("0")
     for item_data in items_input:
         try:
@@ -346,8 +359,10 @@ def _compute_return_refund(sale: Sale, items_input: list) -> Decimal:
             continue
         qty = Decimal(str(item_data["quantity"]))
         line_unit_total = (item.line_total / item.quantity) if item.quantity else Decimal("0")
-        total += (line_unit_total * qty).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
-    return total
+        refund_amount = (line_unit_total * qty).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+        total += refund_amount
+        built.append({"sale_item": item, "quantity": qty, "refund_amount": refund_amount})
+    return built, total
 
 
 def _issue_credit_note(ret: SalesReturn, user) -> CreditNote:
@@ -376,13 +391,20 @@ def _check_credit_limit(customer, estimated_total: Decimal) -> None:
         )
 
 
-def _calculate_grand_total_estimate(items_data: list, data: dict) -> Decimal:
-    """Quick estimate of grand total for credit limit check (before full calculation)."""
-    subtotal = sum(
-        Decimal(str(i["quantity"])) * Decimal(str(i["unit_price"]))
-        for i in items_data
-    )
-    return subtotal
+def _estimate_grand_total(shop, customer, items_data: list, data: dict) -> Decimal:
+    """
+    Compute the real grand total (subtotal, sale-level discount, GST) for the
+    pre-creation credit-limit check — must mirror create_sale's own calculation,
+    otherwise the estimate diverges from the actual total and either over- or
+    under-blocks legitimate wholesale sales.
+    """
+    items_built, subtotal = _build_items(items_data)
+    discount_type = data.get("discount_type", Sale.DiscountType.NONE)
+    discount_value = Decimal(str(data.get("discount_value", 0)))
+    discount_amount = _calc_discount(subtotal, discount_type, discount_value)
+    taxable = subtotal - discount_amount
+    cgst, sgst, igst = _split_gst(shop, customer, items_built, discount_amount, subtotal)
+    return (taxable + cgst + sgst + igst).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
 
 
 def _update_customer_outstanding(customer, delta: Decimal) -> None:
@@ -393,26 +415,56 @@ def _update_customer_outstanding(customer, delta: Decimal) -> None:
     )
 
 
-def _deduct_stock(items_built: list) -> None:
-    """Stub: deduct stock for each item. Wire to inventory module when built."""
-    for item in items_built:
-        if item.get("variant_id"):
-            logger.debug("Stub stock deduction: variant=%s qty=%s", item["variant_id"], item["quantity"])
+def _deduct_stock(shop, items: list[dict], sale_id, user) -> None:
+    """Deduct stock for each item carrying a variant_id via the inventory ledger."""
+    from inventory.models import ProductVariant
+    from inventory.services import record_sale_out
+
+    for item in items:
+        variant_id = item.get("variant_id")
+        if not variant_id:
+            continue
+        try:
+            variant = ProductVariant.objects.get(pk=variant_id)
+        except ProductVariant.DoesNotExist:
+            logger.warning(
+                "Variant %s not found for sale %s — skipping stock deduction", variant_id, sale_id
+            )
+            continue
+        record_sale_out(
+            shop=shop, variant=variant, qty=Decimal(str(item["quantity"])),
+            sale_id=sale_id, user=user,
+        )
 
 
-def _deduct_stock_for_sale(sale: Sale) -> None:
+def _deduct_stock_for_sale(sale: Sale, user) -> None:
     items = [
         {"variant_id": item.variant_id, "quantity": item.quantity}
         for item in sale.items.all()
     ]
-    _deduct_stock(items)
+    _deduct_stock(sale.shop, items, sale.id, user)
 
 
-def _restock_items(sale: Sale) -> None:
-    """Stub: restock items on return approval. Wire to inventory module when built."""
-    for item in sale.items.all():
-        if item.variant_id:
-            logger.debug("Stub restock: variant=%s qty=%s", item.variant_id, item.quantity)
+def _restock_items(ret: SalesReturn, user) -> None:
+    """Restock inventory based on the persisted return line items."""
+    from inventory.models import ProductVariant
+    from inventory.services import record_return_in
+
+    for ret_item in ret.items.select_related("sale_item"):
+        variant_id = ret_item.sale_item.variant_id
+        if not variant_id:
+            continue
+        try:
+            variant = ProductVariant.objects.get(pk=variant_id)
+        except ProductVariant.DoesNotExist:
+            logger.warning(
+                "Variant %s not found for return %s — skipping restock", variant_id, ret.id
+            )
+            continue
+        record_return_in(
+            shop=ret.sale.shop, variant=variant, qty=ret_item.quantity,
+            return_id=ret.id, user=user,
+        )
 
 
 def _write_audit(user, action, model_name, object_id, old_value=None, new_value=None):

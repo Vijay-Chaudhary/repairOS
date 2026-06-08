@@ -203,6 +203,20 @@ class SalesReturn(BaseModel):
         return f"{self.return_number} ({self.status})"
 
 
+class SalesReturnItem(BaseModel):
+    sales_return = models.ForeignKey(SalesReturn, on_delete=models.CASCADE, related_name="items")
+    sale_item = models.ForeignKey(SaleItem, on_delete=models.PROTECT, related_name="return_items")
+    quantity = models.DecimalField(max_digits=10, decimal_places=3)
+    refund_amount = models.DecimalField(max_digits=12, decimal_places=2)
+
+    class Meta:
+        app_label = "pos"
+        db_table = "sales_return_items"
+
+    def __str__(self) -> str:
+        return f"{self.sale_item.product_name_snapshot} x{self.quantity}"
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Credit notes
 # ──────────────────────────────────────────────────────────────────────────────

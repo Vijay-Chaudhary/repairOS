@@ -62,13 +62,16 @@ class SalesReturnSerializer(serializers.ModelSerializer):
     credit_note_number = serializers.CharField(
         source="credit_note.credit_note_number", read_only=True, default=""
     )
+    credit_note_pdf_url = serializers.CharField(
+        source="credit_note.pdf_url", read_only=True, default=""
+    )
 
     class Meta:
         model = SalesReturn
         fields = [
             "id", "return_number", "reason", "status",
             "total_refund_amount", "refund_method",
-            "approved_by", "approved_at", "credit_note_number",
+            "approved_by", "approved_at", "credit_note_number", "credit_note_pdf_url",
             "created_at",
         ]
 
@@ -185,3 +188,22 @@ class CreateReturnSerializer(serializers.Serializer):
 
 class ReviewReturnSerializer(serializers.Serializer):
     action = serializers.ChoiceField(choices=["approve", "reject"])
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Barcode lookup (shop-aware: combines variant data with stock-on-hand)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class BarcodeLookupSerializer(serializers.Serializer):
+    id = serializers.UUIDField(read_only=True)
+    product_name = serializers.CharField(read_only=True)
+    variant_name = serializers.CharField(read_only=True)
+    sku = serializers.CharField(read_only=True)
+    barcode = serializers.CharField(read_only=True, allow_null=True)
+    hsn_code = serializers.CharField(read_only=True)
+    selling_price = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    wholesale_price = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    cost_price = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    tax_rate = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
+    stock_quantity = serializers.DecimalField(max_digits=12, decimal_places=3, read_only=True)

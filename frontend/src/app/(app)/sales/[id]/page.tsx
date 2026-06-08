@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowLeft, RotateCcw, Check, X, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Check, X, ShoppingBag, Wallet } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -13,6 +13,7 @@ import { Money } from '@/components/shared/Money';
 import { Can } from '@/components/shared/Can';
 import { ReceiptView } from '@/components/pos/ReceiptView';
 import { ReturnDialog } from '@/components/pos/ReturnDialog';
+import { RecordPaymentDialog } from '@/components/pos/RecordPaymentDialog';
 import { posApi, SALE_TYPE_LABELS, type ReturnStatus } from '@/lib/api/pos';
 import { qk } from '@/lib/query/keys';
 import { ApiError } from '@/lib/api/client';
@@ -30,6 +31,7 @@ export default function SaleDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
 
   const { data: sale, isLoading, error } = useQuery({
     queryKey: qk.posSale(id),
@@ -162,6 +164,13 @@ export default function SaleDetailPage() {
 
       {/* Actions */}
       <div className="flex gap-3">
+        {sale.status === 'partially_paid' && (
+          <Can permission="billing.payments.record">
+            <Button className="flex-1" onClick={() => setPaymentDialogOpen(true)}>
+              <Wallet className="h-4 w-4" /> Record payment
+            </Button>
+          </Can>
+        )}
         {canReturn && (
           <Can permission="pos.returns.create">
             <Button variant="outline" className="flex-1" onClick={() => setReturnDialogOpen(true)}>
@@ -178,6 +187,9 @@ export default function SaleDetailPage() {
 
       {/* Return dialog */}
       <ReturnDialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen} sale={sale} />
+
+      {/* Record payment dialog */}
+      <RecordPaymentDialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen} sale={sale} />
     </div>
   );
 }

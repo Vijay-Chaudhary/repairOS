@@ -6,10 +6,11 @@ GET   /sales/{id}/                  — detail
 POST  /sales/{id}/payment/          — add payment to existing sale
 POST  /sales/{id}/return/           — create return
 PATCH /sales/returns/{id}/          — review return (approve/reject)
-GET   /products/barcode/{barcode}/  — barcode lookup (stub; wired to inventory)
+GET   /products/barcode/{barcode}/  — barcode lookup (shop-aware: variant + stock)
 """
 
 import logging
+from decimal import Decimal
 
 from django.db.models import Q
 from rest_framework import status
@@ -26,6 +27,7 @@ from . import services
 from .models import Sale, SalesReturn
 from .serializers import (
     AddPaymentSerializer,
+    BarcodeLookupSerializer,
     CreateReturnSerializer,
     CreateSaleSerializer,
     ReviewReturnSerializer,
@@ -168,19 +170,50 @@ class SalesReturnViewSet(GenericViewSet):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Barcode lookup (stub — wired to inventory when built)
+# Barcode lookup
 # ──────────────────────────────────────────────────────────────────────────────
 
 
 class BarcodeView(APIView):
+    """
+    Shop-aware variant lookup for the POS cart (§6): combines the catalogue
+    variant with its stock-on-hand at the requesting shop, in the shape the
+    cart needs to add an item directly from a barcode scan.
+    """
+
     def get_permissions(self):
         return [require_permission("pos.counter_sale.create")()]
 
     def get(self, request, barcode):
-        return Response(
-            {
-                "code": "FEATURE_PENDING",
-                "message": "Barcode lookup requires the inventory module, which is not yet active.",
-            },
-            status=status.HTTP_501_NOT_IMPLEMENTED,
-        )
+        from rest_framework.exceptions import NotFound
+
+        from inventory.models import InventoryStock, ProductVariant
+
+        try:
+            variant = ProductVariant.objects.select_related("product").get(
+                barcode=barcode, is_active=True
+            )
+        except ProductVariant.DoesNotExist:
+            raise NotFound(f"No active variant found with barcode '{barcode}'.")
+
+        stock_quantity = Decimal("0")
+        shop_id = request.query_params.get("shop_id")
+        if shop_id:
+            stock = InventoryStock.objects.filter(shop_id=shop_id, variant=variant).first()
+            if stock:
+                stock_quantity = stock.quantity_in_stock
+
+        data = {
+            "id": variant.id,
+            "product_name": variant.product.name,
+            "variant_name": variant.variant_name,
+            "sku": variant.product.sku,
+            "barcode": variant.barcode,
+            "hsn_code": variant.product.hsn_code,
+            "selling_price": variant.selling_price,
+            "wholesale_price": variant.wholesale_price,
+            "cost_price": variant.cost_price,
+            "tax_rate": variant.product.default_tax_rate,
+            "stock_quantity": stock_quantity,
+        }
+        return Response(BarcodeLookupSerializer(data).data)

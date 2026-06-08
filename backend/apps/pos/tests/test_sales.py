@@ -542,3 +542,114 @@ class TestSaleRetrieval:
         res = admin_client.get(self.url)
         ids = [s["id"] for s in res.data["items"]]
         assert str(sale.id) not in ids
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Stock wiring (sale completion deducts, return approval restocks)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def variant(db, shop):
+    from inventory.models import Product, ProductVariant
+    from inventory.services import opening_stock
+
+    product = Product.objects.create(
+        name="USB Cable", sku="USBC-POS-1M",
+        hsn_code="8544", default_tax_rate=Decimal("18"),
+        is_for_sale=True,
+    )
+    variant = ProductVariant.objects.create(
+        product=product, variant_name="USB-C 1m", barcode="8901030875021",
+        selling_price=Decimal("250"), cost_price=Decimal("120"),
+        wholesale_price=Decimal("200"),
+    )
+    return variant
+
+
+@pytest.mark.django_db
+class TestStockWiring:
+    def _stock_qty(self, shop, variant):
+        from inventory.models import InventoryStock
+        return InventoryStock.objects.get(shop=shop, variant=variant).quantity_in_stock
+
+    def test_completed_sale_deducts_stock(self, shop, admin_user, variant):
+        from inventory.services import opening_stock
+        from pos.services import create_sale
+
+        opening_stock(shop, variant, Decimal("10"), admin_user)
+
+        create_sale(
+            shop,
+            {
+                "sale_type": "counter",
+                "items": [{"variant_id": str(variant.id), "product_name_snapshot": "USB Cable",
+                            "quantity": "2", "unit_price": "250", "tax_rate": "0"}],
+                "payments": [{"amount": "500", "method": "cash"}],
+            },
+            admin_user,
+        )
+
+        assert self._stock_qty(shop, variant) == Decimal("8")
+
+    def test_approved_return_restocks_only_returned_quantity(self, shop, admin_user, variant):
+        from inventory.services import opening_stock
+        from pos.services import approve_return, create_return, create_sale
+
+        opening_stock(shop, variant, Decimal("10"), admin_user)
+
+        sale = create_sale(
+            shop,
+            {
+                "sale_type": "counter",
+                "items": [{"variant_id": str(variant.id), "product_name_snapshot": "USB Cable",
+                            "quantity": "3", "unit_price": "250", "tax_rate": "0"}],
+                "payments": [{"amount": "750", "method": "cash"}],
+            },
+            admin_user,
+        )
+        assert self._stock_qty(shop, variant) == Decimal("7")
+
+        sale_item = sale.items.get()
+        ret = create_return(
+            sale,
+            {
+                "items": [{"sale_item_id": str(sale_item.id), "quantity": "1"}],
+                "reason": "Customer changed mind",
+                "refund_method": "cash",
+            },
+            admin_user,
+        )
+        assert ret.items.count() == 1
+        assert ret.total_refund_amount == Decimal("250.00")
+
+        approve_return(ret, admin_user)
+
+        # Only the 1 returned unit comes back — not the full sale quantity of 3
+        assert self._stock_qty(shop, variant) == Decimal("8")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Barcode lookup
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestBarcodeLookup:
+    def test_lookup_returns_variant_with_shop_stock(self, admin_client, shop, admin_user, variant):
+        from inventory.services import opening_stock
+
+        opening_stock(shop, variant, Decimal("5"), admin_user)
+
+        res = admin_client.get(f"/api/v1/pos/products/barcode/{variant.barcode}/?shop_id={shop.id}")
+
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data["id"] == str(variant.id)
+        assert res.data["product_name"] == "USB Cable"
+        assert Decimal(res.data["selling_price"]) == Decimal("250.00")
+        assert Decimal(res.data["wholesale_price"]) == Decimal("200.00")
+        assert Decimal(res.data["stock_quantity"]) == Decimal("5.000")
+
+    def test_lookup_unknown_barcode_returns_404(self, admin_client, shop):
+        res = admin_client.get(f"/api/v1/pos/products/barcode/0000000000000/?shop_id={shop.id}")
+        assert res.status_code == status.HTTP_404_NOT_FOUND

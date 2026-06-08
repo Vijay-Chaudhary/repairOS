@@ -141,17 +141,22 @@ class InventoryStockSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="variant.product.name", read_only=True)
     sku = serializers.CharField(source="variant.product.sku", read_only=True)
     barcode = serializers.CharField(source="variant.barcode", read_only=True)
+    hsn_code = serializers.CharField(source="variant.product.hsn_code", read_only=True)
     is_low_stock = serializers.SerializerMethodField()
     cost_price = serializers.DecimalField(source="variant.cost_price", max_digits=12, decimal_places=2, read_only=True)
     selling_price = serializers.DecimalField(source="variant.selling_price", max_digits=12, decimal_places=2, read_only=True)
+    wholesale_price = serializers.DecimalField(source="variant.wholesale_price", max_digits=12, decimal_places=2, read_only=True)
+    tax_rate = serializers.DecimalField(
+        source="variant.product.default_tax_rate", max_digits=5, decimal_places=2, read_only=True
+    )
 
     class Meta:
         model = InventoryStock
         fields = [
             "id", "shop_id", "variant_id", "product_id",
-            "variant_name", "product_name", "sku", "barcode",
+            "variant_name", "product_name", "sku", "barcode", "hsn_code",
             "quantity_in_stock", "reorder_level",
-            "is_low_stock", "cost_price", "selling_price",
+            "is_low_stock", "cost_price", "selling_price", "wholesale_price", "tax_rate",
         ]
 
     def get_is_low_stock(self, obj) -> bool:

@@ -171,12 +171,51 @@ export interface SaleFilters {
   cursor?: string;
 }
 
+// Shape returned by GET /inventory/stock/ — a shop-scoped, stock-aware variant record
+// (see InventoryStockSerializer). Mapped to ProductVariant below for the POS cart.
+interface StockSearchResult {
+  variant_id: string;
+  product_name: string;
+  variant_name?: string | null;
+  sku?: string | null;
+  barcode?: string | null;
+  hsn_code?: string | null;
+  selling_price: number;
+  wholesale_price: number;
+  cost_price: number;
+  tax_rate: number;
+  quantity_in_stock: number;
+}
+
+function toProductVariant(s: StockSearchResult): ProductVariant {
+  return {
+    id: s.variant_id,
+    product_name: s.product_name,
+    variant_name: s.variant_name,
+    sku: s.sku,
+    barcode: s.barcode,
+    hsn_code: s.hsn_code,
+    selling_price: s.selling_price,
+    wholesale_price: s.wholesale_price,
+    cost_price: s.cost_price,
+    tax_rate: s.tax_rate,
+    stock_quantity: s.quantity_in_stock,
+  };
+}
+
 export const posApi = {
   lookupBarcode: (barcode: string, shopId: string) =>
     apiGet<ProductVariant>(`/pos/products/barcode/${encodeURIComponent(barcode)}/`, { shop_id: shopId }),
 
-  searchProducts: (query: string, shopId: string) =>
-    apiGet<{ items: ProductVariant[] }>('/inventory/products/', { search: query, shop_id: shopId, page_size: '12' }),
+  searchProducts: async (query: string, shopId: string): Promise<{ items: ProductVariant[] }> => {
+    const res = await apiGet<{ items: StockSearchResult[] }>('/inventory/stock/', {
+      search: query, shop_id: shopId, page_size: '12',
+    });
+    return { items: res.items.map(toProductVariant) };
+  },
+
+  addPayment: (saleId: string, body: { method: SalePaymentMethod; amount: number; reference_id?: string }) =>
+    apiPost<Sale>(`/pos/sales/${saleId}/payment/`, body),
 
   createSale: (
     body: {
