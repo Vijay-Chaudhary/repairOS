@@ -285,7 +285,9 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
         job = self._get_job(pk)
         from crm.models import CommunicationLog
         from crm.serializers import CommunicationLogSerializer
-        qs = CommunicationLog.objects.filter(job_id=job.id).order_by("-logged_at")
+        # CommunicationLog has no `job` FK — it links to Customer/Lead — so a
+        # job's timeline is the communication history of its customer.
+        qs = CommunicationLog.objects.filter(customer_id=job.customer_id).order_by("-logged_at")
         page = self.paginate_queryset(qs)
         data = CommunicationLogSerializer(page if page is not None else qs, many=True).data
         if page is not None:
