@@ -35,7 +35,6 @@ export interface JobListItem {
 
 export interface JobCheckin {
   id: string;
-  job_id: string;
   physical_condition: PhysicalCondition;
   has_scratches: boolean;
   has_cracks: boolean;
@@ -260,8 +259,11 @@ export const repairApi = {
   deleteTemplate: (id: string) =>
     apiDelete(`/fault-templates/${id}/`),
 
-  getTimeline: (jobId: string) =>
-    apiGet<{ items: Array<{ id: string; type: string; actor?: string; description: string; created_at: string }> }>(`/jobs/${jobId}/timeline/`),
+  getTimeline: (jobId: string, cursor?: string) =>
+    apiGet<{ items: Array<{ id: string; type: string; actor?: string; description: string; created_at: string }>; meta: PageMeta }>(
+      `/jobs/${jobId}/timeline/`,
+      cursor ? { cursor } : {},
+    ),
 };
 
 // ── Status machine helpers ────────────────────────────────────────────────────

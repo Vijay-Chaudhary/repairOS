@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   ArrowLeft, Wrench, User, Calendar, MapPin, Shield,
-  AlertTriangle, Star, ExternalLink, Plus,
+  AlertTriangle, Star, ExternalLink, Plus, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -64,6 +64,7 @@ export default function JobDetailPage() {
   const [pendingTransition, setPendingTransition] = useState<{ to: JobStatus; label: string; requiresReason?: boolean } | null>(null);
   const [transitionReason, setTransitionReason] = useState('');
   const [warrantyConfirmOpen, setWarrantyConfirmOpen] = useState(false);
+  const [timelineCursor, setTimelineCursor] = useState<string | undefined>(undefined);
 
   const { data: job, isLoading, error } = useQuery({
     queryKey: qk.job(id),
@@ -72,8 +73,8 @@ export default function JobDetailPage() {
   });
 
   const { data: timelineData, isLoading: timelineLoading } = useQuery({
-    queryKey: qk.jobTimeline(id),
-    queryFn: () => repairApi.getTimeline(id),
+    queryKey: [...qk.jobTimeline(id), timelineCursor],
+    queryFn: () => repairApi.getTimeline(id, timelineCursor),
     staleTime: 60_000,
   });
 
@@ -417,6 +418,24 @@ export default function JobDetailPage() {
               events={timelineData?.items ?? []}
               loading={timelineLoading}
             />
+            {(timelineData?.meta?.next_cursor || timelineCursor) && (
+              <div className="flex items-center justify-center gap-2 mt-4">
+                <Button
+                  variant="outline" size="sm"
+                  disabled={!timelineCursor || timelineLoading}
+                  onClick={() => setTimelineCursor(undefined)}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" /> Newest
+                </Button>
+                <Button
+                  variant="outline" size="sm"
+                  disabled={!timelineData?.meta?.next_cursor || timelineLoading}
+                  onClick={() => setTimelineCursor(timelineData?.meta?.next_cursor ?? undefined)}
+                >
+                  Older <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
           </TabsContent>
         </div>
       </Tabs>

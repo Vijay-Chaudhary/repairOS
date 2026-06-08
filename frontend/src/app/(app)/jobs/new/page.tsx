@@ -163,22 +163,32 @@ export default function NewJobPage() {
         location_lng: wizardData.location_lng ?? undefined,
         location_address: wizardData.location_address || undefined,
       });
-      await repairApi.submitCheckin(job.id, {
-        physical_condition: wizardData.checkin.physical_condition,
-        has_scratches: wizardData.checkin.has_scratches,
-        has_cracks: wizardData.checkin.has_cracks,
-        has_liquid_damage: wizardData.checkin.has_liquid_damage,
-        has_missing_parts: wizardData.checkin.has_missing_parts,
-        accessory_received: wizardData.checkin.accessory_received,
-        customer_description: wizardData.checkin.customer_description,
-        technician_notes: wizardData.checkin.technician_notes,
-        photos: wizardData.checkin.photos,
-        customer_signature_url: wizardData.checkin.customer_signature_url,
-      });
-      return job;
+      // The job now exists even if check-in fails below — don't strand the user
+      // on the wizard with a dangling draft they can't get back to.
+      try {
+        await repairApi.submitCheckin(job.id, {
+          physical_condition: wizardData.checkin.physical_condition,
+          has_scratches: wizardData.checkin.has_scratches,
+          has_cracks: wizardData.checkin.has_cracks,
+          has_liquid_damage: wizardData.checkin.has_liquid_damage,
+          has_missing_parts: wizardData.checkin.has_missing_parts,
+          accessory_received: wizardData.checkin.accessory_received,
+          customer_description: wizardData.checkin.customer_description,
+          technician_notes: wizardData.checkin.technician_notes,
+          photos: wizardData.checkin.photos,
+          customer_signature_url: wizardData.checkin.customer_signature_url,
+        });
+        return { job, checkinFailed: false };
+      } catch {
+        return { job, checkinFailed: true };
+      }
     },
-    onSuccess: (job) => {
-      toast.success(`Job ${job.job_number} created`);
+    onSuccess: ({ job, checkinFailed }) => {
+      if (checkinFailed) {
+        toast.error(`Job ${job.job_number} created — complete check-in to open it.`);
+      } else {
+        toast.success(`Job ${job.job_number} created`);
+      }
       router.push(`/jobs/${job.id}`);
     },
     onError: (e) => {
