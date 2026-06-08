@@ -178,7 +178,8 @@ class TestPlatformAdminTenants:
     def test_list_tenants(self, platform_client, active_tenant):
         res = platform_client.get(self.list_url)
         assert res.status_code == status.HTTP_200_OK
-        slugs = [t["slug"] for t in res.data]
+        assert "items" in res.data and "meta" in res.data
+        slugs = [t["slug"] for t in res.data["items"]]
         assert "activecorp" in slugs
 
     def test_get_tenant_detail(self, platform_client, active_tenant):
@@ -242,12 +243,25 @@ class TestSuspendedTenantBlocked:
         )
 
         from rest_framework.test import APIClient
-        client = APIClient()
-        res = client.post(self.login_url, {
-            "email": "user@suspended.com",
-            "password": "pass",
-            "tenant_slug": "suspendedco",
-        }, format="json")
+        from core.context import set_tenant_db_alias
+
+        # Simulate the request having already resolved to this tenant's DB
+        # alias (the same state TenantMiddleware leaves behind for subdomain-
+        # routed requests, including the stale-cache window where a tenant's
+        # `tenant_db_config` cache entry outlives a status flip to SUSPENDED).
+        # We deliberately do NOT send `tenant_slug` in the body — LoginView
+        # must derive tenant identity solely from resolved context, never from
+        # client-supplied input (a client could otherwise probe the suspension
+        # status of arbitrary tenants).
+        set_tenant_db_alias("tenant_suspendedco")
+        try:
+            client = APIClient()
+            res = client.post(self.login_url, {
+                "email": "user@suspended.com",
+                "password": "pass",
+            }, format="json")
+        finally:
+            set_tenant_db_alias("default")
         # Login for suspended tenant must fail (403 or 400 with error code)
         assert res.status_code in (status.HTTP_403_FORBIDDEN, status.HTTP_400_BAD_REQUEST)
 

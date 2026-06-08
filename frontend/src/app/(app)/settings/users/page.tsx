@@ -10,6 +10,7 @@ import { Plus, Search, UserX, LogOut, MoreHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -44,6 +45,7 @@ function UsersInner() {
   const [showInactive, setShowInactive] = useState(false);
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteRoleIds, setInviteRoleIds] = useState<string[]>([]);
   const [deactivateTarget, setDeactivateTarget] = useState<TenantUser | null>(null);
   const [forceLogoutTarget, setForceLogoutTarget] = useState<TenantUser | null>(null);
 
@@ -74,15 +76,20 @@ function UsersInner() {
   });
 
   const inviteMutation = useMutation({
-    mutationFn: (v: InviteForm) => settingsApi.inviteUser({ ...v, role_ids: [] }),
+    mutationFn: (v: InviteForm) => settingsApi.inviteUser({ ...v, role_ids: inviteRoleIds }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.users() });
       toast.success('Invitation sent');
       form.reset({ full_name: '', email: '', phone: '+91' });
+      setInviteRoleIds([]);
       setInviteOpen(false);
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Failed'),
   });
+
+  const toggleInviteRole = (roleId: string, checked: boolean) => {
+    setInviteRoleIds((prev) => checked ? [...prev, roleId] : prev.filter((id) => id !== roleId));
+  };
 
   const deactivateMutation = useMutation({
     mutationFn: (id: string) => settingsApi.updateUser(id, { is_active: false }),
@@ -246,8 +253,24 @@ function UsersInner() {
                   <FormMessage />
                 </FormItem>
               )} />
+              {roles.length > 0 && (
+                <div>
+                  <p className="text-body-sm font-medium text-[var(--text)] mb-2">Roles</p>
+                  <div className="space-y-2 max-h-40 overflow-auto">
+                    {roles.map((r) => (
+                      <label key={r.id} className="flex items-center gap-2 text-body-sm cursor-pointer">
+                        <Checkbox
+                          checked={inviteRoleIds.includes(r.id)}
+                          onCheckedChange={(v) => toggleInviteRole(r.id, v === true)}
+                        />
+                        {r.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex gap-3">
-                <Button type="button" variant="outline" className="flex-1" onClick={() => setInviteOpen(false)}>Cancel</Button>
+                <Button type="button" variant="outline" className="flex-1" onClick={() => { setInviteRoleIds([]); setInviteOpen(false); }}>Cancel</Button>
                 <Button type="submit" className="flex-1" disabled={inviteMutation.isPending}>
                   {inviteMutation.isPending ? 'Inviting…' : 'Send invite'}
                 </Button>

@@ -91,6 +91,7 @@ export const qk = {
   users:          listKey('users'),
   permissions:    () => ['permissions'] as const,
   notifTemplates: () => ['notif-templates'] as const,
+  whatsAppConnection: () => ['whatsapp-connection'] as const,
 
   // Platform Admin
   tenants: listKey('tenants'),

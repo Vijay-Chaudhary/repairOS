@@ -44,7 +44,7 @@ class DevOTPView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        if not settings.DEBUG:
+        if not settings.DEBUG or not getattr(settings, "DEV_OTP_ENABLED", False):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("Not available in production.")
         phone = request.query_params.get("phone", "")
@@ -143,15 +143,14 @@ class LoginView(APIView):
         user = serializer.validated_data["user"]
         tenant_slug = _get_tenant_slug(request)
 
-        # Block login for suspended tenants.
-        # Context slug 'default' means no tenant context (tests/local) — use
-        # the explicit body param instead so callers can pass tenant_slug directly.
+        # Block login for suspended tenants. Tenant identity is derived solely
+        # from the request's resolved subdomain/JWT context — 'default' means
+        # no tenant context (tests/local/platform-admin), so we skip the check.
         ctx_slug = tenant_slug if tenant_slug not in ("", "default") else ""
-        effective_slug = ctx_slug or request.data.get("tenant_slug", "")
-        if effective_slug:
+        if ctx_slug:
             try:
                 from master.models import Tenant
-                t = Tenant.objects.using("default").get(slug=effective_slug)
+                t = Tenant.objects.using("default").get(slug=ctx_slug)
                 if t.status == Tenant.Status.SUSPENDED:
                     return Response(
                         {"code": "TENANT_SUSPENDED", "detail": "This account is suspended."},
@@ -201,20 +200,27 @@ class OTPRequestView(APIView):
 
         otp = "".join(random.choices(string.digits, k=6))
         otp_key = f"otp:{phone}"
+
+        if not self._send_otp(phone, otp):
+            return Response(
+                {"code": "SMS_NOT_CONFIGURED", "message": "SMS delivery is not configured. Please log in with email and password."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         cache.set(otp_key, {"otp": otp, "attempts": 0}, timeout=settings.OTP_EXPIRY_SECONDS)
         cache.set(rate_key, count + 1, timeout=settings.OTP_RATE_WINDOW)
-
-        self._send_otp(phone, otp)
         logger.info("OTP sent to %s", phone)
 
         return Response({"message": "OTP sent.", "expires_in": settings.OTP_EXPIRY_SECONDS})
 
-    def _send_otp(self, phone: str, otp: str) -> None:
+    def _send_otp(self, phone: str, otp: str) -> bool:
+        """Dispatch the OTP via SMS. Returns True once dispatched (or logged in DEBUG)."""
         if getattr(settings, "DEBUG", False):
             logger.debug("DEV OTP for %s: %s", phone, otp)
-            return
-        # Production: send via MSG91
-        # msg91_service.send_otp(phone, otp)
+            return True
+        # Production: send via MSG91 — not yet integrated.
+        # return msg91_service.send_otp(phone, otp)
+        return False
 
 
 class OTPVerifyView(APIView):
@@ -235,10 +241,14 @@ class OTPVerifyView(APIView):
             raise OTPExpired()
 
         if cached["otp"] != otp_input:
-            cached["attempts"] = cached.get("attempts", 0) + 1
-            cache.set(otp_key, cached, timeout=settings.OTP_EXPIRY_SECONDS)
             from rest_framework.exceptions import ValidationError
 
+            cached["attempts"] = cached.get("attempts", 0) + 1
+            if cached["attempts"] >= settings.MAX_OTP_ATTEMPTS:
+                cache.delete(otp_key)
+                raise ValidationError({"otp": ["Too many attempts. Request a new OTP."]})
+
+            cache.set(otp_key, cached, timeout=settings.OTP_EXPIRY_SECONDS)
             raise ValidationError({"otp": ["Invalid OTP."]})
 
         cache.delete(otp_key)

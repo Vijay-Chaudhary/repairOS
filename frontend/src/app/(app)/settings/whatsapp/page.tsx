@@ -13,6 +13,7 @@ import { ForbiddenPage } from '@/components/shared/ForbiddenPage';
 import { settingsApi, type NotifTemplate } from '@/lib/api/settings';
 import { ApiError } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/stores/authStore';
+import { qk } from '@/lib/query/keys';
 
 const MODULE_ORDER = ['repair', 'crm', 'pos', 'billing', 'amc', 'hr'] as const;
 const MODULE_LABELS: Record<string, string> = {
@@ -32,7 +33,7 @@ function TemplateRow({ template }: { template: NotifTemplate }) {
       settingsApi.updateTemplate(template.id, { is_active: active }),
     onSuccess: (updated) => {
       qc.setQueryData<{ items: NotifTemplate[] }>(
-        ['notif-templates'],
+        qk.notifTemplates(),
         (old) => old ? { ...old, items: old.items.map((t) => t.id === updated.id ? updated : t) } : old,
       );
     },
@@ -71,13 +72,13 @@ function WhatsAppInner() {
   const [disconnectOpen, setDisconnectOpen] = useState(false);
 
   const { data: connection, isLoading: connLoading } = useQuery({
-    queryKey: ['whatsapp-connection'],
+    queryKey: qk.whatsAppConnection(),
     queryFn: () => settingsApi.getWhatsAppConnection(),
     staleTime: 60_000,
   });
 
   const { data: templatesData, isLoading: templatesLoading } = useQuery({
-    queryKey: ['notif-templates'],
+    queryKey: qk.notifTemplates(),
     queryFn: () => settingsApi.listTemplates(),
     staleTime: 120_000,
   });
@@ -85,7 +86,7 @@ function WhatsAppInner() {
   const connectMutation = useMutation({
     mutationFn: () => settingsApi.connectWhatsApp(phoneInput),
     onSuccess: (updated) => {
-      qc.setQueryData(['whatsapp-connection'], updated);
+      qc.setQueryData(qk.whatsAppConnection(), updated);
       toast.success('WhatsApp connected');
       setPhoneInput('');
     },
@@ -95,7 +96,7 @@ function WhatsAppInner() {
   const disconnectMutation = useMutation({
     mutationFn: () => settingsApi.disconnectWhatsApp(),
     onSuccess: () => {
-      qc.setQueryData(['whatsapp-connection'], { phone_number: null, is_connected: false });
+      qc.setQueryData(qk.whatsAppConnection(), { phone_number: null, is_connected: false });
       toast.success('WhatsApp disconnected');
       setDisconnectOpen(false);
     },

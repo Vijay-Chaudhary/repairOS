@@ -13,6 +13,7 @@ Covers:
 import pytest
 from django.conf import settings
 from django.core.cache import cache
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 
@@ -69,8 +70,22 @@ class TestLogin:
 
 @pytest.mark.django_db
 class TestOTP:
+    """
+    SMS dispatch is stubbed in DEBUG mode (logs the OTP instead of sending it);
+    in production (DEBUG=False) it returns 503 SMS_NOT_CONFIGURED until MSG91
+    is integrated — see TestOTPSendUnconfigured below. Django forces DEBUG=False
+    for the test run, so these tests opt back into dev-mode dispatch explicitly
+    (via the autouse `debug_mode` fixture) to exercise the OTP request/verify
+    flow end-to-end.
+    """
+
     request_url = "/api/v1/auth/otp/request/"
     verify_url = "/api/v1/auth/otp/verify/"
+
+    @pytest.fixture(autouse=True)
+    def debug_mode(self):
+        with override_settings(DEBUG=True):
+            yield
 
     def setup_method(self):
         cache.clear()
@@ -105,6 +120,43 @@ class TestOTP:
     def test_otp_verify_expired(self, api_client, tenant_user):
         res = api_client.post(self.verify_url, {"phone": tenant_user.phone, "otp": "123456"})
         assert res.status_code == status.HTTP_410_GONE
+
+    def test_otp_verify_max_attempts_locks_out(self, api_client, tenant_user):
+        api_client.post(self.request_url, {"phone": tenant_user.phone})
+        for _ in range(settings.MAX_OTP_ATTEMPTS - 1):
+            res = api_client.post(self.verify_url, {"phone": tenant_user.phone, "otp": "000000"})
+            assert res.status_code == status.HTTP_400_BAD_REQUEST
+            assert res.data["fields"]["otp"] == ["Invalid OTP."]
+
+        # The attempt that reaches MAX_OTP_ATTEMPTS invalidates the OTP outright.
+        res = api_client.post(self.verify_url, {"phone": tenant_user.phone, "otp": "000000"})
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        assert res.data["fields"]["otp"] == ["Too many attempts. Request a new OTP."]
+        assert cache.get(f"otp:{tenant_user.phone}") is None
+
+        # Even the correct code is now rejected — the cache entry is gone.
+        res = api_client.post(self.verify_url, {"phone": tenant_user.phone, "otp": "123456"})
+        assert res.status_code == status.HTTP_410_GONE
+
+
+@pytest.mark.django_db
+class TestOTPSendUnconfigured:
+    """Outside DEBUG (i.e. production, and the default test-runner state),
+    SMS dispatch is not yet integrated — OTP request must fail closed with an
+    explicit 503 rather than silently "succeeding" with no SMS ever sent."""
+
+    request_url = "/api/v1/auth/otp/request/"
+
+    def setup_method(self):
+        cache.clear()
+
+    def test_otp_request_returns_503_when_sms_not_configured(self, api_client, tenant_user):
+        assert settings.DEBUG is False
+        res = api_client.post(self.request_url, {"phone": tenant_user.phone})
+        assert res.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert res.data["code"] == "SMS_NOT_CONFIGURED"
+        # No OTP should be cached — the request never "succeeded".
+        assert cache.get(f"otp:{tenant_user.phone}") is None
 
 
 # ──────────────────────────────────────────────────────────────────────────────

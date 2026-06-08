@@ -99,10 +99,7 @@ class PasswordChangeSerializer(serializers.Serializer):
 
     def validate_new_password(self, value: str) -> str:
         if not self._PASSWORD_POLICY.match(value):
-            raise serializers.ValidationError(
-                "Password must be at least 8 characters and include at least one uppercase letter, "
-                "one number, and one special character."
-            )
+            raise serializers.ValidationError("Password does not meet complexity requirements.")
         return value
 
     def validate(self, attrs):

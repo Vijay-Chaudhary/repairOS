@@ -16,6 +16,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.pagination import RepairOSCursorPagination
+
 from . import services
 from .models import SubscriptionPlan, Tenant
 from .serializers import (
@@ -82,7 +84,10 @@ class TenantListView(APIView):
 
     def get(self, request: Request) -> Response:
         tenants = Tenant.objects.using("default").order_by("-created_at")
-        return Response(TenantListSerializer(tenants, many=True).data)
+        paginator = RepairOSCursorPagination()
+        page = paginator.paginate_queryset(tenants, request)
+        data = TenantListSerializer(page, many=True).data
+        return paginator.get_paginated_response(data)
 
 
 class TenantDetailView(APIView):

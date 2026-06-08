@@ -266,6 +266,8 @@ TENANT_DB_HOST = env("TENANT_DB_HOST", default="")
 OTP_EXPIRY_SECONDS = 600
 OTP_RATE_LIMIT = 3  # max sends per phone per 10 min
 OTP_RATE_WINDOW = 600
+MAX_OTP_ATTEMPTS = 5
+DEV_OTP_ENABLED = env.bool("DEV_OTP_ENABLED", default=False)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Account lockout
