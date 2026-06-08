@@ -97,7 +97,6 @@ def send_visit_reminders(self):
 @shared_task(name="amc.process_auto_renewals", bind=True, max_retries=3)
 def process_auto_renewals(self):
     """Nightly: auto-renew expired contracts where auto_renew=True."""
-    from authentication.models import User
     from .models import AMCContract
     from .services import renew_contract
 
@@ -108,16 +107,13 @@ def process_auto_renewals(self):
         end_date__lt=today,
     ).select_related("customer", "shop")
 
-    # Use a system user for auto-renewals (first admin or system sentinel)
-    system_user = _get_system_user()
-    if not system_user:
-        logger.warning("No system user found for auto-renewal; skipping.")
-        return 0
-
     count = 0
     for contract in expired:
         try:
-            renew_contract(contract, system_user)
+            # No human triggered this — pass user=None so the audit trail
+            # records it as system-initiated rather than misattributing it
+            # to an arbitrary active user.
+            renew_contract(contract, None)
             count += 1
         except Exception as exc:
             logger.exception("Auto-renewal failed for %s: %s", contract.contract_number, exc)
@@ -175,10 +171,3 @@ def _alert_manager_missed_visit(visit) -> None:
         },
     )
 
-
-def _get_system_user():
-    from authentication.models import User
-    try:
-        return User.objects.filter(is_active=True).order_by("created_at").first()
-    except Exception:
-        return None

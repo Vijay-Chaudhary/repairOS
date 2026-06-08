@@ -245,7 +245,7 @@ def renew_contract(contract: AMCContract, user, new_end_date=None, new_value=Non
 def _write_audit(user, action, model_name, object_id, old_value=None, new_value=None):
     try:
         AuditLog.objects.create(
-            user_id=user.id,
+            user_id=user.id if user is not None else None,
             action=action,
             model_name=model_name,
             object_id=object_id,
