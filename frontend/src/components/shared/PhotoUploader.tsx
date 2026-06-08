@@ -49,6 +49,7 @@ export function PhotoUploader({ value, onChange, maxFiles = 10, disabled, classN
             <img src={url} alt={`Photo ${i + 1}`} className="h-20 w-20 rounded-md object-cover border border-[var(--border)]" />
             {!disabled && (
               <button
+                type="button"
                 onClick={() => removePhoto(i)}
                 className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-[var(--danger)] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity min-h-[auto] min-w-[auto]"
               >
@@ -60,6 +61,7 @@ export function PhotoUploader({ value, onChange, maxFiles = 10, disabled, classN
 
         {value.length < maxFiles && !disabled && (
           <button
+            type="button"
             onClick={() => inputRef.current?.click()}
             disabled={uploading}
             className="h-20 w-20 rounded-md border-2 border-dashed border-[var(--border)] flex flex-col items-center justify-center gap-1 text-[var(--text-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors min-h-[auto] min-w-[auto]"
