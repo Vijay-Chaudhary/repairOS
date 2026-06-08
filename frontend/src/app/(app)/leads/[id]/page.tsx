@@ -32,7 +32,7 @@ import {
 import { qk } from '@/lib/query/keys';
 import { ApiError } from '@/lib/api/client';
 import { formatDate, formatDatetime } from '@/lib/format/date';
-import { formatPhone } from '@/lib/format/phone';
+import { formatPhone, normalizePhone } from '@/lib/format/phone';
 
 // ── Edit schema ───────────────────────────────────────────────────────────────
 
@@ -762,7 +762,7 @@ function LeadEditSheet({ open, onOpenChange, lead, onSuccess }: {
     mutationFn: (values: EditValues) =>
       crmApi.updateLead(lead.id, {
         name: values.name,
-        phone: values.phone,
+        phone: normalizePhone(values.phone),
         email: values.email || undefined,
         source: values.source as LeadSource,
         device_type: values.device_type || undefined,

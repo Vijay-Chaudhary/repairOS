@@ -25,6 +25,7 @@ import { useActiveShopStore } from '@/lib/stores/activeShopStore';
 import { useOfflineQueueStore } from '@/lib/stores/offlineQueueStore';
 import { ApiError, apiPost } from '@/lib/api/client';
 import { money } from '@/lib/format/money';
+import { normalizePhone } from '@/lib/format/phone';
 
 const STEPS = [
   { label: 'Customer' },
@@ -657,7 +658,7 @@ function QuickCreateCustomerDialog({
     mutationFn: (values: QuickCustomerFormValues) =>
       apiPost<CustomerOption>('/crm/customers/', {
         name: values.name,
-        phone: values.phone,
+        phone: normalizePhone(values.phone),
         email: values.email || undefined,
       }),
     onSuccess: (customer) => {

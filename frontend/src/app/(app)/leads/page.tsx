@@ -27,7 +27,7 @@ import { useActiveShopStore } from '@/lib/stores/activeShopStore';
 import { useDebounce } from '@/lib/hooks/useDebounce';
 import { ApiError } from '@/lib/api/client';
 import { formatDate } from '@/lib/format/date';
-import { formatPhone } from '@/lib/format/phone';
+import { formatPhone, normalizePhone } from '@/lib/format/phone';
 import { cn } from '@/lib/utils';
 
 type ViewMode = 'kanban' | 'list';
@@ -212,7 +212,7 @@ function CreateLeadDialog({
       crmApi.createLead({
         shop_id: shopId,
         name: values.name,
-        phone: values.phone,
+        phone: normalizePhone(values.phone),
         email: values.email || undefined,
         source: values.source,
         device_type: values.device_type || undefined,

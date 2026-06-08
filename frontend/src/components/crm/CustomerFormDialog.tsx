@@ -14,6 +14,7 @@ import { MoneyInput } from '@/components/shared/MoneyInput';
 import { TagInput } from '@/components/crm/TagInput';
 import { crmApi, type Customer } from '@/lib/api/crm';
 import { ApiError } from '@/lib/api/client';
+import { normalizePhone } from '@/lib/format/phone';
 
 export const customerSchema = z.object({
   name: z.string().min(2, 'Name required'),
@@ -65,8 +66,8 @@ export function CustomerFormDialog({
     mutationFn: (values: CustomerFormValues) => {
       const body = {
         name: values.name,
-        phone: values.phone,
-        alternate_phone: values.alternate_phone || undefined,
+        phone: normalizePhone(values.phone),
+        alternate_phone: values.alternate_phone ? normalizePhone(values.alternate_phone) : undefined,
         email: values.email || undefined,
         address: values.address || undefined,
         city: values.city || undefined,
