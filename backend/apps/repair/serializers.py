@@ -168,6 +168,10 @@ class JobStatusSerializer(serializers.Serializer):
 
 
 class JobCheckinConditionSerializer(serializers.ModelSerializer):
+    # Model field is a non-nullable CharField (default ""); the frontend submits
+    # `null` when no signature was captured, so accept null and normalize to "".
+    customer_signature_url = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
     class Meta:
         model = JobCheckinCondition
         fields = [
@@ -177,6 +181,9 @@ class JobCheckinConditionSerializer(serializers.ModelSerializer):
             "photos", "customer_signature_url", "acknowledged_at",
         ]
         read_only_fields = ["id", "acknowledged_at"]
+
+    def validate_customer_signature_url(self, value):
+        return value or ""
 
 
 # ──────────────────────────────────────────────────────────────────────────────
