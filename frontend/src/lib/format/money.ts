@@ -21,3 +21,15 @@ export function moneyCompact(amount: number): string {
 export function parseMoneyInput(value: string): number {
   return parseFloat(value.replace(/[^0-9.]/g, '')) || 0;
 }
+
+// API money fields are DRF Decimals serialized as strings (e.g. "1234.56").
+// Sum via integer paise to avoid both string concatenation bugs (typed `number`
+// but actually a string at runtime) and floating-point drift on ₹ amounts.
+export function sumMoney(...amounts: Array<number | string | null | undefined>): number {
+  const paise = amounts.reduce<number>((total, amount) => {
+    if (amount === null || amount === undefined) return total;
+    const n = typeof amount === 'string' ? parseFloat(amount) : amount;
+    return isNaN(n) ? total : total + Math.round(n * 100);
+  }, 0);
+  return paise / 100;
+}

@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { CustomerSearch, type CustomerOption } from '@/components/repair/CustomerSearch';
 import { Money } from '@/components/shared/Money';
 import { crmApi, type Customer } from '@/lib/api/crm';
+import { sumMoney } from '@/lib/format/money';
 import { qk } from '@/lib/query/keys';
 import { ApiError } from '@/lib/api/client';
 
@@ -111,11 +112,11 @@ export function MergeCustomersDialog({ open, onOpenChange, sourceCustomer, onSuc
                 </div>
                 <div>
                   <p className="text-xs text-[var(--text-muted)]">Billed</p>
-                  <Money amount={sourceCustomer.total_billed + targetDetail.total_billed} className="text-body font-semibold" />
+                  <Money amount={sumMoney(sourceCustomer.total_billed, targetDetail.total_billed)} className="text-body font-semibold" />
                 </div>
                 <div>
                   <p className="text-xs text-[var(--text-muted)]">Outstanding</p>
-                  <Money amount={sourceCustomer.total_outstanding + targetDetail.total_outstanding} className="text-body font-semibold" />
+                  <Money amount={sumMoney(sourceCustomer.total_outstanding, targetDetail.total_outstanding)} className="text-body font-semibold" />
                 </div>
               </div>
             </div>

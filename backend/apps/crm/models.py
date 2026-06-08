@@ -137,6 +137,7 @@ class Customer(SoftDeleteModel):
     total_jobs = models.IntegerField(default=0)
     total_billed = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     total_outstanding = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    last_visit = models.DateTimeField(null=True, blank=True)
     whatsapp_optout = models.BooleanField(default=False)
     source_lead = models.ForeignKey(
         Lead, null=True, blank=True, on_delete=models.SET_NULL, related_name="customers"

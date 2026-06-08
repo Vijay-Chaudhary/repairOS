@@ -208,11 +208,12 @@ def _on_close(job: JobTicket) -> None:
     job.warranty_days = DEFAULT_WARRANTY_DAYS
     job.warranty_expires_at = date.today() + timedelta(days=DEFAULT_WARRANTY_DAYS)
 
-    # Update customer total_jobs counter (CRM denormalization)
+    # Update customer total_jobs counter and last_visit (CRM denormalization)
     try:
         from crm.models import Customer
         Customer.objects.filter(pk=job.customer_id).update(
-            total_jobs=models.F("total_jobs") + 1
+            total_jobs=models.F("total_jobs") + 1,
+            last_visit=timezone.now(),
         )
     except Exception:
         logger.exception("Failed to update customer total_jobs for job %s", job.id)

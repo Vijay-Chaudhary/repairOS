@@ -45,6 +45,7 @@ export interface Customer {
   total_jobs: number;
   total_billed: number;
   total_outstanding: number;
+  last_visit?: string | null;
   whatsapp_optout: boolean;
   source_lead_id?: string | null;
   created_at: string;
@@ -120,10 +121,7 @@ export interface SegmentMember {
 export interface LeadFilters {
   shop_id?: string;
   status?: LeadStatus;
-  source?: LeadSource;
   assigned_to?: string;
-  date_from?: string;
-  date_to?: string;
   search?: string;
   page?: number;
 }
@@ -223,10 +221,10 @@ export const crmApi = {
   mergeCustomers: (body: { source_id: string; target_id: string }) =>
     apiPost<Customer>('/crm/customers/merge/', body),
 
-  getCustomerTimeline: (id: string, type?: CommType) =>
-    apiGet<{ items: Array<{ id: string; type: string; summary: string; description: string; logged_by_name?: string; actor?: string; created_at: string }> }>(
+  getCustomerTimeline: (id: string, type?: CommType, cursor?: string) =>
+    apiGet<{ items: Array<{ id: string; type: string; summary: string; description: string; logged_by_name?: string; actor?: string; created_at: string }>; meta: PageMeta }>(
       `/crm/customers/${id}/timeline/`,
-      type ? { type } : {},
+      { ...(type ? { type } : {}), ...(cursor ? { cursor } : {}) },
     ),
 
   // Communications

@@ -338,7 +338,7 @@ function SegmentMembersSheet({
   segment: Segment;
 }) {
   const { data, isLoading } = useQuery({
-    queryKey: ['segment-members', segment.id],
+    queryKey: qk.segmentMembers(segment.id),
     queryFn: () => crmApi.getSegmentMembers(segment.id),
     staleTime: 60_000,
   });

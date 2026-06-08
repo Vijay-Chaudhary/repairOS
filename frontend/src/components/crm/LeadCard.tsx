@@ -176,7 +176,10 @@ export function LeadCard({ lead }: LeadCardProps) {
                 </Can>
                 {lead.status !== 'converted' && lead.status !== 'lost' && (
                   <Can permission="crm.leads.convert">
-                    <DropdownMenuItem onClick={() => setConvertConfirmOpen(true)}>
+                    <DropdownMenuItem
+                      disabled={advanceMutation.isPending || convertMutation.isPending}
+                      onClick={() => setConvertConfirmOpen(true)}
+                    >
                       <UserCheck className="h-4 w-4" /> Convert to customer
                     </DropdownMenuItem>
                   </Can>
@@ -186,6 +189,7 @@ export function LeadCard({ lead }: LeadCardProps) {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="text-[var(--danger)]"
+                      disabled={advanceMutation.isPending || convertMutation.isPending}
                       onClick={() => setLostDialogOpen(true)}
                     >
                       Mark as lost

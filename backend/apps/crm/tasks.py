@@ -19,17 +19,19 @@ def mark_overdue_tasks(self):
     from .models import FollowUpTask
 
     today = timezone.now().date()
-    updated = FollowUpTask.objects.filter(
+    newly_overdue_qs = FollowUpTask.objects.filter(
         status=FollowUpTask.Status.PENDING,
         due_date__lt=today,
-    ).update(status=FollowUpTask.Status.OVERDUE)
+    )
+    newly_overdue_ids = list(newly_overdue_qs.values_list("id", flat=True))
+    updated = newly_overdue_qs.update(status=FollowUpTask.Status.OVERDUE)
 
     logger.info("Marked %d tasks as overdue.", updated)
 
-    # Notify assignees of newly overdue tasks
+    # Notify assignees of every task that just transitioned to overdue in this run —
+    # not just ones exactly one day overdue, so a multi-day outage doesn't skip notifications.
     overdue_tasks = FollowUpTask.objects.filter(
-        status=FollowUpTask.Status.OVERDUE,
-        due_date=today - timezone.timedelta(days=1),  # tasks that became overdue today
+        id__in=newly_overdue_ids,
     ).select_related("assigned_to", "customer", "lead")
 
     for task in overdue_tasks:

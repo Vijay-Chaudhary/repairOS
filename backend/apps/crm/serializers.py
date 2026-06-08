@@ -75,11 +75,11 @@ class CustomerSerializer(serializers.ModelSerializer):
         fields = [
             "id", "shop_id", "name", "phone", "alternate_phone", "email",
             "address", "city", "gstin", "customer_type", "credit_limit",
-            "tags", "total_jobs", "total_billed", "total_outstanding",
+            "tags", "total_jobs", "total_billed", "total_outstanding", "last_visit",
             "whatsapp_optout", "source_lead_id", "created_at", "updated_at",
         ]
         read_only_fields = [
-            "id", "total_jobs", "total_billed", "total_outstanding",
+            "id", "total_jobs", "total_billed", "total_outstanding", "last_visit",
             "created_at", "updated_at",
         ]
         extra_kwargs = {"phone": {"validators": []}}

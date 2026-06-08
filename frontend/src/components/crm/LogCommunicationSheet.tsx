@@ -61,6 +61,7 @@ export function LogCommunicationSheet({ open, onOpenChange, customerId, leadId }
       }
       if (leadId) {
         queryClient.invalidateQueries({ queryKey: qk.lead(leadId) });
+        queryClient.invalidateQueries({ queryKey: qk.leadComms(leadId) });
       }
       toast.success('Communication logged');
       form.reset();

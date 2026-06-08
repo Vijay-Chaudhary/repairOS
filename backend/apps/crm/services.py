@@ -290,6 +290,7 @@ def evaluate_segment(segment: CustomerSegment):
       customer_type  — "individual" | "business"
       city           — case-insensitive contains
       whatsapp_optout — bool
+      min_total_jobs — integer threshold
     """
     rules = segment.filter_rules or {}
     qs = Customer.objects.all()  # SoftDeleteManager already filters deleted_at IS NULL
@@ -315,6 +316,9 @@ def evaluate_segment(segment: CustomerSegment):
 
     if (optout := rules.get("whatsapp_optout")) is not None:
         qs = qs.filter(whatsapp_optout=optout)
+
+    if (min_jobs := rules.get("min_total_jobs")) is not None:
+        qs = qs.filter(total_jobs__gte=min_jobs)
 
     return qs
 

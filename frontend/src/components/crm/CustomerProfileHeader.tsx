@@ -149,6 +149,12 @@ export function CustomerProfileHeader({ customer, onEdit }: CustomerProfileHeade
         <p className="text-xs text-[var(--text-muted)] font-mono mt-0.5">GSTIN: {customer.gstin}</p>
       )}
 
+      {customer.last_visit && (
+        <p className="text-xs text-[var(--text-muted)] mt-0.5">
+          Last visit: {formatDate(customer.last_visit)}
+        </p>
+      )}
+
       <LogCommunicationSheet open={logCommOpen} onOpenChange={setLogCommOpen} customerId={customer.id} />
       <TaskComposer open={taskOpen} onOpenChange={setTaskOpen} customerId={customer.id} />
     </div>

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Users } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -52,6 +52,10 @@ export default function CustomerProfilePage() {
   const [editOpen, setEditOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>('all');
+  const [timelineCursor, setTimelineCursor] = useState<string | undefined>(undefined);
+
+  // Reset to the first page whenever the comm-type filter changes.
+  useEffect(() => { setTimelineCursor(undefined); }, [timelineFilter]);
 
   const { data: customer, isLoading, error } = useQuery({
     queryKey: qk.customer(id),
@@ -59,21 +63,27 @@ export default function CustomerProfilePage() {
     staleTime: 30_000,
   });
 
-  const { data: timelineData, isLoading: timelineLoading } = useQuery({
-    queryKey: [...qk.customerTimeline(id), timelineFilter],
-    queryFn: () => crmApi.getCustomerTimeline(id, timelineFilter === 'all' ? undefined : timelineFilter),
+  const {
+    data: timelineData, isLoading: timelineLoading, error: timelineError, refetch: refetchTimeline,
+  } = useQuery({
+    queryKey: [...qk.customerTimeline(id), timelineFilter, timelineCursor],
+    queryFn: () => crmApi.getCustomerTimeline(id, timelineFilter === 'all' ? undefined : timelineFilter, timelineCursor),
     staleTime: 60_000,
     enabled: !!customer,
   });
 
-  const { data: jobsData, isLoading: jobsLoading } = useQuery({
+  const {
+    data: jobsData, isLoading: jobsLoading, error: jobsError, refetch: refetchJobs,
+  } = useQuery({
     queryKey: qk.jobs({ customer_id: id }),
     queryFn: () => repairApi.listJobs({ customer_id: id }),
     staleTime: 60_000,
     enabled: !!customer,
   });
 
-  const { data: tasksData, isLoading: tasksLoading } = useQuery({
+  const {
+    data: tasksData, isLoading: tasksLoading, error: tasksError, refetch: refetchTasks,
+  } = useQuery({
     queryKey: qk.tasks({ customer_id: id }),
     queryFn: () => crmApi.listTasks({ customer_id: id }),
     staleTime: 30_000,
@@ -151,11 +161,13 @@ export default function CustomerProfilePage() {
               columns={JOB_COLUMNS}
               data={jobsData?.items}
               loading={jobsLoading}
+              error={jobsError instanceof Error ? jobsError : null}
               keyExtractor={(r) => r.id}
               onRowClick={(r) => router.push(`/jobs/${r.id}`)}
               emptyTitle="No repair jobs"
               emptyDescription="No repair history for this customer yet."
             />
+            {jobsError && <RetryBanner onRetry={() => refetchJobs()} />}
           </TabsContent>
 
           {/* Timeline */}
@@ -177,19 +189,47 @@ export default function CustomerProfilePage() {
                 </button>
               ))}
             </div>
-            <EntityTimeline
-              events={(timelineData?.items ?? []) as TimelineEvent[]}
-              loading={timelineLoading}
-            />
+            {timelineError ? (
+              <RetryBanner onRetry={() => refetchTimeline()} />
+            ) : (
+              <>
+                <EntityTimeline
+                  events={(timelineData?.items ?? []) as TimelineEvent[]}
+                  loading={timelineLoading}
+                />
+                {(timelineData?.meta?.next_cursor || timelineCursor) && (
+                  <div className="flex items-center justify-center gap-2 mt-4">
+                    <Button
+                      variant="outline" size="sm"
+                      disabled={!timelineCursor || timelineLoading}
+                      onClick={() => setTimelineCursor(undefined)}
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" /> Newest
+                    </Button>
+                    <Button
+                      variant="outline" size="sm"
+                      disabled={!timelineData?.meta?.next_cursor || timelineLoading}
+                      onClick={() => setTimelineCursor(timelineData?.meta?.next_cursor ?? undefined)}
+                    >
+                      Older <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
           </TabsContent>
 
           {/* Tasks */}
           <TabsContent value="tasks" className="p-4 md:p-6 mt-0">
-            <TaskList
-              tasks={tasksData?.items ?? []}
-              loading={tasksLoading}
-              customerId={id}
-            />
+            {tasksError ? (
+              <RetryBanner onRetry={() => refetchTasks()} />
+            ) : (
+              <TaskList
+                tasks={tasksData?.items ?? []}
+                loading={tasksLoading}
+                customerId={id}
+              />
+            )}
           </TabsContent>
 
           {/* Financial summary */}
@@ -241,6 +281,18 @@ export default function CustomerProfilePage() {
           onSuccess={() => router.push('/customers')}
         />
       )}
+    </div>
+  );
+}
+
+function RetryBanner({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--danger)]/30 bg-[var(--danger)]/5 p-4">
+      <div className="flex items-center gap-2 text-body-sm text-[var(--danger)]">
+        <AlertCircle className="h-4 w-4 shrink-0" />
+        Failed to load. Check your connection and try again.
+      </div>
+      <Button size="sm" variant="outline" onClick={onRetry}>Retry</Button>
     </div>
   );
 }
