@@ -147,10 +147,10 @@ export interface JobListResponse {
 
 export const repairApi = {
   listJobs: (filters: JobFilters = {}) =>
-    apiGet<JobListResponse>('/jobs/', filters as Record<string, string | number | boolean | undefined>),
+    apiGet<JobListResponse>('/repair/jobs/', filters as Record<string, string | number | boolean | undefined>),
 
   getJob: (id: string) =>
-    apiGet<JobDetail>(`/jobs/${id}/`),
+    apiGet<JobDetail>(`/repair/jobs/${id}/`),
 
   createJob: (body: {
     shop_id: string;
@@ -171,7 +171,7 @@ export const repairApi = {
     advance_paid?: number;
     notes?: string;
     template_id?: string;
-  }) => apiPost<JobDetail>('/jobs/', body),
+  }) => apiPost<JobDetail>('/repair/jobs/', body),
 
   updateJob: (id: string, body: Partial<{
     device_type: string;
@@ -184,7 +184,7 @@ export const repairApi = {
     expected_delivery_date: string;
     service_charge: number;
     notes: string;
-  }>) => apiPatch<JobDetail>(`/jobs/${id}/`, body),
+  }>) => apiPatch<JobDetail>(`/repair/jobs/${id}/`, body),
 
   submitCheckin: (jobId: string, body: {
     physical_condition: PhysicalCondition;
@@ -197,17 +197,17 @@ export const repairApi = {
     technician_notes?: string;
     photos?: string[];
     customer_signature_url?: string | null;
-  }) => apiPost<JobCheckin>(`/jobs/${jobId}/checkin/`, body),
+  }) => apiPost<JobCheckin>(`/repair/jobs/${jobId}/checkin/`, body),
 
   changeStatus: (jobId: string, body: { to_status: JobStatus; reason?: string }) =>
-    apiPost<JobDetail>(`/jobs/${jobId}/status/`, body),
+    apiPost<JobDetail>(`/repair/jobs/${jobId}/status/`, body),
 
   setStages: (jobId: string, body: {
     stages?: Array<{ stage_order: number; stage_type: StageType; assigned_technician_id: string }>;
     stage_id?: string;
     action?: 'complete' | 'start' | 'skip';
     notes?: string;
-  }) => apiPost<{ message: string } | JobStage>(`/jobs/${jobId}/stages/`, body),
+  }) => apiPost<{ message: string } | JobStage>(`/repair/jobs/${jobId}/stages/`, body),
 
   createEstimate: (jobId: string, body: {
     labor_charge: number;
@@ -215,26 +215,26 @@ export const repairApi = {
     valid_until?: string;
     notes?: string;
     send_via?: 'whatsapp' | 'email' | 'in_person';
-  }) => apiPost<JobEstimate>(`/jobs/${jobId}/estimate/`, body),
+  }) => apiPost<JobEstimate>(`/repair/jobs/${jobId}/estimate/`, body),
 
   respondEstimate: (jobId: string, body: { response: 'approved' | 'rejected'; method: string }) =>
-    apiPost<JobDetail>(`/jobs/${jobId}/estimate/respond/`, body),
+    apiPost<JobDetail>(`/repair/jobs/${jobId}/estimate/respond/`, body),
 
   requestSparePart: (jobId: string, body: {
     variant_id?: string;
     custom_part_name?: string;
     quantity: number;
     is_urgent?: boolean;
-  }) => apiPost<SparePartRequest>(`/jobs/${jobId}/spare-parts/`, body),
+  }) => apiPost<SparePartRequest>(`/repair/jobs/${jobId}/spare-parts/`, body),
 
   reviewSparePart: (partId: string, body: { status: SparePartStatus; po_id?: string }) =>
-    apiPatch<SparePartRequest>(`/spare-parts/${partId}/`, body),
+    apiPatch<SparePartRequest>(`/repair/spare-parts/${partId}/`, body),
 
   warrantyClaim: (jobId: string) =>
-    apiPost<JobDetail>(`/jobs/${jobId}/warranty-claim/`, {}),
+    apiPost<JobDetail>(`/repair/jobs/${jobId}/warranty-claim/`, {}),
 
   listTemplates: (shopId: string) =>
-    apiGet<{ items: FaultTemplate[] }>('/fault-templates/', { shop_id: shopId }),
+    apiGet<{ items: FaultTemplate[] }>('/repair/fault-templates/', { shop_id: shopId }),
 
   createTemplate: (body: {
     shop_id: string;
@@ -244,7 +244,7 @@ export const repairApi = {
     problem_description: string;
     default_sc: number;
     estimated_duration_hours?: number;
-  }) => apiPost<FaultTemplate>('/fault-templates/', body),
+  }) => apiPost<FaultTemplate>('/repair/fault-templates/', body),
 
   updateTemplate: (id: string, body: Partial<{
     name: string;
@@ -254,14 +254,14 @@ export const repairApi = {
     default_sc: number;
     estimated_duration_hours: number;
     is_active: boolean;
-  }>) => apiPatch<FaultTemplate>(`/fault-templates/${id}/`, body),
+  }>) => apiPatch<FaultTemplate>(`/repair/fault-templates/${id}/`, body),
 
   deleteTemplate: (id: string) =>
-    apiDelete(`/fault-templates/${id}/`),
+    apiDelete(`/repair/fault-templates/${id}/`),
 
   getTimeline: (jobId: string, cursor?: string) =>
     apiGet<{ items: Array<{ id: string; type: string; actor?: string; description: string; created_at: string }>; meta: PageMeta }>(
-      `/jobs/${jobId}/timeline/`,
+      `/repair/jobs/${jobId}/timeline/`,
       cursor ? { cursor } : {},
     ),
 };
