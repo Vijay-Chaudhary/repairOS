@@ -208,7 +208,8 @@ def record_purchase_in(shop, variant: ProductVariant, qty: Decimal, grn_id: UUID
 
 BULK_IMPORT_HEADERS = [
     "name", "sku", "variant_name", "barcode",
-    "selling_price", "cost_price", "default_tax_rate", "hsn_code",
+    "selling_price", "cost_price", "wholesale_price",
+    "default_tax_rate", "hsn_code", "brand",
 ]
 
 
@@ -216,37 +217,64 @@ def bulk_import_products(csv_text: str, user) -> dict:
     """
     Import products + variants from CSV.
     Expected headers (case-insensitive): name, sku, variant_name, barcode,
-    selling_price, cost_price, default_tax_rate, hsn_code.
+    selling_price, cost_price, wholesale_price, default_tax_rate, hsn_code, brand.
+
+    Validates every row first; if any row fails, nothing is written
+    (Spec UI AC: "CSV import validates before commit"). Otherwise all
+    rows are committed atomically.
 
     Returns {"created": N, "updated": N, "failed": [{"row": N, "error": "..."}]}.
     """
     reader = csv.DictReader(io.StringIO(csv_text.strip()))
     rows = list(reader)
 
-    created = updated = 0
+    parsed = []
     failed = []
 
     for i, row in enumerate(rows, start=2):
         row = {k.strip().lower(): v.strip() for k, v in row.items()}
         try:
+            wholesale_price = row.get("wholesale_price") or ""
+            parsed.append((i, {
+                "sku": row["sku"],
+                "name": row.get("name", row["sku"]),
+                "hsn_code": row.get("hsn_code", ""),
+                "brand": row.get("brand", ""),
+                "default_tax_rate": Decimal(row.get("default_tax_rate", "18")),
+                "variant_name": row.get("variant_name", "Default"),
+                "barcode": row.get("barcode") or None,
+                "selling_price": Decimal(row.get("selling_price", "0")),
+                "cost_price": Decimal(row.get("cost_price", "0")),
+                "wholesale_price": Decimal(wholesale_price) if wholesale_price else None,
+            }))
+        except Exception as exc:
+            failed.append({"row": i, "error": str(exc)})
+
+    if failed:
+        return {"created": 0, "updated": 0, "failed": failed}
+
+    created = updated = 0
+    with transaction.atomic():
+        for i, vd in parsed:
             product, prod_created = Product.objects.update_or_create(
-                sku=row["sku"],
+                sku=vd["sku"],
                 defaults={
-                    "name": row.get("name", row["sku"]),
-                    "hsn_code": row.get("hsn_code", ""),
-                    "default_tax_rate": Decimal(row.get("default_tax_rate", "18")),
+                    "name": vd["name"],
+                    "hsn_code": vd["hsn_code"],
+                    "brand": vd["brand"],
+                    "default_tax_rate": vd["default_tax_rate"],
                     "is_active": True,
                 },
             )
 
-            barcode = row.get("barcode") or None
             variant, var_created = ProductVariant.objects.update_or_create(
                 product=product,
-                variant_name=row.get("variant_name", "Default"),
+                variant_name=vd["variant_name"],
                 defaults={
-                    "barcode": barcode,
-                    "selling_price": Decimal(row.get("selling_price", "0")),
-                    "cost_price": Decimal(row.get("cost_price", "0")),
+                    "barcode": vd["barcode"],
+                    "selling_price": vd["selling_price"],
+                    "cost_price": vd["cost_price"],
+                    "wholesale_price": vd["wholesale_price"],
                     "is_active": True,
                 },
             )
@@ -256,10 +284,7 @@ def bulk_import_products(csv_text: str, user) -> dict:
             else:
                 updated += 1
 
-        except Exception as exc:
-            failed.append({"row": i, "error": str(exc)})
-
-    return {"created": created, "updated": updated, "failed": failed}
+    return {"created": created, "updated": updated, "failed": []}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
