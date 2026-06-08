@@ -199,10 +199,7 @@ export const procurementApi = {
     bill_number: string;
     bill_date: string;
     subtotal: number;
-    cgst?: number;
-    sgst?: number;
-    igst?: number;
-    grand_total: number;
+    tax_rate?: number;
     due_date?: string;
   }) => apiPost<PurchaseInvoice>('/procurement/purchase-invoices/', body),
 
