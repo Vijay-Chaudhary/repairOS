@@ -80,12 +80,8 @@ export const qk = {
   assets:   listKey('assets'),
 
   // Reports
-  dashboard:       (shopId: string | null) => ['dashboard', shopId] as const,
-  revenueReport:   listKey('report-revenue'),
-  hrReport:        listKey('report-hr'),
-  gstReport:       listKey('report-gst'),
-  repairReport:    listKey('report-repair'),
-  inventoryReport: listKey('report-inventory'),
+  dashboard: (shopId: string | null) => ['dashboard', shopId] as const,
+  report:    (type: string, filters: Record<string, unknown>) => ['report', type, filters] as const,
 
   // Settings
   shops:          () => ['shops'] as const,

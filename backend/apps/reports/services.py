@@ -91,7 +91,7 @@ def dashboard(shop_ids: list) -> dict:
         .order_by("paid_at__date")
     )
     revenue_trend = [
-        {"date": str(row["paid_at__date"]), "revenue": _d(row["revenue"])}
+        {"date": str(row["paid_at__date"]), "revenue": float(row["revenue"])}
         for row in trend_payments
     ]
 
@@ -152,9 +152,9 @@ def dashboard(shop_ids: list) -> dict:
     return {
         "open_jobs": open_jobs,
         "jobs_completed_today": jobs_completed_today,
-        "revenue_today": _d(revenue_today),
-        "revenue_month": _d(revenue_month),
-        "outstanding_amount": _d(outstanding_amount),
+        "revenue_today": float(revenue_today),
+        "revenue_month": float(revenue_month),
+        "outstanding_amount": float(outstanding_amount),
         "new_customers_month": new_customers_month,
         "tasks_due_today": tasks_due_today,
         "amc_visits_this_week": amc_visits_this_week,
@@ -511,8 +511,8 @@ def technician_performance(shop_ids: list, month: int, year: int) -> dict:
             TechnicianCommission.objects
             .filter(
                 technician_id=s["assigned_technician_id"],
-                job__created_at__date__gte=start,
-                job__created_at__date__lte=end,
+                created_at__date__gte=start,
+                created_at__date__lte=end,
             )
             .aggregate(total=Sum("commission_amount"))["total"] or _ZERO
         )
@@ -542,8 +542,8 @@ def commission_ledger(technician_id, month: int, year: int) -> dict:
 
     rows = TechnicianCommission.objects.filter(
         technician_id=technician_id,
-        job__created_at__date__gte=start,
-        job__created_at__date__lte=end,
+        created_at__date__gte=start,
+        created_at__date__lte=end,
     ).select_related("job")
 
     data = [
@@ -786,7 +786,7 @@ def purchase_summary(shop_ids: list, date_from: date, date_to: date) -> dict:
 
     by_supplier: dict[str, Decimal] = {}
     for po in qs:
-        by_supplier[po.supplier.name] = by_supplier.get(po.supplier.name, _ZERO)
+        by_supplier[po.supplier.name] = by_supplier.get(po.supplier.name, _ZERO) + (po.grand_total or _ZERO)
 
     total_pos = qs.count()
     return {"total_purchase_orders": total_pos, "by_supplier": {k: _d(v) for k, v in by_supplier.items()}}

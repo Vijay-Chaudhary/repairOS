@@ -400,7 +400,10 @@ class TestExportJob:
         job = ExportJob.objects.get(id=res.data["export_job_id"])
         assert job.report_type == "revenue-summary"
         assert job.format == "csv"
-        assert job.status == "queued"
+        # CELERY_TASK_ALWAYS_EAGER runs run_export synchronously, so by the
+        # time we re-fetch from the DB the job has already completed.
+        assert job.status == "ready"
+        assert job.file_url
         assert job.requested_by == admin_user
 
     def test_export_job_list(self, rpt_client, shop):

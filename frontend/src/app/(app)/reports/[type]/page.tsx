@@ -28,6 +28,9 @@ function isMoneyCellKey(key: string) {
 function isDateCellKey(key: string) {
   return /_date$|_at$|date_/.test(key);
 }
+function isNumericString(val: string) {
+  return /^-?\d+(\.\d+)?$/.test(val);
+}
 
 function CellValue({ colKey, val }: { colKey: string; val: unknown }) {
   if (val == null || val === '') return <span className="text-[var(--text-muted)]">—</span>;
@@ -36,6 +39,8 @@ function CellValue({ colKey, val }: { colKey: string; val: unknown }) {
     return <span className="tabular-nums">{val}</span>;
   }
   if (typeof val === 'string') {
+    // Report services return Decimal amounts as quantized strings (e.g. "1234.56")
+    if (isMoneyCellKey(colKey) && isNumericString(val)) return <span className="tabular-nums">{money(val)}</span>;
     if (isDateCellKey(colKey)) return <span>{formatDate(val)}</span>;
     return <span>{val}</span>;
   }
@@ -59,7 +64,9 @@ function GenericTable({ data }: { data: Record<string, unknown> }) {
             <div key={k} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
               <p className="text-xs text-[var(--text-muted)] capitalize">{k.replace(/_/g, ' ')}</p>
               <p className="text-body font-semibold text-[var(--text)] tabular-nums mt-0.5">
-                {typeof v === 'number' ? (isMoneyCellKey(k) ? money(v) : v) : String(v)}
+                {isMoneyCellKey(k) && (typeof v === 'number' || (typeof v === 'string' && isNumericString(v)))
+                  ? money(v)
+                  : typeof v === 'number' ? v : String(v)}
               </p>
             </div>
           ))}
@@ -202,7 +209,7 @@ export default function ReportViewPage() {
   const filters = useMemo(buildFilters, [buildFilters]);
 
   const { data: reportData, isLoading, error, refetch } = useQuery({
-    queryKey: [qk.revenueReport(filters)[0], type, filters],
+    queryKey: qk.report(type, filters),
     queryFn: () => reportApi.getReport(type, filters),
     enabled: !!report,
     staleTime: 60_000,

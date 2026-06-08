@@ -5,6 +5,7 @@ from . import views
 urlpatterns = [
     path("dashboard/", views.DashboardView.as_view(), name="dashboard"),
     path("export-jobs/", views.ExportJobListView.as_view(), name="export-jobs"),
+    path("export-jobs/<uuid:job_id>/", views.ExportJobDetailView.as_view(), name="export-job-detail"),
     path("gstr1/", views.GSTR1View.as_view(), name="gstr1"),
     path("gstr2-proxy/", views.GSTR2View.as_view(), name="gstr2-proxy"),
     # Dynamic report dispatcher. When ?export=csv|pdf is present, creates an ExportJob (202).

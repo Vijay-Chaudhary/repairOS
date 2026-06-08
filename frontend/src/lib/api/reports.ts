@@ -62,7 +62,7 @@ export const REPORT_CATALOGUE: ReportDef[] = [
   { type: 'warranty-claims',           label: 'Warranty Claims',              module: 'Repair',  permission: 'reports.repair.view',  filters: ['date_range', 'shop'],                  exports: ['csv'] },
   { type: 'fault-template-usage',      label: 'Fault Template Usage',         module: 'Repair',  permission: 'reports.repair.view',  filters: ['date_range'],                          exports: ['csv'] },
   { type: 'technician-performance',    label: 'Technician Performance',       module: 'Repair',  permission: 'reports.repair.view',  filters: ['month_year', 'shop', 'technician_id'], exports: ['pdf', 'csv'] },
-  { type: 'commission-ledger',         label: 'Commission Ledger',            module: 'Repair',  permission: 'reports.repair.view',  filters: ['month_year', 'technician_id'],          exports: ['pdf'] },
+  { type: 'commission-ledger',         label: 'Commission Ledger',            module: 'Repair',  permission: 'reports.hr.view',      filters: ['month_year', 'technician_id'],          exports: ['pdf'] },
   // CRM
   { type: 'lead-conversion',           label: 'Lead Conversion',              module: 'CRM',     permission: 'reports.crm.view',     filters: ['date_range', 'shop'],                  exports: ['csv'] },
   { type: 'customer-acquisition',      label: 'Customer Acquisition',         module: 'CRM',     permission: 'reports.crm.view',     filters: ['date_range', 'shop'],                  exports: ['csv'] },
@@ -103,8 +103,8 @@ export const reportApi = {
     format: ExportFormat,
   ) =>
     apiGet<{ export_job_id: string; status: ExportStatus }>(
-      `/reports/${type}/export/`,
-      { ...filters, format } as Record<string, string>,
+      `/reports/${type}/`,
+      { ...filters, export: format } as Record<string, string>,
     ),
 
   pollExportJob: (jobId: string) =>
