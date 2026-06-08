@@ -109,7 +109,15 @@ def _get_technicians(job) -> list[dict]:
             seen[tech_id] = stage
 
     if not seen:
-        return [{"technician": job.created_by, "stage": None, "is_lead": True}]
+        # job.created_by is typically the receptionist who opened the ticket,
+        # not a technician — crediting them would misattribute commission.
+        # JobTicket has no assigned_technician field (only JobStage does), so
+        # there's no reliable technician to credit on a stageless job: skip.
+        logger.warning(
+            "Job %s has no stages; skipping commission accrual (no technician to attribute it to).",
+            job.job_number,
+        )
+        return []
 
     result = []
     for i, (tech_id, stage) in enumerate(seen.items()):

@@ -16,8 +16,6 @@ export interface TechnicianCommission {
   id: string;
   job_id: string;
   job_number: string;
-  technician_id: string;
-  technician_name?: string | null;
   is_lead: boolean;
   sc_amount: number;
   rate: number;
@@ -25,7 +23,6 @@ export interface TechnicianCommission {
   is_paid: boolean;
   payout_id?: string | null;
   job_closed_at: string;
-  job_type?: string | null;
 }
 
 export interface CommissionPayout {

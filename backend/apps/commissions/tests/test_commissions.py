@@ -280,18 +280,20 @@ class TestAccrual:
         row = TechnicianCommission.objects.get(job=job, technician=tech1)
         assert row.rate == Decimal("40.00")
 
-    def test_job_with_no_stages_uses_created_by_as_tech(self, db, shop, customer, tech1, rule):
-        """Jobs without any stages accrue commission to the job creator."""
+    def test_job_with_no_stages_skips_accrual(self, db, shop, customer, tech1, rule):
+        """
+        Jobs without stages have no reliable technician to attribute commission to —
+        job.created_by is typically the receptionist who opened the ticket, and
+        JobTicket has no assigned_technician field (only JobStage does). Crediting
+        the creator would misattribute commission, so accrual is skipped instead.
+        """
         from commissions import services
         job = make_job(shop, customer, tech1, Decimal("500.00"), "TST-2026-0008")
 
         services.accrue_commission(job)
 
         from commissions.models import TechnicianCommission
-        rows = TechnicianCommission.objects.filter(job=job)
-        assert rows.count() == 1
-        assert rows.first().technician == tech1
-        assert rows.first().commission_amount == Decimal("150.00")   # 500 × 30%
+        assert TechnicianCommission.objects.filter(job=job).count() == 0
 
 
 # ──────────────────────────────────────────────────────────────────────────────
