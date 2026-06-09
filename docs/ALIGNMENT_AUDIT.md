@@ -331,9 +331,9 @@
 
 Every `_send_whatsapp` / `_broadcast` / `_send_otp` / `_send_otp` function across every module is a debug-log stub. Confirmed in: CRM (`crm/tasks.py`), Repair (`repair/services.py`), POS (`pos/services.py`), AMC (`amc/tasks.py`), Inventory (`inventory/services.py`), HR (`hr/services.py`), Finance (`finance/services.py`), Auth (`auth/views.py`). The product markets 31 WhatsApp notification templates. None fire. **Fix**: implement a shared `notifications.send_whatsapp(phone, template_name, variables)` service backed by Meta Cloud API and swap all stubs to call it. **DONE 2ef123d** — `core/notifications.py` provides `send_whatsapp()` (opt-out check + Celery dispatch); `core/tasks.py` dispatches `dispatch_whatsapp_message` which calls `POST https://graph.facebook.com/v18.0/{phone_number_id}/messages` with 3-retry backoff. All stubs in repair, pos, crm, amc, inventory, hr, finance replaced to delegate to the shared service. 31-template `TEMPLATE_REGISTRY` defined. `NotificationTemplate` model in tenant DB enables per-template on/off via `GET/PATCH /notifications/templates/`.
 
-### Pattern 2 — Celery beat never scheduled (Modules 01, 02, 03, 04, 11)
+### Pattern 2 — Celery beat never scheduled (Modules 01, 02, 03, 04, 11) — **DONE 45202c5**
 
-`CELERY_BEAT_SCHEDULE` in `config/settings/base.py` is empty. Affected tasks that silently never run: CRM `mark_overdue_tasks` + `send_task_daily_digest` (01), Repair `send_warranty_expiry_reminders` (02), POS `send_wholesale_payment_reminders` (03), AMC `mark_missed_visits` + `send_renewal_reminders` + `send_visit_reminders` + `process_auto_renewals` (04), Reports `run_export` (11). **Fix**: populate `CELERY_BEAT_SCHEDULE` with all defined tasks in one PR; the tasks already exist — they just need schedule entries.
+`CELERY_BEAT_SCHEDULE` in `config/settings/base.py` is empty. Affected tasks that silently never run: CRM `mark_overdue_tasks` + `send_task_daily_digest` (01), Repair `send_warranty_expiry_reminders` (02), POS `send_wholesale_payment_reminders` (03), AMC `mark_missed_visits` + `send_renewal_reminders` + `send_visit_reminders` + `process_auto_renewals` (04), Reports `run_export` (11). **Fix**: populate `CELERY_BEAT_SCHEDULE` with all defined tasks in one PR; the tasks already exist — they just need schedule entries. **DONE 45202c5** — `CELERY_BEAT_SCHEDULE` fully populated: CRM overdue @ 00:00, digest @ 08:00; Repair warranty reminders @ 06:00; POS payment reminders @ 06:30; AMC missed/renewal/visit/auto-renewal tasks; HR payroll reminders @ 09:00 daily (day-guard fires only on 25th). `run_export` is a triggered task (not periodic) — it belongs to Pattern 9. Tests added: 22 tests across `crm/tests/test_tasks.py`, `repair/tests/test_tasks.py`, `pos/tests/test_tasks.py`, `hr/tests/test_tasks.py` covering happy paths, opt-out guards, day guards, and filter correctness.
 
 ### Pattern 3 — Pagination shape: flat `[]` vs expected `{items, meta}` (Modules 06, 09, 10, 11, 12)
 
@@ -371,7 +371,7 @@ Three compounding issues make all 37 PDF/CSV exports permanently fail: (a) `requ
 | 2 | FK field `_id` / `_name` aliases in serializers | 01–05, 09, 10 | Unbreaks technician/employee/customer display across 7 modules |
 | 3 | Shop isolation on detail views | 01, 03, 04, 09, 10 | Security: closes cross-tenant UUID enumeration |
 | 4 | Settings backend (new app) | 12 | Unbreaks all user/role/shop/WA settings — required before first customer | **DONE 2ef123d** |
-| 5 | Celery beat schedule | 01, 02, 03, 04, 11 | Enables all scheduled work: overdue tasks, reminders, auto-renewals, exports |
+| 5 | Celery beat schedule | 01, 02, 03, 04, 11 | Enables all scheduled work: overdue tasks, reminders, auto-renewals, exports | **DONE 45202c5** |
 | 6 | Reports export pipeline (3-part fix) | 11 | Unbreaks all 37 PDF/CSV exports |
 | 7 | WhatsApp shared service | All | Enables all 31 notification templates | **DONE 2ef123d** |
 | 8 | Stock deduction | 02, 03 | Inventory correctness: sales/repairs stop silently ignoring stock |
