@@ -159,18 +159,15 @@ def send_quote(lead: Lead, data: dict, user) -> LeadQuote:
 
 
 def _send_whatsapp_quote(lead: Lead, quote: LeadQuote) -> None:
-    from .tasks import _send_whatsapp
+    from core.notifications import send_whatsapp
     try:
-        _send_whatsapp(
+        send_whatsapp(
             phone=lead.phone,
             template_name="lead_quote_sent",
             variables={
                 "customer_name": lead.name,
-                "quote_number": quote.quote_number,
-                "device_type": lead.device_type or "your device",
-                "total_amount": f"₹{quote.total_amount:,.0f}",
+                "quote_amount": f"₹{quote.total_amount:,.0f}",
                 "valid_until": str(quote.valid_until),
-                "shop_name": lead.shop.name,
                 "shop_phone": lead.shop.phone,
             },
         )

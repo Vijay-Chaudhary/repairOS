@@ -82,10 +82,12 @@ def send_bulk_whatsapp_segment(self, customer_ids: list, template_name: str, var
 
     for customer in customers:
         try:
-            _send_whatsapp(
+            from core.notifications import send_whatsapp
+            send_whatsapp(
                 phone=customer.phone,
                 template_name=template_name,
                 variables={**variables, "customer_name": customer.name},
+                customer=customer,
             )
             sent += 1
         except Exception as exc:
@@ -98,32 +100,29 @@ def send_bulk_whatsapp_segment(self, customer_ids: list, template_name: str, var
     return {"sent": sent, "failed": failed}
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Internal helpers (stubs — real implementation connects to Meta Cloud API)
-# ──────────────────────────────────────────────────────────────────────────────
-
-
 def _notify_task_overdue(task) -> None:
+    from core.notifications import send_whatsapp
     customer_name = ""
     if task.customer:
         customer_name = task.customer.name
     elif task.lead:
         customer_name = task.lead.name
 
-    _send_whatsapp(
+    send_whatsapp(
         phone=task.assigned_to.phone,
         template_name="task_overdue",
         variables={
+            "staff_name": task.assigned_to.full_name,
             "task_title": task.title,
             "due_date": str(task.due_date),
-            "customer_name": customer_name,
         },
     )
 
 
 def _send_daily_digest(user, tasks: list) -> None:
+    from core.notifications import send_whatsapp
     task_list = "; ".join(t.title for t in tasks[:5])
-    _send_whatsapp(
+    send_whatsapp(
         phone=user.phone,
         template_name="task_daily_digest",
         variables={
@@ -132,8 +131,3 @@ def _send_daily_digest(user, tasks: list) -> None:
             "task_list": task_list,
         },
     )
-
-
-def _send_whatsapp(phone: str, template_name: str, variables: dict) -> None:
-    # TODO: integrate with Meta Cloud API / notification service
-    logger.debug("WhatsApp → %s template=%s vars=%s", phone, template_name, variables)

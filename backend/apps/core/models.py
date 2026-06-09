@@ -1,10 +1,12 @@
 """
 Abstract base models shared by every tenant-DB app.
 
-BaseModel        — UUID PK, created_at, updated_at.
-SoftDeleteModel  — extends BaseModel with deleted_at / deleted_by (UUID, not FK,
-                   to avoid cross-app FK issues between modules).
-Shop             — concrete; every tenant DB has this table.
+BaseModel           — UUID PK, created_at, updated_at.
+SoftDeleteModel     — extends BaseModel with deleted_at / deleted_by.
+Shop                — concrete; every tenant DB has this table.
+TenantSettings      — singleton branding/bank config per tenant DB.
+WhatsAppConnection  — singleton WhatsApp channel config per tenant DB.
+NotificationTemplate — per-template active/body overrides.
 """
 
 import uuid
@@ -151,3 +153,66 @@ class Shop(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.code})"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tenant-scoped singleton settings (stored in each tenant DB)
+# ──────────────────────────────────────────────────────────────────────────────
+
+_SETTINGS_SINGLETON = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+
+class TenantSettings(BaseModel):
+    """Singleton branding + bank details for this tenant. One row per tenant DB."""
+
+    logo_url = models.CharField(max_length=500, null=True, blank=True)
+    invoice_footer = models.TextField(blank=True, default="")
+    bank_name = models.CharField(max_length=200, null=True, blank=True)
+    bank_account_number = models.CharField(max_length=50, null=True, blank=True)
+    bank_ifsc = models.CharField(max_length=20, null=True, blank=True)
+
+    class Meta:
+        app_label = "core"
+        db_table = "tenant_settings"
+
+    @classmethod
+    def get_or_create_singleton(cls) -> "TenantSettings":
+        obj, _ = cls.objects.get_or_create(id=_SETTINGS_SINGLETON)
+        return obj
+
+
+class WhatsAppConnection(BaseModel):
+    """Singleton WhatsApp channel config for this tenant."""
+
+    phone_number = models.CharField(max_length=20, null=True, blank=True)
+    is_connected = models.BooleanField(default=False)
+    connected_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        app_label = "core"
+        db_table = "whatsapp_connections"
+
+    @classmethod
+    def get_or_create_singleton(cls) -> "WhatsAppConnection":
+        _wa_singleton = uuid.UUID("00000000-0000-0000-0000-000000000002")
+        obj, _ = cls.objects.get_or_create(id=_wa_singleton)
+        return obj
+
+
+class NotificationTemplate(BaseModel):
+    """
+    Per-template on/off switch and optional custom body override.
+    One row per template_name that a tenant has customised.
+    If a template has no row here it is treated as active with no body override.
+    """
+
+    template_name = models.CharField(max_length=100, unique=True)
+    is_active = models.BooleanField(default=True)
+    custom_body = models.TextField(null=True, blank=True)
+
+    class Meta:
+        app_label = "core"
+        db_table = "notification_templates"
+
+    def __str__(self) -> str:
+        return self.template_name

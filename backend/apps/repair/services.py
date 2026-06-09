@@ -635,11 +635,8 @@ def _broadcast(shop_id, event_type: str, payload: dict) -> None:
 
 
 def _send_whatsapp(phone: str, template_name: str, variables: dict, customer=None) -> None:
-    """Queue a WhatsApp notification. Respects customer opt-out."""
-    if customer and getattr(customer, "whatsapp_optout", False):
-        logger.debug("WhatsApp opt-out: skipping %s for %s", template_name, phone)
-        return
-    logger.debug("WhatsApp → %s template=%s", phone, template_name)
+    from core.notifications import send_whatsapp
+    send_whatsapp(phone=phone, template_name=template_name, variables=variables, customer=customer)
 
 
 def _send_shop_notification(shop_id, template_name: str, variables: dict) -> None:

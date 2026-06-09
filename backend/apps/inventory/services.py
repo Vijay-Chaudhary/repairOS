@@ -310,4 +310,5 @@ def _emit_low_stock_alert(shop, variant, current_qty, reorder_level) -> None:
 
 
 def _send_whatsapp(phone, template_name, variables) -> None:
-    logger.debug("WhatsApp → %s template=%s", phone, template_name)
+    from core.notifications import send_whatsapp
+    send_whatsapp(phone=phone, template_name=template_name, variables=variables)

@@ -159,7 +159,14 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "Asia/Kolkata"
+# ──────────────────────────────────────────────────────────────────────────────
+# WhatsApp (Meta Cloud API)
+# ──────────────────────────────────────────────────────────────────────────────
+WHATSAPP_PHONE_NUMBER_ID = env("WHATSAPP_PHONE_NUMBER_ID", default="")
+WHATSAPP_ACCESS_TOKEN = env("WHATSAPP_ACCESS_TOKEN", default="")
+
 CELERY_TASK_ROUTES = {
+    "core.dispatch_whatsapp_message": {"queue": "high"},
     "*.tasks.send_whatsapp_*": {"queue": "high"},
     "*.tasks.generate_pdf_*": {"queue": "high"},
     "*.tasks.generate_report_*": {"queue": "low"},

@@ -49,4 +49,32 @@ def send_payroll_reminders() -> None:
         return
 
     logger.info("send_payroll_reminders: payroll reminder triggered for %s/%s", today.month, today.year)
-    # TODO: send WhatsApp/email to HR managers once notification infrastructure is in place.
+
+    from authentication.models import User
+    from core.notifications import send_whatsapp
+
+    # Notify all active HR managers (is_platform_admin excluded — tenant users only).
+    hr_managers = User.objects.filter(is_active=True, is_platform_admin=False)
+    pending_count = _count_pending_slips(today.month, today.year)
+
+    for manager in hr_managers:
+        send_whatsapp(
+            phone=manager.phone,
+            template_name="payroll_reminder",
+            variables={
+                "manager_name": manager.full_name,
+                "month": str(today.month),
+                "year": str(today.year),
+                "pending_count": str(pending_count),
+            },
+        )
+
+
+def _count_pending_slips(month: int, year: int) -> int:
+    try:
+        from hr.models import Employee, SalarySlip
+        total = Employee.objects.filter(is_active=True).count()
+        done = SalarySlip.objects.filter(month=month, year=year).count()
+        return max(0, total - done)
+    except Exception:
+        return 0

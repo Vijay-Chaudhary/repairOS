@@ -70,7 +70,16 @@ def record_petty_cash_txn(account: PettyCashAccount, data: dict, user) -> PettyC
             "Petty cash low: shop %s balance %.2f < threshold %.2f",
             account_locked.shop_id, new_balance, account_locked.low_balance_threshold,
         )
-        # Notification stub — wire WhatsApp when notification module is built.
+        from core.notifications import send_whatsapp
+        send_whatsapp(
+            phone=account_locked.shop.phone,
+            template_name="petty_cash_low",
+            variables={
+                "shop_name": account_locked.shop.name,
+                "current_balance": f"{new_balance:.2f}",
+                "threshold": f"{account_locked.low_balance_threshold:.2f}",
+            },
+        )
 
     return txn
 
@@ -141,7 +150,18 @@ def _update_budget_allocation(head: BudgetHead, month: int, year: int, amount: D
             "Budget exceeded: head '%s' %d/%d actual=%.2f budgeted=%.2f",
             head.name, month, year, alloc.actual_amount, alloc.budgeted_amount,
         )
-        # Notification stub — wire WhatsApp when notification module is built.
+        from core.notifications import send_whatsapp
+        send_whatsapp(
+            phone=head.shop.phone,
+            template_name="budget_exceeded",
+            variables={
+                "head_name": head.name,
+                "month": str(month),
+                "year": str(year),
+                "actual": f"{alloc.actual_amount:.2f}",
+                "budgeted": f"{alloc.budgeted_amount:.2f}",
+            },
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────────────

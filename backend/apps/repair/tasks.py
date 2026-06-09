@@ -37,14 +37,15 @@ def send_warranty_expiry_reminders(self):
 
 
 def _send_reminder(job) -> None:
-    from .services import _send_whatsapp
+    from core.notifications import send_whatsapp
 
-    _send_whatsapp(
+    send_whatsapp(
         phone=job.customer.phone,
         template_name="warranty_expiry_reminder",
         variables={
             "customer_name": job.customer.name,
             "job_number": job.job_number,
+            "device_type": job.device_type,
             "expiry_date": str(job.warranty_expires_at),
             "shop_phone": job.shop.phone,
         },

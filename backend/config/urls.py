@@ -5,6 +5,11 @@ from django.urls import include, path
 urlpatterns = [
     path("api/v1/", include("master.urls")),
     path("api/v1/auth/", include("authentication.urls")),
+    # Settings — users, roles, permissions
+    path("api/v1/", include("authentication.settings_urls")),
+    # Settings — tenant branding, WhatsApp, notification templates
+    path("api/v1/", include("core.settings_urls")),
+    # Shops (list + detail)
     path("api/v1/shops/", include("core.shop_urls")),
     path("api/v1/crm/", include("crm.urls")),
     path("api/v1/repair/", include("repair.urls")),

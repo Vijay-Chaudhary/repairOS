@@ -257,8 +257,5 @@ def _write_audit(user, action, model_name, object_id, old_value=None, new_value=
 
 
 def _send_whatsapp(phone, template_name: str, variables: dict, customer=None) -> None:
-    if not phone:
-        return
-    if customer and getattr(customer, "whatsapp_optout", False):
-        return
-    logger.debug("WhatsApp → %s template=%s", phone, template_name)
+    from core.notifications import send_whatsapp
+    send_whatsapp(phone=phone, template_name=template_name, variables=variables, customer=customer)

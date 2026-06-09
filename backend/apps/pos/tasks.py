@@ -42,16 +42,16 @@ def send_wholesale_payment_reminders(self):
 
 
 def _send_reminder(sale) -> None:
-    from .services import _send_whatsapp
+    from core.notifications import send_whatsapp
 
-    _send_whatsapp(
+    send_whatsapp(
         phone=sale.customer.phone,
         template_name="wholesale_payment_reminder",
         variables={
             "customer_name": sale.customer.name,
-            "sale_number": sale.sale_number,
-            "outstanding": str(sale.amount_outstanding),
-            "payment_link": "",
+            "amount_due": str(sale.amount_outstanding),
+            "due_date": "",
+            "shop_phone": sale.shop.phone,
         },
         customer=sale.customer,
     )

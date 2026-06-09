@@ -128,9 +128,9 @@ def process_auto_renewals(self):
 
 
 def _send_visit_reminder(visit) -> None:
-    from .services import _send_whatsapp
+    from core.notifications import send_whatsapp
     tech_name = visit.technician.full_name if visit.technician else "Our technician"
-    _send_whatsapp(
+    send_whatsapp(
         phone=visit.contract.customer.phone,
         template_name="amc_visit_reminder",
         variables={
@@ -144,8 +144,8 @@ def _send_visit_reminder(visit) -> None:
 
 
 def _send_renewal_reminder(contract) -> None:
-    from .services import _send_whatsapp
-    _send_whatsapp(
+    from core.notifications import send_whatsapp
+    send_whatsapp(
         phone=contract.customer.phone,
         template_name="amc_renewal_reminder",
         variables={
@@ -159,8 +159,8 @@ def _send_renewal_reminder(contract) -> None:
 
 
 def _alert_manager_missed_visit(visit) -> None:
-    from .services import _send_whatsapp
-    _send_whatsapp(
+    from core.notifications import send_whatsapp
+    send_whatsapp(
         phone=visit.contract.shop.phone,
         template_name="amc_visit_missed_alert",
         variables={
