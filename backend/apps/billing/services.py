@@ -57,11 +57,11 @@ def create_repair_invoice(job, data: dict, user) -> RepairInvoice:
     due_date = data.get("due_date")
 
     items_data = _build_line_items(job)
-    subtotal = sum(i["line_subtotal"] for i in items_data).quantize(_TWO_PLACES)
+    subtotal = sum((i["line_subtotal"] for i in items_data), Decimal("0")).quantize(_TWO_PLACES)
 
     # Discount scale (applied proportionally to each line's tax)
     scale = (1 - discount_amount / subtotal) if subtotal > 0 else Decimal("1")
-    total_tax = sum(i["line_tax"] for i in items_data) * scale
+    total_tax = sum((i["line_tax"] for i in items_data), Decimal("0")) * scale
     total_tax = total_tax.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
 
     cgst, sgst, igst = _split_gst(shop, customer, total_tax)
