@@ -5,6 +5,7 @@ Salary computation follows the spec formulas exactly (§4).
 """
 
 import calendar
+import datetime
 import logging
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -102,18 +103,22 @@ def generate_salary_slips(shop, month: int, year: int, employee_ids: list) -> li
     else:
         employees = Employee.objects.filter(shop=shop, deleted_at__isnull=True)
 
-    # Guard: check for existing slips
-    existing = SalarySlip.objects.filter(
-        employee__in=employees, month=month, year=year
+    # Skip employees who already have a slip for this period; raise only if none remain.
+    existing_ids = set(
+        SalarySlip.objects.filter(
+            employee__in=employees, month=month, year=year
+        ).values_list("employee_id", flat=True)
     )
-    if existing.exists():
+    employees_to_generate = [e for e in employees if e.pk not in existing_ids]
+
+    if not employees_to_generate:
         raise BusinessRuleViolation(
-            f"Salary slip already exists for employee(s) in {month}/{year}."
+            f"Salary slips already exist for all specified employees in {month}/{year}."
         )
 
     slips = []
     with transaction.atomic():
-        for emp in employees:
+        for emp in employees_to_generate:
             slip = _compute_and_create_slip(emp, month, year)
             slips.append(slip)
     return slips
@@ -151,7 +156,27 @@ def _compute_and_create_slip(employee: Employee, month: int, year: int) -> Salar
         attendance.filter(status=AttendanceRecord.AttendanceStatus.ABSENT).count()
     ))
 
-    paid_days = present_days + (half_days * Decimal("0.5")) + leave_days
+    # Unpaid leave days must not contribute to paid_days — query the approved
+    # UNPAID leave requests that overlap this month and count their dates.
+    month_start = datetime.date(year, month, 1)
+    month_end = datetime.date(year, month, calendar.monthrange(year, month)[1])
+    unpaid_leave_days = Decimal("0")
+    unpaid_requests = LeaveRequest.objects.filter(
+        employee=employee,
+        leave_type=LeaveRequest.LeaveType.UNPAID,
+        status=LeaveRequest.LeaveStatus.APPROVED,
+        from_date__lte=month_end,
+        to_date__gte=month_start,
+    )
+    for req in unpaid_requests:
+        cur = max(req.from_date, month_start)
+        end = min(req.to_date, month_end)
+        while cur <= end:
+            unpaid_leave_days += Decimal("1")
+            cur += datetime.timedelta(days=1)
+
+    paid_leave_days = leave_days - unpaid_leave_days
+    paid_days = present_days + (half_days * Decimal("0.5")) + paid_leave_days
 
     # Sum overtime hours across all present days
     from django.db.models import Sum
@@ -220,4 +245,9 @@ def update_slip_status(slip: SalarySlip, new_status: str) -> SalarySlip:
 
     slip.status = new_status
     slip.save(update_fields=["status", "updated_at"])
+
+    if new_status == SalarySlip.SlipStatus.APPROVED:
+        from .tasks import generate_salary_pdf
+        generate_salary_pdf.delay(str(slip.id))
+
     return slip

@@ -62,9 +62,6 @@ class EmployeeListCreateView(APIView):
             from django.db.models import Q as DQ
             qs = qs.filter(DQ(full_name__icontains=search) | DQ(employee_code__icontains=search))
 
-        if et := request.query_params.get("employment_type"):
-            qs = qs.filter(employment_type=et)
-
         paginator = RepairOSCursorPagination()
         page = paginator.paginate_queryset(qs, request)
         data = EmployeeSerializer(page, many=True).data

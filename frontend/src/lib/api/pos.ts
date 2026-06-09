@@ -168,6 +168,7 @@ export interface SaleFilters {
   customer_id?: string;
   date_from?: string;
   date_to?: string;
+  search?: string;
   cursor?: string;
 }
 

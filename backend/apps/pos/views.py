@@ -73,6 +73,11 @@ class SaleViewSet(ShopScopedMixin, GenericViewSet):
             qs = qs.filter(sale_date__date__gte=date_from)
         if date_to := qp.get("date_to"):
             qs = qs.filter(sale_date__date__lte=date_to)
+        if q := qp.get("search"):
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(sale_number__icontains=q) | Q(customer__name__icontains=q)
+            )
         return qs
 
     def list(self, request, *args, **kwargs):

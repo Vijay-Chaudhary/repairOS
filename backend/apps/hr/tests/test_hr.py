@@ -409,7 +409,8 @@ class TestSalaryGeneration:
         # 22 wd × 2 OT = 44 hrs; 44 × (20000/176) = 5000.00
         assert Decimal(slip["overtime_amount"]) == Decimal("5000.00")
 
-    def test_duplicate_slip_same_month_year_blocked(self, hr_client, employee, shop, db):
+    def test_duplicate_slip_all_existing_returns_422(self, hr_client, employee, shop, db):
+        """When ALL specified employees already have slips, raise 422."""
         mark_month_attendance(employee, 2026, 6, present_days=10)
         hr_client.post(self.url, {
             "shop_id": str(shop.id),
@@ -422,6 +423,114 @@ class TestSalaryGeneration:
             "employee_ids": [str(employee.id)],
         }, format="json")
         assert res2.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_partial_batch_skips_existing_generates_rest(self, hr_client, employee, employee2, shop, db):
+        """When only SOME employees already have slips, generate for the rest."""
+        mark_month_attendance(employee, 2026, 7, present_days=10)
+        mark_month_attendance(employee2, 2026, 7, present_days=10)
+
+        # Generate slip for employee only
+        hr_client.post(self.url, {
+            "shop_id": str(shop.id),
+            "month": 7, "year": 2026,
+            "employee_ids": [str(employee.id)],
+        }, format="json")
+
+        # Generate for both — employee already has a slip; only employee2 should get one
+        res = hr_client.post(self.url, {
+            "shop_id": str(shop.id),
+            "month": 7, "year": 2026,
+            "employee_ids": [str(employee.id), str(employee2.id)],
+        }, format="json")
+        assert res.status_code == status.HTTP_201_CREATED
+        assert len(res.data["slips"]) == 1
+        assert res.data["slips"][0]["employee_id"] == str(employee2.id)
+
+    def test_unpaid_leave_not_counted_as_paid_days(self, hr_client, employee, shop, db):
+        """
+        Unpaid approved leave days must NOT be included in paid_days for proration.
+
+        May 2026: 21 working days.
+        Mark 10 PRESENT; override 2 previously-ABSENT days (May 19-20) to LEAVE
+        via an approved UNPAID leave request.
+        paid_leave_days = 0  (leave_days=2, unpaid_leave_days=2)
+        paid_days = 10 + 0 = 10
+        basic_earned = 20000 × 10/21 ≈ 9523.81
+        """
+        from hr.models import AttendanceRecord, LeaveRequest
+
+        year, month = 2026, 5
+
+        # First 10 working days present; rest absent
+        mark_month_attendance(employee, year, month, present_days=10)
+
+        # Override May 19 & 20 (working days 13 & 14 — previously ABSENT) to LEAVE
+        for day in [19, 20]:
+            AttendanceRecord.objects.update_or_create(
+                employee=employee,
+                date=datetime.date(year, month, day),
+                defaults={"status": AttendanceRecord.AttendanceStatus.LEAVE},
+            )
+
+        LeaveRequest.objects.create(
+            employee=employee,
+            leave_type=LeaveRequest.LeaveType.UNPAID,
+            from_date=datetime.date(year, month, 19),
+            to_date=datetime.date(year, month, 20),
+            days=Decimal("2.0"),
+            status=LeaveRequest.LeaveStatus.APPROVED,
+        )
+
+        res = hr_client.post(self.url, {
+            "shop_id": str(shop.id),
+            "month": month, "year": year,
+            "employee_ids": [str(employee.id)],
+        }, format="json")
+        assert res.status_code == status.HTTP_201_CREATED
+        slip = res.data["slips"][0]
+
+        # 21 working days, 10 paid days (unpaid leave not counted)
+        expected_basic = (Decimal("20000") * Decimal("10") / Decimal("21")).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        assert Decimal(slip["basic_earned"]) == expected_basic
+
+    def test_paid_leave_counted_as_paid_days(self, hr_client, employee, shop, db):
+        """Casual/sick/earned leave days DO count as paid days (default behaviour)."""
+        from hr.models import AttendanceRecord, LeaveRequest
+
+        year, month = 2026, 5
+
+        mark_month_attendance(employee, year, month, present_days=10)
+
+        # Override May 19 (working day 13, previously ABSENT) to LEAVE via CASUAL
+        AttendanceRecord.objects.update_or_create(
+            employee=employee,
+            date=datetime.date(year, month, 19),
+            defaults={"status": AttendanceRecord.AttendanceStatus.LEAVE},
+        )
+        LeaveRequest.objects.create(
+            employee=employee,
+            leave_type=LeaveRequest.LeaveType.CASUAL,
+            from_date=datetime.date(year, month, 19),
+            to_date=datetime.date(year, month, 19),
+            days=Decimal("1.0"),
+            status=LeaveRequest.LeaveStatus.APPROVED,
+        )
+
+        res = hr_client.post(self.url, {
+            "shop_id": str(shop.id),
+            "month": month, "year": year,
+            "employee_ids": [str(employee.id)],
+        }, format="json")
+        assert res.status_code == status.HTTP_201_CREATED
+        slip = res.data["slips"][0]
+
+        # 10 present + 1 paid leave = 11 paid days
+        expected_basic = (Decimal("20000") * Decimal("11") / Decimal("21")).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        assert Decimal(slip["basic_earned"]) == expected_basic
 
     def test_generate_multiple_employees(self, hr_client, employee, employee2, shop, db):
         mark_month_attendance(employee, 2026, 2, present_days=15)

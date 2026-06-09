@@ -13,6 +13,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Money } from '@/components/shared/Money';
 import { Can } from '@/components/shared/Can';
 import { AgedOutstandingTable } from '@/components/billing/AgedOutstandingTable';
+import { TallyExportPanel } from '@/components/billing/TallyExportPanel';
 import { billingApi, type Invoice, type InvoiceStatus } from '@/lib/api/billing';
 import { qk } from '@/lib/query/keys';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
@@ -123,8 +124,11 @@ export default function InvoicesPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-[var(--border)] bg-[var(--surface)]">
+      <div className="px-4 py-3 border-b border-[var(--border)] bg-[var(--surface)] flex items-center justify-between gap-3">
         <h1 className="text-h1 text-[var(--text)]">Invoices</h1>
+        <Can permission="billing.tally_export">
+          <TallyExportPanel />
+        </Can>
       </div>
 
       <div className="flex-1 overflow-auto">

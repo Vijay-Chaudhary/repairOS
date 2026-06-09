@@ -1,4 +1,5 @@
 import { apiGet, apiPost, type PageMeta } from './client';
+import { useAuthStore } from '@/lib/stores/authStore';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -126,6 +127,31 @@ export const billingApi = {
 
   createRazorpayLink: (body: { invoice_id: string; amount: number }) =>
     apiPost<RazorpayLinkResponse>('/billing/payments/razorpay/create-link/', body),
+
+  /**
+   * Download Tally-compatible CSV export. Returns the CSV text so the caller
+   * can trigger a browser download; not JSON — bypasses apiFetch.
+   */
+  tallyExport: async (params: { shop_id: string; from_date: string; to_date: string }): Promise<void> => {
+    const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+    const DEV_TENANT_SLUG = process.env.NEXT_PUBLIC_TENANT_SLUG ?? '';
+    const qs = new URLSearchParams(params).toString();
+    const token = useAuthStore.getState().accessToken;
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (DEV_TENANT_SLUG) headers['X-Tenant-Slug'] = DEV_TENANT_SLUG;
+
+    const res = await fetch(`${BASE_URL}/api/v1/billing/tally-export/?${qs}`, { headers });
+    if (!res.ok) throw new Error(`Tally export failed (${res.status})`);
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tally-export-${params.from_date}-${params.to_date}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────

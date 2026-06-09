@@ -202,6 +202,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "amc.process_auto_renewals",
         "schedule": crontab(hour=1, minute=0, day_of_month="1"),
     },
+    # HR
+    "hr-send-payroll-reminders": {
+        "task": "hr.send_payroll_reminders",
+        "schedule": crontab(hour=9, minute=0),
+    },
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
