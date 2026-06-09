@@ -603,3 +603,141 @@ class TestSoftDelete:
         assert res.status_code == status.HTTP_200_OK
         ids = [j["id"] for j in res.data["items"]]
         assert str(job.id) not in ids
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Stock deduction on close (Pattern 7)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _drive_to_closed(job, user):
+    """Advance a draft job through open → in_progress → ready_for_pickup → delivered → closed."""
+    from repair.services import transition_job
+
+    transition_job(job, "open",             user, reason="test bypass", is_tenant_wide=True)
+    transition_job(job, "in_progress",      user)
+    transition_job(job, "ready_for_pickup", user)
+    transition_job(job, "delivered",        user)
+    transition_job(job, "closed",           user)
+    return job
+
+
+def _stock_qty(shop, variant):
+    from inventory.models import InventoryStock
+    return InventoryStock.objects.get(shop=shop, variant=variant).quantity_in_stock
+
+
+@pytest.mark.django_db
+class TestRepairStockDeduction:
+    """_on_close must deduct inventory for received spare parts."""
+
+    @pytest.fixture
+    def variant(self, db, shop):
+        from decimal import Decimal
+        from inventory.models import Product, ProductCategory, ProductVariant
+        from inventory.services import opening_stock
+
+        cat = ProductCategory.objects.create(name="Parts")
+        prod = Product.objects.create(name="Screen Assembly", sku="SCR-001", category=cat)
+        v = ProductVariant.objects.create(product=prod, variant_name="Standard", selling_price=Decimal("1000"))
+        return v
+
+    def test_received_spare_part_deducted_on_close(self, shop, customer, admin_user, variant):
+        from decimal import Decimal
+        from inventory.services import opening_stock
+        from repair.models import JobSparePartRequest
+        from repair.services import create_job, transition_job
+
+        opening_stock(shop, variant, Decimal("10"), admin_user)
+        assert _stock_qty(shop, variant) == Decimal("10")
+
+        job = create_job(
+            shop, customer,
+            {"device_type": "Laptop", "problem_description": "Screen broken badly.", "priority": "normal"},
+            admin_user,
+        )
+
+        # Mark spare part as received (qty=3)
+        JobSparePartRequest.objects.create(
+            job=job,
+            variant_id=variant.id,
+            quantity=3,
+            status=JobSparePartRequest.RequestStatus.RECEIVED,
+            requested_by=admin_user,
+        )
+
+        _drive_to_closed(job, admin_user)
+
+        assert _stock_qty(shop, variant) == Decimal("7")
+
+    def test_only_received_parts_deducted_not_requested(self, shop, customer, admin_user, variant):
+        from decimal import Decimal
+        from inventory.services import opening_stock
+        from repair.models import JobSparePartRequest
+        from repair.services import create_job
+
+        opening_stock(shop, variant, Decimal("10"), admin_user)
+
+        job = create_job(
+            shop, customer,
+            {"device_type": "Phone", "problem_description": "Battery swollen and leaking.", "priority": "normal"},
+            admin_user,
+        )
+
+        # One received (should deduct) + one still requested (must not deduct)
+        JobSparePartRequest.objects.create(
+            job=job, variant_id=variant.id, quantity=2,
+            status=JobSparePartRequest.RequestStatus.RECEIVED,
+            requested_by=admin_user,
+        )
+        JobSparePartRequest.objects.create(
+            job=job, variant_id=variant.id, quantity=5,
+            status=JobSparePartRequest.RequestStatus.REQUESTED,
+            requested_by=admin_user,
+        )
+
+        _drive_to_closed(job, admin_user)
+
+        assert _stock_qty(shop, variant) == Decimal("8")
+
+    def test_no_spare_parts_close_leaves_stock_unchanged(self, shop, customer, admin_user, variant):
+        from decimal import Decimal
+        from inventory.services import opening_stock
+        from repair.services import create_job
+
+        opening_stock(shop, variant, Decimal("10"), admin_user)
+
+        job = create_job(
+            shop, customer,
+            {"device_type": "Tablet", "problem_description": "Touch screen unresponsive entirely.", "priority": "low"},
+            admin_user,
+        )
+
+        _drive_to_closed(job, admin_user)
+
+        assert _stock_qty(shop, variant) == Decimal("10")
+
+    def test_missing_variant_skips_without_crashing(self, shop, customer, admin_user):
+        import uuid
+        from repair.models import JobSparePartRequest
+        from repair.services import create_job
+
+        job = create_job(
+            shop, customer,
+            {"device_type": "Console", "problem_description": "HDMI port not working at all.", "priority": "normal"},
+            admin_user,
+        )
+
+        # variant_id points to a non-existent variant
+        JobSparePartRequest.objects.create(
+            job=job,
+            variant_id=uuid.uuid4(),
+            quantity=1,
+            status=JobSparePartRequest.RequestStatus.RECEIVED,
+            requested_by=admin_user,
+        )
+
+        # Must not raise — missing variant logs a warning and skips
+        _drive_to_closed(job, admin_user)
+        job.refresh_from_db()
+        assert job.status == "closed"
