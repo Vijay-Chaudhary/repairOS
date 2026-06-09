@@ -87,6 +87,7 @@ export const qk = {
   // Settings
   shops:          () => ['shops'] as const,
   shop:           (id: string) => ['shop', id] as const,
+  tenantBranding: () => ['tenant-branding'] as const,
   roles:          () => ['roles'] as const,
   role:           (id: string) => ['role', id] as const,
   users:          listKey('users'),

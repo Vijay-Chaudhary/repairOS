@@ -68,7 +68,7 @@ function ShopSettingsInner() {
   });
 
   const { data: branding, isLoading: brandLoading } = useQuery({
-    queryKey: ['tenant-branding'],
+    queryKey: qk.tenantBranding(),
     queryFn: () => settingsApi.getTenantBranding(),
     staleTime: 60_000,
   });
@@ -121,7 +121,7 @@ function ShopSettingsInner() {
       bank_ifsc:           v.bank_ifsc || undefined,
     }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tenant-branding'] });
+      qc.invalidateQueries({ queryKey: qk.tenantBranding() });
       toast.success('Branding saved');
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Failed'),

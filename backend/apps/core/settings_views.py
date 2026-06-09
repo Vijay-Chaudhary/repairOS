@@ -94,9 +94,7 @@ def _template_to_dict(tmpl_def: dict, override: NotificationTemplate | None) -> 
 
 class ShopDetailView(APIView):
     def get_permissions(self):
-        if self.request.method == "PATCH":
-            return [require_permission("settings.shop.manage")()]
-        return [require_permission("settings.shop.view")()]
+        return [require_permission("settings.shop.edit")()]
 
     def _get_shop(self, shop_id):
         try:
@@ -139,9 +137,7 @@ class ShopDetailView(APIView):
 
 class TenantSettingsView(APIView):
     def get_permissions(self):
-        if self.request.method == "PATCH":
-            return [require_permission("settings.tenant.manage")()]
-        return [require_permission("settings.tenant.view")()]
+        return [require_permission("settings.shop.edit")()]
 
     def get(self, request):
         ts = TenantSettings.get_or_create_singleton()
@@ -166,7 +162,7 @@ class TenantSettingsView(APIView):
 
 class WhatsAppConnectionView(APIView):
     def get_permissions(self):
-        return [require_permission("settings.whatsapp.manage")()]
+        return [require_permission("settings.notifications.manage")()]
 
     def get(self, request):
         wa = WhatsAppConnection.get_or_create_singleton()
@@ -175,7 +171,7 @@ class WhatsAppConnectionView(APIView):
 
 class WhatsAppConnectView(APIView):
     def get_permissions(self):
-        return [require_permission("settings.whatsapp.manage")()]
+        return [require_permission("settings.notifications.manage")()]
 
     def post(self, request):
         phone_number = request.data.get("phone_number", "").strip()
@@ -192,7 +188,7 @@ class WhatsAppConnectView(APIView):
 
 class WhatsAppDisconnectView(APIView):
     def get_permissions(self):
-        return [require_permission("settings.whatsapp.manage")()]
+        return [require_permission("settings.notifications.manage")()]
 
     def post(self, request):
         wa = WhatsAppConnection.get_or_create_singleton()
@@ -205,7 +201,7 @@ class WhatsAppDisconnectView(APIView):
 
 class NotificationTemplateListView(APIView):
     def get_permissions(self):
-        return [require_permission("settings.whatsapp.manage")()]
+        return [require_permission("settings.notifications.manage")()]
 
     def get(self, request):
         overrides = {
@@ -218,7 +214,7 @@ class NotificationTemplateListView(APIView):
 
 class NotificationTemplateDetailView(APIView):
     def get_permissions(self):
-        return [require_permission("settings.whatsapp.manage")()]
+        return [require_permission("settings.notifications.manage")()]
 
     def _get_tmpl_def(self, template_name: str):
         from .notifications import _TEMPLATE_MAP
