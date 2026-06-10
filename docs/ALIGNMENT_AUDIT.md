@@ -377,3 +377,15 @@ Three compounding issues make all 37 PDF/CSV exports permanently fail: (a) `requ
 | 8 | Stock deduction | 02, 03 | Inventory correctness: sales/repairs stop silently ignoring stock |
 | 9 | Money type alignment | 10, 11 | ₹ formatting in Reports and Finance |
 | 10 | OTP brute-force guard | 12 | Auth security: max-attempts enforcement on OTP verify |
+
+### UI: Raw UUID inputs replaced with StaffPicker typeahead — **DONE 3edbd74..acfd37a**
+
+Five locations that required users to type a raw UUID now use the shared `StaffPicker` combobox from `components/shared/StaffPicker.tsx`. Each queries a live endpoint, debounces at 350ms, and shows full name + role/email in the dropdown. Backend gained `?role=` filter on `GET /users/` (09d4ae6).
+
+| Location | File | Source | Commit |
+|---|---|---|---|
+| DefineStagesDialog technician | `app/(app)/jobs/[id]/page.tsx:662` | `/users/` | 1b30d61 |
+| New-job quick-assign tech (new field) | `app/(app)/jobs/new/page.tsx` | `/users/` | acfd37a |
+| Commissions generate-payout technician | `app/(app)/commissions/page.tsx:183` | `/users/` | f1d732d |
+| HR leave dialog employee | `app/(app)/hr/leave/page.tsx:160` | `/hr/employees/` | d763a82 |
+| CRM TaskComposer assignee | `components/crm/TaskComposer.tsx:140` | `/users/` | b30f21e |

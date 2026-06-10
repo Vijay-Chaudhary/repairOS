@@ -11,7 +11,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -25,6 +24,7 @@ import { CheckinForm } from '@/components/repair/CheckinForm';
 import { EstimateBuilder } from '@/components/repair/EstimateBuilder';
 import { StageWorkflow } from '@/components/repair/StageWorkflow';
 import { SparePartRequestSheet } from '@/components/repair/SparePartRequestSheet';
+import { StaffPicker } from '@/components/shared/StaffPicker';
 import { GenerateInvoiceDialog } from '@/components/billing/GenerateInvoiceDialog';
 import {
   repairApi, STATUS_TRANSITIONS, STAGE_LABELS,
@@ -659,11 +659,11 @@ function DefineStagesDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <Input
+              <StaffPicker
                 className="flex-1"
-                placeholder="Technician ID"
+                placeholder="Assign technician…"
                 value={row.assigned_technician_id}
-                onChange={(e) => updateRow(i, 'assigned_technician_id', e.target.value)}
+                onChange={(id) => updateRow(i, 'assigned_technician_id', id)}
               />
               {rows.length > 1 && (
                 <button

@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Stepper } from '@/components/shared/Stepper';
 import { MoneyInput } from '@/components/shared/MoneyInput';
+import { StaffPicker } from '@/components/shared/StaffPicker';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { CustomerSearch, type CustomerOption } from '@/components/repair/CustomerSearch';
 import { CheckinForm } from '@/components/repair/CheckinForm';
@@ -69,6 +70,7 @@ interface WizardData {
   location_lng: number | null;
   location_address: string;
   checkin: CheckinPayload | null;
+  quick_technician_id: string;
 }
 
 // ── Step schemas ───────────────────────────────────────────────────────────────
@@ -129,6 +131,7 @@ export default function NewJobPage() {
     template_id: null,
     is_field_job: false, location_lat: null, location_lng: null, location_address: '',
     checkin: null,
+    quick_technician_id: '',
   });
 
   // Fault templates for step 2
@@ -166,6 +169,7 @@ export default function NewJobPage() {
       });
       // The job now exists even if check-in fails below — don't strand the user
       // on the wizard with a dangling draft they can't get back to.
+      let checkinFailed = false;
       try {
         await repairApi.submitCheckin(job.id, {
           physical_condition: wizardData.checkin.physical_condition,
@@ -179,10 +183,19 @@ export default function NewJobPage() {
           photos: wizardData.checkin.photos,
           customer_signature_url: wizardData.checkin.customer_signature_url,
         });
-        return { job, checkinFailed: false };
       } catch {
-        return { job, checkinFailed: true };
+        checkinFailed = true;
       }
+      if (wizardData.quick_technician_id) {
+        try {
+          await repairApi.setStages(job.id, {
+            stages: [{ stage_order: 1, stage_type: 'diagnosis', assigned_technician_id: wizardData.quick_technician_id }],
+          });
+        } catch {
+          // Non-fatal — tech can be assigned from the job detail page
+        }
+      }
+      return { job, checkinFailed };
     },
     onSuccess: ({ job, checkinFailed }) => {
       if (checkinFailed) {
@@ -270,6 +283,8 @@ export default function NewJobPage() {
           onBack={() => setStep(3)}
           onSubmit={() => submitMutation.mutate()}
           isSubmitting={submitMutation.isPending}
+          quickTechId={wizardData.quick_technician_id}
+          onQuickTechIdChange={(id) => setWizardData((prev) => ({ ...prev, quick_technician_id: id }))}
         />
       )}
 
@@ -590,11 +605,14 @@ function LocationStep({
 
 function ReviewStep({
   data, onBack, onSubmit, isSubmitting,
+  quickTechId, onQuickTechIdChange,
 }: {
   data: WizardData;
   onBack: () => void;
   onSubmit: () => void;
   isSubmitting: boolean;
+  quickTechId: string;
+  onQuickTechIdChange: (id: string) => void;
 }) {
   const rows: Array<{ label: string; value: string }> = [
     { label: 'Customer', value: data.customer?.name ?? '—' },
@@ -627,6 +645,18 @@ function ReviewStep({
           </p>
         </div>
       )}
+
+      <div className="space-y-1.5">
+        <label className="text-body-sm font-medium text-[var(--text)] block">
+          Assign technician <span className="text-[var(--text-muted)] font-normal">(optional)</span>
+        </label>
+        <StaffPicker
+          placeholder="Pick technician now, or assign after…"
+          value={quickTechId}
+          onChange={onQuickTechIdChange}
+          disabled={isSubmitting}
+        />
+      </div>
 
       <div className="flex gap-3">
         <Button variant="outline" className="flex-1" onClick={onBack} disabled={isSubmitting}>

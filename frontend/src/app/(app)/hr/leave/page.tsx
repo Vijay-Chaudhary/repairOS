@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { StaffPicker } from '@/components/shared/StaffPicker';
 import { Can } from '@/components/shared/Can';
 import { hrApi, LEAVE_TYPE_LABELS, type LeaveStatus, type LeaveType } from '@/lib/api/hr';
 import { qk } from '@/lib/query/keys';
@@ -156,8 +157,13 @@ export default function LeavePage() {
           <DialogHeader><DialogTitle>New leave request</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="text-body-sm font-medium text-[var(--text)] block mb-1">Employee ID *</label>
-              <Input placeholder="Employee ID" value={empId} onChange={(e) => setEmpId(e.target.value)} />
+              <label className="text-body-sm font-medium text-[var(--text)] block mb-1">Employee *</label>
+              <StaffPicker
+                source="employees"
+                placeholder="Select employee…"
+                value={empId}
+                onChange={setEmpId}
+              />
             </div>
             <div>
               <label className="text-body-sm font-medium text-[var(--text)] block mb-1">Leave type</label>

@@ -14,6 +14,7 @@ import { crmApi, TASK_PRIORITY_LABELS, type TaskPriority } from '@/lib/api/crm';
 import { qk } from '@/lib/query/keys';
 import { ApiError } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/stores/authStore';
+import { StaffPicker } from '@/components/shared/StaffPicker';
 
 const schema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -136,8 +137,14 @@ export function TaskComposer({ open, onOpenChange, customerId, leadId, jobId }: 
 
             <FormField control={form.control} name="assigned_to" render={({ field }) => (
               <FormItem>
-                <FormLabel>Assigned to (user ID) *</FormLabel>
-                <FormControl><Input placeholder={user?.id ?? 'User ID…'} {...field} /></FormControl>
+                <FormLabel>Assigned to *</FormLabel>
+                <FormControl>
+                  <StaffPicker
+                    placeholder="Select assignee…"
+                    value={field.value}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )} />

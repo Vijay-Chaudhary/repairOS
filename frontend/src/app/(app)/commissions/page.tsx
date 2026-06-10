@@ -5,11 +5,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { TrendingUp, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { StaffPicker } from '@/components/shared/StaffPicker';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Money } from '@/components/shared/Money';
 import { Can } from '@/components/shared/Can';
@@ -179,11 +179,11 @@ export default function CommissionsPage() {
               <div className="rounded-lg border border-[var(--border)] p-4 space-y-3">
                 <h2 className="text-body-sm font-semibold text-[var(--text)]">Generate payout batch</h2>
                 <div className="flex gap-3 flex-wrap">
-                  <Input
-                    placeholder="Technician user ID"
+                  <StaffPicker
+                    placeholder="Select technician…"
                     className="flex-1 min-w-[200px]"
                     value={payoutTechId}
-                    onChange={(e) => setPayoutTechId(e.target.value)}
+                    onChange={setPayoutTechId}
                   />
                   <div className="flex gap-2">
                     <Select value={String(selectedMonth)} onValueChange={(v) => setSelectedMonth(Number(v))}>

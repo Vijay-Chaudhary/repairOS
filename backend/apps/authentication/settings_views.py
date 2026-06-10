@@ -109,6 +109,12 @@ class UserListCreateView(APIView):
         if is_active_param is not None:
             qs = qs.filter(is_active=is_active_param.lower() in ("true", "1", "yes"))
 
+        if role := request.query_params.get("role"):
+            qs = qs.filter(
+                user_roles__role__name__iexact=role,
+                user_roles__role__deleted_at__isnull=True,
+            ).distinct()
+
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(qs, request)
         data = TenantUserSerializer(page if page is not None else qs, many=True).data
