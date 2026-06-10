@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, SlidersHorizontal, ArrowRightLeft, WifiOff } from 'lucide-react';
+import { AlertTriangle, ArrowRightLeft, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Can } from '@/components/shared/Can';
 import { StockTable } from '@/components/inventory/StockTable';
 import { AdjustmentDialog } from '@/components/inventory/AdjustmentDialog';
+import { TransferDialog } from '@/components/inventory/TransferDialog';
 import { inventoryApi, type StockRecord } from '@/lib/api/inventory';
 import { qk } from '@/lib/query/keys';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
@@ -21,6 +22,7 @@ export default function InventoryPage() {
   const [search, setSearch] = useState('');
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [adjustRecord, setAdjustRecord] = useState<StockRecord | null>(null);
+  const [transferOpen, setTransferOpen] = useState(false);
 
   const debouncedSearch = useDebounce(search, 350);
 
@@ -52,6 +54,17 @@ export default function InventoryPage() {
             </p>
           )}
         </div>
+        <Can permission="erp.inventory.adjust">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!isOnline}
+            onClick={() => setTransferOpen(true)}
+          >
+            <ArrowRightLeft className="h-4 w-4 mr-1.5" />
+            Transfer
+          </Button>
+        </Can>
       </div>
 
       {/* Offline banner */}
@@ -90,6 +103,12 @@ export default function InventoryPage() {
         open={!!adjustRecord}
         onOpenChange={(v) => !v && setAdjustRecord(null)}
         record={adjustRecord}
+      />
+
+      {/* Transfer dialog */}
+      <TransferDialog
+        open={transferOpen}
+        onOpenChange={setTransferOpen}
       />
     </div>
   );
