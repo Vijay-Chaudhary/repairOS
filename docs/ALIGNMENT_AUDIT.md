@@ -335,9 +335,9 @@ Every `_send_whatsapp` / `_broadcast` / `_send_otp` / `_send_otp` function acros
 
 `CELERY_BEAT_SCHEDULE` in `config/settings/base.py` is empty. Affected tasks that silently never run: CRM `mark_overdue_tasks` + `send_task_daily_digest` (01), Repair `send_warranty_expiry_reminders` (02), POS `send_wholesale_payment_reminders` (03), AMC `mark_missed_visits` + `send_renewal_reminders` + `send_visit_reminders` + `process_auto_renewals` (04), Reports `run_export` (11). **Fix**: populate `CELERY_BEAT_SCHEDULE` with all defined tasks in one PR; the tasks already exist — they just need schedule entries. **DONE 45202c5** — `CELERY_BEAT_SCHEDULE` fully populated: CRM overdue @ 00:00, digest @ 08:00; Repair warranty reminders @ 06:00; POS payment reminders @ 06:30; AMC missed/renewal/visit/auto-renewal tasks; HR payroll reminders @ 09:00 daily (day-guard fires only on 25th). `run_export` is a triggered task (not periodic) — it belongs to Pattern 9. Tests added: 22 tests across `crm/tests/test_tasks.py`, `repair/tests/test_tasks.py`, `pos/tests/test_tasks.py`, `hr/tests/test_tasks.py` covering happy paths, opt-out guards, day guards, and filter correctness.
 
-### Pattern 3 — Pagination shape: flat `[]` vs expected `{items, meta}` (Modules 06, 09, 10, 11, 12)
+### Pattern 3 — Pagination shape: flat `[]` vs expected `{items, meta}` (Modules 06, 09, 10, 11, 12) — **DONE a428513**
 
-Every list view in HR (09) and Finance (10) returns a bare array. FE universally reads `data?.items ?? []` → always empty. Affected: HR employees, attendance, leave requests, salary slips; Finance petty cash transactions, expenses, budget heads, assets, budget allocations; Procurement suppliers (06); Reports export-job list (11); Settings roles/permissions (12). **Fix**: apply `CursorPagination` + `get_paginated_response({items, meta})` wrapper to all list views — one shared mixin, applied to each missing view.
+Every list view in HR (09) and Finance (10) returns a bare array. FE universally reads `data?.items ?? []` → always empty. Affected: HR employees, attendance, leave requests, salary slips; Finance petty cash transactions, expenses, budget heads, assets, budget allocations; Procurement suppliers (06); Reports export-job list (11); Settings roles/permissions (12). **Fix**: apply `CursorPagination` + `get_paginated_response({items, meta})` wrapper to all list views — one shared mixin, applied to each missing view. **DONE a428513** — All paginated endpoints (employees, leave requests, salary slips, petty cash, expenses, assets, procurement suppliers, export job list, users) use `RepairOSCursorPagination` and return `{items, meta}`. Views where FE types don't need `meta` (attendance, budget allocations, budget heads, roles, permissions) correctly return `{items}` only. Tests updated in `hr/tests/test_hr.py`: added list GET assertions for employees (`items`+`meta`), attendance (`items`), leave requests (`items`+`meta`), salary slips (`items`+`meta`).
 
 ### Pattern 4 — Shop isolation absent on detail/mutation views (Modules 01, 03, 04, 09, 10)
 
@@ -367,7 +367,7 @@ Three compounding issues make all 37 PDF/CSV exports permanently fail: (a) `requ
 
 | Priority | Pattern | Modules | Impact |
 |---|---|---|---|
-| 1 | Pagination wrapper (`{items, meta}`) | 06, 09, 10, 11, 12 | Unbreaks all HR, Finance, Procurement, Reports list tables |
+| 1 | Pagination wrapper (`{items, meta}`) | 06, 09, 10, 11, 12 | Unbreaks all HR, Finance, Procurement, Reports list tables | **DONE a428513** |
 | 2 | FK field `_id` / `_name` aliases in serializers | 01–05, 09, 10 | Unbreaks technician/employee/customer display across 7 modules |
 | 3 | Shop isolation on detail views | 01, 03, 04, 09, 10 | Security: closes cross-tenant UUID enumeration |
 | 4 | Settings backend (new app) | 12 | Unbreaks all user/role/shop/WA settings — required before first customer | **DONE 2ef123d** |

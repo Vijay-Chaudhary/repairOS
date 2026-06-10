@@ -191,6 +191,8 @@ class TestEmployeeCRUD:
     def test_list_employees(self, hr_client, employee):
         res = hr_client.get(self.url)
         assert res.status_code == status.HTTP_200_OK
+        assert "items" in res.data
+        assert "meta" in res.data
         assert len(res.data["items"]) >= 1
 
     def test_encryption_roundtrip(self, db, employee):
@@ -220,7 +222,15 @@ class TestEmployeeCRUD:
 
 
 class TestAttendance:
+    list_url = "/api/v1/hr/attendance/"
     url = "/api/v1/hr/attendance/bulk/"
+
+    def test_list_returns_items_shape(self, hr_client, employee):
+        # Attendance list returns {items} without meta — FE does not need cursor pagination here.
+        res = hr_client.get(self.list_url, {"month": "5", "year": "2026"})
+        assert res.status_code == status.HTTP_200_OK
+        assert "items" in res.data
+        assert isinstance(res.data["items"], list)
 
     def test_bulk_mark_attendance(self, hr_client, employee):
         res = hr_client.post(self.url, {
@@ -263,6 +273,12 @@ class TestAttendance:
 
 class TestLeaveRequests:
     create_url = "/api/v1/hr/leave-requests/"
+
+    def test_list_returns_items_and_meta(self, hr_client):
+        res = hr_client.get(self.create_url)
+        assert res.status_code == status.HTTP_200_OK
+        assert "items" in res.data
+        assert "meta" in res.data
 
     def test_submit_leave_request(self, hr_client, employee):
         res = hr_client.post(self.create_url, {
@@ -329,7 +345,14 @@ class TestLeaveRequests:
 
 
 class TestSalaryGeneration:
+    list_url = "/api/v1/hr/salary-slips/"
     url = "/api/v1/hr/salary-slips/generate/"
+
+    def test_list_returns_items_and_meta(self, hr_client):
+        res = hr_client.get(self.list_url)
+        assert res.status_code == status.HTTP_200_OK
+        assert "items" in res.data
+        assert "meta" in res.data
 
     def test_full_month_salary_equals_gross(self, hr_client, employee, shop, db):
         """All working days present → earned = gross (no proration)."""
