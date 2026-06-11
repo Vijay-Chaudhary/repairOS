@@ -164,9 +164,22 @@ CELERY_TIMEZONE = "Asia/Kolkata"
 # ──────────────────────────────────────────────────────────────────────────────
 WHATSAPP_PHONE_NUMBER_ID = env("WHATSAPP_PHONE_NUMBER_ID", default="")
 WHATSAPP_ACCESS_TOKEN = env("WHATSAPP_ACCESS_TOKEN", default="")
+SMS_GATEWAY_KEY = env("SMS_GATEWAY_KEY", default="")
+
+# ── Email ─────────────────────────────────────────────────────────────────────
+# Dev: overridden to console backend in local.py / e2e.py
+EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", default="")
+EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@repaiross.app")
 
 CELERY_TASK_ROUTES = {
     "core.dispatch_whatsapp_message": {"queue": "high"},
+    "core.dispatch_sms_fallback": {"queue": "high"},
+    "core.dispatch_email_message": {"queue": "high"},
     "*.tasks.send_whatsapp_*": {"queue": "high"},
     "*.tasks.generate_pdf_*": {"queue": "high"},
     "*.tasks.generate_report_*": {"queue": "low"},
@@ -213,6 +226,11 @@ CELERY_BEAT_SCHEDULE = {
     "hr-send-payroll-reminders": {
         "task": "hr.send_payroll_reminders",
         "schedule": crontab(hour=9, minute=0),
+    },
+    # Procurement
+    "procurement-send-bill-due-reminders": {
+        "task": "procurement.send_bill_due_reminders",
+        "schedule": crontab(hour=7, minute=0),
     },
 }
 

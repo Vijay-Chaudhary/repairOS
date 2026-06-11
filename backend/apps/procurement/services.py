@@ -273,7 +273,35 @@ def receive_grn(shop, po: PurchaseOrder, data: dict, user) -> GoodsReceiptNote:
         _refresh_po_status(po)
 
     logger.info("GRN %s created for PO %s", grn_number, po.po_number)
+    _notify_grn_received(po, grn)
     return grn
+
+
+def _notify_grn_received(po: PurchaseOrder, grn) -> None:
+    """Send spare_part_received WhatsApp to the PO creator when the GRN is created."""
+    from core.notifications import send_whatsapp
+
+    staff = po.created_by
+    if not getattr(staff, "phone", None):
+        return
+
+    items = list(po.items.select_related("variant__product").values_list(
+        "variant__product__name", "quantity_ordered"
+    )[:3])
+    part_names = ", ".join(f"{name} ×{qty}" for name, qty in items)
+    if po.items.count() > 3:
+        part_names += " …"
+
+    send_whatsapp(
+        phone=staff.phone,
+        template_name="spare_part_received",
+        variables={
+            "staff_name": staff.full_name,
+            "part_name": part_names,
+            "job_number": po.po_number,
+            "qty": str(grn.items.count()),
+        },
+    )
 
 
 def _refresh_po_status(po: PurchaseOrder) -> None:
@@ -498,7 +526,24 @@ def dispatch_purchase_return(ret: PurchaseReturn, user) -> PurchaseReturn:
 def _notify_po_sent(po: PurchaseOrder) -> None:
     if not po.supplier.email:
         return
-    logger.info(
-        "PO confirmation: supplier=%s po=%s delivery=%s",
-        po.supplier.name, po.po_number, po.expected_delivery_date,
+    from django.db.models import F, Sum
+    from core.notifications import send_email
+
+    delivery = str(po.expected_delivery_date) if po.expected_delivery_date else "TBD"
+    total = po.items.aggregate(t=Sum(F("quantity_ordered") * F("unit_price")))["t"] or 0
+
+    body = (
+        f"Dear {po.supplier.name},\n\n"
+        f"Please find below the details of Purchase Order {po.po_number}:\n\n"
+        f"  PO Number    : {po.po_number}\n"
+        f"  Delivery by  : {delivery}\n"
+        f"  Order value  : {total}\n\n"
+        f"Kindly confirm receipt and arrange delivery accordingly.\n\n"
+        f"Regards,\nRepairOS"
+    )
+    send_email(
+        to=po.supplier.email,
+        subject=f"Purchase Order {po.po_number}",
+        body=body,
+        template_name="po_confirmation_supplier",
     )
