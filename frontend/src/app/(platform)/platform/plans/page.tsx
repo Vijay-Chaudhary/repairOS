@@ -56,7 +56,7 @@ export default function PlansPage() {
       const features = Object.fromEntries(FEATURE_KEYS.map((k) => [k, enabledFeatures.has(k)]));
       return platformApi.createPlan({
         name: planName,
-        price_monthly_inr: parseFloat(price) || 0,
+        price_monthly_inr: price || '0.00',
         max_shops: maxShops ? parseInt(maxShops, 10) : null,
         max_users: maxUsers ? parseInt(maxUsers, 10) : null,
         max_products: null,

@@ -1,4 +1,4 @@
-import { apiGet, apiPost, type PageMeta } from './client';
+import { apiGet, apiPost, apiPatch, type PageMeta } from './client';
 
 export type DbStatus = 'provisioning' | 'active' | 'suspended' | 'deleted';
 export type SubStatus = 'active' | 'trialing' | 'past_due' | 'cancelled' | 'paused';
@@ -24,7 +24,27 @@ export interface SubscriptionPlan {
   max_products: number | null;
   max_jobs_per_month: number | null;
   features: Record<string, boolean>;
-  price_monthly_inr: number;
+  price_monthly_inr: string;
+}
+
+export interface TenantDetail {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  plan: string;
+  owner_email: string;
+  owner_phone: string;
+  created_at: string;
+  updated_at: string;
+  db_status: DbStatus;
+  subscription: {
+    id: string;
+    plan: SubscriptionPlan;
+    status: SubStatus;
+    current_period_start: string;
+    current_period_end: string;
+  } | null;
 }
 
 export const platformApi = {
@@ -35,7 +55,7 @@ export const platformApi = {
     ),
 
   getTenant: (id: string) =>
-    apiGet<Tenant>(`/platform/tenants/${id}/`),
+    apiGet<TenantDetail>(`/platform/tenants/${id}/`),
 
   suspendTenant: (id: string) =>
     apiPost<Tenant>(`/platform/tenants/${id}/suspend/`, {}),

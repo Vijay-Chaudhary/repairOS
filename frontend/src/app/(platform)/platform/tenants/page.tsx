@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Search, Loader2, RefreshCw } from 'lucide-react';
@@ -21,6 +22,7 @@ import { useDebounce } from '@/lib/hooks/useDebounce';
 import { cn } from '@/lib/utils';
 
 export default function TenantsPage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<DbStatus | 'all'>('all');
@@ -118,7 +120,11 @@ export default function TenantsPage() {
             </thead>
             <tbody>
               {tenants.map((tenant) => (
-                <tr key={tenant.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-2)]/50">
+                <tr
+                  key={tenant.id}
+                  className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-2)]/50 cursor-pointer"
+                  onClick={() => router.push(`/platform/tenants/${tenant.id}`)}
+                >
                   <td className="px-4 py-3">
                     <p className="font-medium text-[var(--text)]">{tenant.name}</p>
                     <p className="font-mono text-xs text-[var(--text-muted)]">{tenant.slug}</p>
@@ -151,7 +157,7 @@ export default function TenantsPage() {
                         size="sm"
                         variant="ghost"
                         className="h-7 text-xs text-[var(--danger)] hover:bg-[var(--danger)]/10 hover:text-[var(--danger)]"
-                        onClick={() => setSuspendTarget(tenant)}
+                        onClick={(e) => { e.stopPropagation(); setSuspendTarget(tenant); }}
                       >
                         Suspend
                       </Button>
