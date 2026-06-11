@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from authentication.models import AuditLog
 from core.models import DocumentCounter
+from core.notifications import send_whatsapp
 
 from .models import CreditNote, Sale, SaleItem, SalePayment, SalesReturn, SalesReturnItem
 
@@ -227,7 +228,7 @@ def approve_return(ret: SalesReturn, user) -> SalesReturn:
         if ret.sale.sale_type == Sale.SaleType.WHOLESALE and ret.sale.customer:
             _update_customer_outstanding(ret.sale.customer, -ret.total_refund_amount)
 
-    _send_whatsapp(
+    send_whatsapp(
         phone=ret.sale.customer.phone if ret.sale.customer else None,
         template_name="credit_note_issued",
         variables={
@@ -485,6 +486,3 @@ def _broadcast(shop_id, event_type: str, payload: dict) -> None:
     logger.debug("WS broadcast shop=%s event=%s", shop_id, event_type)
 
 
-def _send_whatsapp(phone, template_name: str, variables: dict, customer=None) -> None:
-    from core.notifications import send_whatsapp
-    send_whatsapp(phone=phone, template_name=template_name, variables=variables, customer=customer)

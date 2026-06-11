@@ -18,6 +18,7 @@ from django.db import transaction
 from django.db.models import F
 
 from authentication.models import AuditLog
+from core.notifications import send_whatsapp
 
 from .models import (
     InventoryStock,
@@ -297,7 +298,7 @@ def _emit_low_stock_alert(shop, variant, current_qty, reorder_level) -> None:
         "Low stock: %s @ %s — qty=%s reorder=%s",
         variant, shop.code, current_qty, reorder_level,
     )
-    _send_whatsapp(
+    send_whatsapp(
         phone=shop.phone,
         template_name="low_stock_alert",
         variables={
@@ -307,8 +308,3 @@ def _emit_low_stock_alert(shop, variant, current_qty, reorder_level) -> None:
             "reorder_level": str(reorder_level),
         },
     )
-
-
-def _send_whatsapp(phone, template_name, variables) -> None:
-    from core.notifications import send_whatsapp
-    send_whatsapp(phone=phone, template_name=template_name, variables=variables)

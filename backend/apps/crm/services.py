@@ -9,6 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from authentication.models import AuditLog
+from core.notifications import send_whatsapp
 
 from .models import (
     CommunicationLog,
@@ -151,15 +152,6 @@ def send_quote(lead: Lead, data: dict, user) -> LeadQuote:
         )
 
     # Send WhatsApp (outside atomic so a notification failure doesn't roll back)
-    _send_whatsapp_quote(lead, quote)
-    quote.sent_via_whatsapp = True
-    quote.save(update_fields=["sent_via_whatsapp"])
-
-    return quote
-
-
-def _send_whatsapp_quote(lead: Lead, quote: LeadQuote) -> None:
-    from core.notifications import send_whatsapp
     try:
         send_whatsapp(
             phone=lead.phone,
@@ -173,6 +165,10 @@ def _send_whatsapp_quote(lead: Lead, quote: LeadQuote) -> None:
         )
     except Exception:
         logger.warning("WhatsApp notification failed for quote %s", quote.quote_number)
+    quote.sent_via_whatsapp = True
+    quote.save(update_fields=["sent_via_whatsapp"])
+
+    return quote
 
 
 def convert_lead(lead: Lead, user) -> Customer:

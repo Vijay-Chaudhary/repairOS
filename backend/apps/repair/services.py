@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from authentication.models import AuditLog
 from core.models import DocumentCounter
+from core.notifications import send_whatsapp
 
 from .models import (
     FaultTemplate,
@@ -328,7 +329,7 @@ def _transition_estimate_sent(job: JobTicket, estimate: JobEstimate, user) -> No
         job.save(update_fields=["status", "updated_at"])
 
     approval_link = f"https://app.repaiross.app/e/{estimate.id}"
-    _send_whatsapp(
+    send_whatsapp(
         phone=job.customer.phone,
         template_name="repair_estimate",
         variables={
@@ -364,7 +365,7 @@ def respond_to_estimate(estimate: JobEstimate, response: str, method: str, user)
         # Notify assigned technician
         first_stage = job.stages.filter(stage_order=1).first()
         if first_stage:
-            _send_whatsapp(
+            send_whatsapp(
                 phone=first_stage.assigned_technician.phone,
                 template_name="estimate_approved_staff",
                 variables={
@@ -457,7 +458,7 @@ def advance_stage(stage: JobStage, action: str, notes: str, user) -> JobStage:
                 next_stage.started_at = timezone.now()
                 next_stage.save(update_fields=["status", "started_at", "updated_at"])
 
-                _send_whatsapp(
+                send_whatsapp(
                     phone=next_stage.assigned_technician.phone,
                     template_name="stage_handoff",
                     variables={
@@ -554,7 +555,7 @@ def review_spare_part(req: JobSparePartRequest, status: str, reviewer, po_id=Non
     req.save(update_fields=["status", "reviewed_by", "po_id", "updated_at"])
 
     if status == JobSparePartRequest.RequestStatus.RECEIVED:
-        _send_whatsapp(
+        send_whatsapp(
             phone=req.requested_by.phone,
             template_name="spare_part_received",
             variables={
@@ -664,10 +665,6 @@ def _broadcast(shop_id, event_type: str, payload: dict) -> None:
     logger.debug("WS broadcast shop=%s event=%s payload=%s", shop_id, event_type, payload)
 
 
-def _send_whatsapp(phone: str, template_name: str, variables: dict, customer=None) -> None:
-    from core.notifications import send_whatsapp
-    send_whatsapp(phone=phone, template_name=template_name, variables=variables, customer=customer)
-
 
 def _send_shop_notification(shop_id, template_name: str, variables: dict) -> None:
     logger.debug("Shop notification shop=%s template=%s", shop_id, template_name)
@@ -693,7 +690,7 @@ def _send_status_notification(job: JobTicket, to_status: str, reason: str = "") 
         "hold_reason": reason,
         "shop_address": job.shop.address,
     }
-    _send_whatsapp(phone=job.customer.phone, template_name=template_name,
+    send_whatsapp(phone=job.customer.phone, template_name=template_name,
                    variables=variables, customer=job.customer)
 
 
