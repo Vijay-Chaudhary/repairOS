@@ -391,10 +391,9 @@ class FaultTemplateViewSet(ShopScopedMixin, GenericViewSet):
         serializer = FaultTemplateSerializer(template, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         vd = serializer.validated_data
-        vd.pop("parts", None)  # Nested parts managed via separate endpoint
-        for attr, value in vd.items():
-            setattr(template, attr, value)
-        template.save()
+        # parts_data is None when "parts" key absent (don't touch existing parts)
+        parts_data = vd.pop("parts", None)
+        template = services.update_fault_template(template, vd, parts_data, request.user)
         return Response(FaultTemplateSerializer(template).data)
 
     def destroy(self, request, pk=None):

@@ -2,11 +2,11 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Plus, Pencil, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Pencil, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -21,6 +21,11 @@ import { useActiveShopStore } from '@/lib/stores/activeShopStore';
 import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 
+const partSchema = z.object({
+  custom_part_name: z.string().min(1, 'Part name required'),
+  quantity: z.number().int().min(1, 'Min 1'),
+});
+
 const templateSchema = z.object({
   name: z.string().min(2, 'Name is required'),
   device_type: z.string().min(1, 'Device type is required'),
@@ -28,6 +33,7 @@ const templateSchema = z.object({
   problem_description: z.string().min(10, 'At least 10 characters'),
   default_sc: z.number().min(0),
   estimated_duration_hours: z.number().min(0).optional(),
+  parts: z.array(partSchema),
 });
 
 type TemplateFormValues = z.infer<typeof templateSchema>;
@@ -80,6 +86,15 @@ export default function FaultTemplatesPage() {
       key: 'sc',
       header: 'Default S/C',
       cell: (t) => <Money amount={t.default_sc} className="text-body-sm" />,
+    },
+    {
+      key: 'parts',
+      header: 'Parts',
+      cell: (t) => (
+        <span className="text-body-sm text-[var(--text-muted)]">
+          {t.parts.length > 0 ? `${t.parts.length} part${t.parts.length !== 1 ? 's' : ''}` : '—'}
+        </span>
+      ),
     },
     {
       key: 'duration',
@@ -201,13 +216,17 @@ function TemplateDialog({
           problem_description: editing.problem_description,
           default_sc: editing.default_sc,
           estimated_duration_hours: editing.estimated_duration_hours ?? undefined,
+          parts: editing.parts.map((p) => ({ custom_part_name: p.custom_part_name, quantity: p.quantity })),
         }
       : {
           name: '', device_type: '', device_brand: '',
           problem_description: '', default_sc: 0,
           estimated_duration_hours: undefined,
+          parts: [],
         },
   });
+
+  const { fields, append, remove } = useFieldArray({ control: form.control, name: 'parts' });
 
   // Reset form when editing target changes
   const currentEditId = editing?.id ?? null;
@@ -219,11 +238,13 @@ function TemplateDialog({
       problem_description: editing!.problem_description,
       default_sc: editing!.default_sc,
       estimated_duration_hours: editing!.estimated_duration_hours ?? undefined,
+      parts: editing!.parts.map((p) => ({ custom_part_name: p.custom_part_name, quantity: p.quantity })),
     });
   }
 
   const saveMutation = useMutation({
     mutationFn: (values: TemplateFormValues) => {
+      const parts = values.parts.filter((p) => p.custom_part_name.trim());
       const body = {
         name: values.name,
         device_type: values.device_type,
@@ -231,6 +252,7 @@ function TemplateDialog({
         problem_description: values.problem_description,
         default_sc: values.default_sc,
         estimated_duration_hours: values.estimated_duration_hours,
+        parts,
       };
       return editing
         ? repairApi.updateTemplate(editing.id, body)
@@ -316,6 +338,70 @@ function TemplateDialog({
                   </FormControl>
                 </FormItem>
               )} />
+            </div>
+
+            {/* Default parts */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-body-sm font-medium text-[var(--text)]">Default parts</p>
+                <button
+                  type="button"
+                  onClick={() => append({ custom_part_name: '', quantity: 1 })}
+                  className="flex items-center gap-1 text-xs text-[var(--accent)] hover:underline"
+                >
+                  <Plus className="h-3 w-3" /> Add part
+                </button>
+              </div>
+              {fields.length === 0 ? (
+                <p className="text-xs text-[var(--text-muted)] py-2">
+                  No default parts. Click &ldquo;Add part&rdquo; to define parts that will be auto-requested on job creation.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {fields.map((field, index) => (
+                    <div key={field.id} className="flex items-start gap-2">
+                      <FormField
+                        control={form.control}
+                        name={`parts.${index}.custom_part_name`}
+                        render={({ field: f }) => (
+                          <FormItem className="flex-1">
+                            <FormControl>
+                              <Input placeholder="Part name" {...f} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`parts.${index}.quantity`}
+                        render={({ field: f }) => (
+                          <FormItem className="w-20">
+                            <FormControl>
+                              <Input
+                                type="number"
+                                inputMode="numeric"
+                                min={1}
+                                placeholder="Qty"
+                                value={f.value}
+                                onChange={(e) => f.onChange(parseInt(e.target.value, 10) || 1)}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => remove(index)}
+                        className="mt-2 p-1 text-[var(--danger)] hover:bg-[var(--danger)]/10 rounded"
+                        aria-label="Remove part"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3 pt-1">

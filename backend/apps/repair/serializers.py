@@ -44,7 +44,6 @@ class FaultTemplateSerializer(serializers.ModelSerializer):
             "is_active", "parts", "created_at",
         ]
         read_only_fields = ["id", "created_at"]
-        extra_kwargs = {"parts": {"read_only": True}}
 
 
 # ──────────────────────────────────────────────────────────────────────────────

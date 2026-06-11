@@ -109,6 +109,16 @@ def create_job(shop, customer, data: dict, user) -> JobTicket:
         **data,
     )
 
+    if template:
+        for part in template.parts.all():
+            JobSparePartRequest.objects.create(
+                job=job,
+                requested_by=user,
+                variant_id=part.variant_id,
+                custom_part_name=part.custom_part_name,
+                quantity=part.quantity,
+            )
+
     _write_audit(user, AuditLog.Action.CREATE, "JobTicket", job.id, new_value={"job_number": job_number})
 
     # Broadcast to shop channel
@@ -607,6 +617,26 @@ def create_fault_template(shop, data: dict, parts_data: list, user) -> FaultTemp
         for part in parts_data:
             FaultTemplatePart.objects.create(template=template, **part)
     _write_audit(user, AuditLog.Action.CREATE, "FaultTemplate", template.id)
+    return template
+
+
+def update_fault_template(
+    template: FaultTemplate, data: dict, parts_data: "list | None", user
+) -> FaultTemplate:
+    """
+    Update template fields. When parts_data is not None (i.e. 'parts' key was
+    sent in the request), replace all FaultTemplatePart rows atomically.
+    parts_data=[] clears parts without adding new ones.
+    """
+    with transaction.atomic():
+        for attr, value in data.items():
+            setattr(template, attr, value)
+        template.save()
+        if parts_data is not None:
+            template.parts.all().delete()
+            for part in parts_data:
+                FaultTemplatePart.objects.create(template=template, **part)
+    _write_audit(user, AuditLog.Action.UPDATE, "FaultTemplate", template.id)
     return template
 
 

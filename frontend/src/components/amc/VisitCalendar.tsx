@@ -60,9 +60,8 @@ export function VisitCalendar({ shopId }: Props) {
     staleTime: 60_000,
   });
 
-  const contracts = data?.items ?? [];
-
   const visitsByDay = useMemo<Map<string, VisitPill[]>>(() => {
+    const contracts = data?.items ?? [];
     const map = new Map<string, VisitPill[]>();
     for (const c of contracts) {
       if (!c.next_visit_date) continue;
@@ -71,7 +70,7 @@ export function VisitCalendar({ shopId }: Props) {
       map.get(ymd)!.push({ contractId: c.id, title: c.title, status: c.status });
     }
     return map;
-  }, [contracts]);
+  }, [data]);
 
   const days = useMemo(() => buildCalendarDays(year, month), [year, month]);
   const todayYMD = toYMD(today);

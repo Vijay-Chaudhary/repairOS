@@ -114,6 +114,13 @@ export interface JobDetail extends JobListItem {
   spare_part_requests: SparePartRequest[];
 }
 
+export interface FaultTemplatePart {
+  id: string;
+  variant_id?: string | null;
+  custom_part_name: string;
+  quantity: number;
+}
+
 export interface FaultTemplate {
   id: string;
   shop_id: string;
@@ -124,6 +131,7 @@ export interface FaultTemplate {
   default_sc: number;
   estimated_duration_hours?: number | null;
   is_active: boolean;
+  parts: FaultTemplatePart[];
 }
 
 // ── API functions ─────────────────────────────────────────────────────────────
@@ -244,6 +252,7 @@ export const repairApi = {
     problem_description: string;
     default_sc: number;
     estimated_duration_hours?: number;
+    parts?: Array<{ custom_part_name: string; quantity: number }>;
   }) => apiPost<FaultTemplate>('/repair/fault-templates/', body),
 
   updateTemplate: (id: string, body: Partial<{
@@ -254,6 +263,7 @@ export const repairApi = {
     default_sc: number;
     estimated_duration_hours: number;
     is_active: boolean;
+    parts: Array<{ custom_part_name: string; quantity: number }>;
   }>) => apiPatch<FaultTemplate>(`/repair/fault-templates/${id}/`, body),
 
   deleteTemplate: (id: string) =>
