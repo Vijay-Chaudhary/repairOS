@@ -217,6 +217,63 @@ class TestRegistration:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# TestRegistrationStatus
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestRegistrationStatus:
+    url = "/api/v1/register/status/"
+
+    def test_provisioning_tenant_returns_provisioning(self, db, starter_plan):
+        from rest_framework.test import APIClient
+        from master.models import Tenant
+        tenant = Tenant.objects.create(
+            name="Prov Status", slug="provstatus",
+            status=Tenant.Status.PROVISIONING,
+            owner_email="o@provstatus.com", owner_phone="+919000000200",
+        )
+        res = APIClient().get(self.url, {"slug": tenant.slug})
+        assert res.status_code == 200
+        assert res.data["status"] == "provisioning"
+
+    def test_active_tenant_returns_active(self, db, active_tenant):
+        from rest_framework.test import APIClient
+        res = APIClient().get(self.url, {"slug": active_tenant.slug})
+        assert res.status_code == 200
+        assert res.data["status"] == "active"
+
+    def test_failed_tenant_returns_failed(self, db):
+        from rest_framework.test import APIClient
+        from master.models import Tenant
+        tenant = Tenant.objects.create(
+            name="Failed Tenant", slug="failedtenant",
+            status=Tenant.Status.PROVISIONING_FAILED,
+            owner_email="o@failed.com", owner_phone="+919000000201",
+        )
+        res = APIClient().get(self.url, {"slug": tenant.slug})
+        assert res.status_code == 200
+        assert res.data["status"] == "failed"
+
+    def test_unknown_slug_returns_404(self, db):
+        from rest_framework.test import APIClient
+        res = APIClient().get(self.url, {"slug": "doesnotexist"})
+        assert res.status_code == 404
+
+    def test_missing_slug_returns_400(self, db):
+        from rest_framework.test import APIClient
+        res = APIClient().get(self.url)
+        assert res.status_code == 400
+
+    def test_endpoint_is_public(self, db, active_tenant):
+        """No auth header required."""
+        from rest_framework.test import APIClient
+        client = APIClient()
+        # deliberately no credentials set
+        res = client.get(self.url, {"slug": active_tenant.slug})
+        assert res.status_code == 200
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # TestProvisioning
 # ──────────────────────────────────────────────────────────────────────────────
 

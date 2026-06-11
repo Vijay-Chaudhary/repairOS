@@ -74,6 +74,30 @@ class RegisterView(APIView):
         )
 
 
+class RegistrationStatusView(APIView):
+    """Poll provisioning progress after a successful POST /register/."""
+
+    permission_classes = [AllowAny]
+
+    _STATUS_MAP = {
+        Tenant.Status.ACTIVE: "active",
+        Tenant.Status.PROVISIONING_FAILED: "failed",
+    }
+
+    def get(self, request: Request) -> Response:
+        slug = request.query_params.get("slug", "").strip().lower()
+        if not slug:
+            return Response({"detail": "slug is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            tenant = Tenant.objects.using("default").get(slug=slug)
+        except Tenant.DoesNotExist:
+            return Response({"detail": "Tenant not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        provision_status = self._STATUS_MAP.get(tenant.status, "provisioning")
+        return Response({"slug": tenant.slug, "status": provision_status})
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Platform admin: tenant management
 # ──────────────────────────────────────────────────────────────────────────────
