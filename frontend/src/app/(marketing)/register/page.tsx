@@ -12,7 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 
 const schema = z.object({
   business_name: z.string().min(2, 'Required'),
-  slug: z.string().min(3).regex(/^[a-z0-9-]+$/, 'Lowercase letters, numbers, hyphens only'),
+  slug: z.string().min(3, 'Min 3 characters').max(50, 'Max 50 characters').regex(/^[a-z0-9_]{3,50}$/, 'Lowercase letters, numbers, underscores only'),
   owner_name: z.string().min(2, 'Required'),
   phone: z.string().regex(/^\+91[0-9]{10}$/, 'Enter valid Indian mobile number'),
   email: z.string().email('Invalid email'),
@@ -135,7 +135,7 @@ export default function RegisterPage() {
             <FormField control={form.control} name="slug" render={({ field }) => (
               <FormItem>
                 <FormLabel>Workspace URL</FormLabel>
-                <FormControl><Input placeholder="sunrise-repairs" {...field} /></FormControl>
+                <FormControl><Input placeholder="sunrise_repairs" {...field} /></FormControl>
                 <FormMessage />
               </FormItem>
             )} />
