@@ -361,42 +361,42 @@ Every `_send_whatsapp` / `_broadcast` / `_send_otp` / `_send_otp` function acros
 
 Every list view in HR (09) and Finance (10) returns a bare array. FE universally reads `data?.items ?? []` → always empty. Affected: HR employees, attendance, leave requests, salary slips; Finance petty cash transactions, expenses, budget heads, assets, budget allocations; Procurement suppliers (06); Reports export-job list (11); Settings roles/permissions (12). **Fix**: apply `CursorPagination` + `get_paginated_response({items, meta})` wrapper to all list views — one shared mixin, applied to each missing view. **DONE a428513** — All paginated endpoints (employees, leave requests, salary slips, petty cash, expenses, assets, procurement suppliers, export job list, users) use `RepairOSCursorPagination` and return `{items, meta}`. Views where FE types don't need `meta` (attendance, budget allocations, budget heads, roles, permissions) correctly return `{items}` only. Tests updated in `hr/tests/test_hr.py`: added list GET assertions for employees (`items`+`meta`), attendance (`items`), leave requests (`items`+`meta`), salary slips (`items`+`meta`).
 
-### Pattern 4 — Shop isolation absent on detail/mutation views (Modules 01, 03, 04, 09, 10)
+### Pattern 4 — Shop isolation absent on detail/mutation views (Modules 01, 03, 04, 09, 10) — **DONE 227a2fd**
 
-List views filter by `shop_ids__in`; `get_object()` resolves from the unfiltered queryset. Any user with a valid permission can read or modify any record from any shop or tenant by guessing a UUID. Confirmed: AMC `AMCVisitViewSet` (04), POS `SalesReturnViewSet` (03), HR detail views (09), Finance expense/asset detail views (10). **Fix**: add `.filter(shop__in=shop_ids)` (or equivalent via `select_related`) inside `get_queryset` for all `APIView`-based detail views, not just list views.
+List views filter by `shop_ids__in`; `get_object()` resolves from the unfiltered queryset. Any user with a valid permission can read or modify any record from any shop or tenant by guessing a UUID. Confirmed: AMC `AMCVisitViewSet` (04), POS `SalesReturnViewSet` (03), HR detail views (09), Finance expense/asset detail views (10). **Fix**: add `.filter(shop__in=shop_ids)` (or equivalent via `select_related`) inside `get_queryset` for all `APIView`-based detail views, not just list views. **DONE 227a2fd** — `AMCVisitViewSet.get_queryset` filters `contract__shop_id__in=shop_ids`; `SalesReturnViewSet.get_queryset` filters `sale__shop_id__in=shop_ids`; `EmployeeDetailView`, `LeaveRequestDetailView`, `SalarySlipDetailView` scoped to `employee__shop_id__in`; `AssetDetailView` and `PettyCashAccountView` scoped to shop. 15 isolation tests in `bbc8f9f`.
 
-### Pattern 5 — FK field naming: DRF emits `shop` / `employee` / `assigned_technician`, FE expects `_id` suffix (Modules 01, 02, 04, 09, 10)
+### Pattern 5 — FK field naming: DRF emits `shop` / `employee` / `assigned_technician`, FE expects `_id` suffix (Modules 01, 02, 04, 09, 10) — **DONE 2975383**
 
-DRF default `PrimaryKeyRelatedField` serializes as the bare field name; every module's FE interface appends `_id`. Silent `undefined` results on: `shop_id` (HR, Finance), `employee_id` + `employee_name` (HR leave/slip), `assigned_technician_id` + `_name` (AMC, Repair), `customer_id` (CRM, POS), `head_id` (Finance budget). **Fix**: systematic pass over all serializers — add explicit `UUIDField(source='x_id', read_only=True)` aliases and `CharField(source='x.name', read_only=True)` SerializerMethodFields wherever FE expects them.
+DRF default `PrimaryKeyRelatedField` serializes as the bare field name; every module's FE interface appends `_id`. Silent `undefined` results on: `shop_id` (HR, Finance), `employee_id` + `employee_name` (HR leave/slip), `assigned_technician_id` + `_name` (AMC, Repair), `customer_id` (CRM, POS), `head_id` (Finance budget). **Fix**: systematic pass over all serializers — add explicit `UUIDField(source='x_id', read_only=True)` aliases and `CharField(source='x.name', read_only=True)` SerializerMethodFields wherever FE expects them. **DONE 2975383** — all `_id`/`_name` aliases added across CRM, AMC, HR, Finance, Repair serializers. Tests in `08349a8` verify aliases present and bare FK keys absent.
 
 ### Pattern 6 — Settings backend entirely missing (Module 12) — **DONE 2ef123d**
 
 18 endpoints called by `settingsApi` return 404 (`/users/`, `/roles/`, `/permissions/`, `/whatsapp/*`, `/notifications/templates/*`, `/shops/<id>/`, `/tenants/me/`). No settings page works. **Fix**: implement a `settings` Django app with views, serializers, and URL registration — this is a full module build, not a patch. **DONE 2ef123d** — implemented across `authentication/settings_views.py` + `core/settings_views.py` (split across existing apps rather than a new app). All 18 endpoints now registered in `config/urls.py`: users list/invite/update/force-logout, roles CRUD (system roles protected), permissions list, TenantSettings singleton branding (`/tenants/me/`), WhatsApp connection/connect/disconnect, notification templates list+patch, shop detail+update. New models: `TenantSettings`, `WhatsAppConnection`, `NotificationTemplate` (migration `core/0005`).
 
-### Pattern 7 — Stock deduction stubs: inventory never decremented (Modules 02, 03)
+### Pattern 7 — Stock deduction stubs: inventory never decremented (Modules 02, 03) — **DONE 8e8a485**
 
-`_deduct_stock` in POS (03) and `repair_out` movements in Repair (02 `_on_close`) are debug-log stubs or simply absent. Every completed sale and every closed repair job with received spare parts leaves inventory unchanged. **Fix**: implement `StockMovement` writes (`sale_out`, `repair_out`, `return_in`) inside the respective service atomic transactions.
+`_deduct_stock` in POS (03) and `repair_out` movements in Repair (02 `_on_close`) are debug-log stubs or simply absent. Every completed sale and every closed repair job with received spare parts leaves inventory unchanged. **Fix**: implement `StockMovement` writes (`sale_out`, `repair_out`, `return_in`) inside the respective service atomic transactions. **DONE 8e8a485** — `record_sale_out`, `record_repair_out`, and `record_return_in` implemented in `inventory/services.py`; `_deduct_stock()` + `_restock_items()` wired in `pos/services.py`; `_on_close()` writes `repair_out` movements for all `RECEIVED` spare-part requests in `repair/services.py`. All within atomic transactions. Tests in `test_repair.py` cover the `_on_close` stock path.
 
 ### Pattern 8 — Money type mismatch: Decimal strings returned, FE types as `number` (Modules 10, 11)
 
 All Finance and Reports services return Decimal amounts as strings via `_d()` (e.g. `"1234.56"`). FE types them as `number`. `money()` formatting skips strings → amounts render without ₹ symbol. Dashboard KPI cards may show `₹NaN` if `money()` doesn't coerce. **Fix**: either return `float(val)` from all service functions, or change all FE money types to `string` and update `money(parseFloat(val))` at render points.
 
-### Pattern 9 — Reports export pipeline broken end-to-end (Module 11)
+### Pattern 9 — Reports export pipeline broken end-to-end (Module 11) — **DONE 5a7fe73**
 
-Three compounding issues make all 37 PDF/CSV exports permanently fail: (a) `requestExport` calls the wrong URL (path suffix instead of query param); (b) the Celery export task is commented out so every job stays `QUEUED` forever; (c) `pollExportJob` calls a detail endpoint that doesn't exist (404). **Fix**: fix the URL, uncomment + implement `run_export`, add the export-job detail route — all three are required together for any export to work.
+Three compounding issues make all 37 PDF/CSV exports permanently fail: (a) `requestExport` calls the wrong URL (path suffix instead of query param); (b) the Celery export task is commented out so every job stays `QUEUED` forever; (c) `pollExportJob` calls a detail endpoint that doesn't exist (404). **Fix**: fix the URL, uncomment + implement `run_export`, add the export-job detail route — all three are required together for any export to work. **DONE 5a7fe73** — FE `requestExport` URL fixed to `?export=` query param; `run_export` fully implemented with CSV + PDF branches; `ExportJobDetailView` + URL route added for polling. 5 FE report-slug aliases added (outstanding-dues-repair, pl-summary, gstr-1, gstr-2, supplier-payable). Full 3-stage pipeline tested in `92c8670`.
 
 ### Recommended fix order (maximum user-visible impact per sprint)
 
 | Priority | Pattern | Modules | Impact |
 |---|---|---|---|
 | 1 | Pagination wrapper (`{items, meta}`) | 06, 09, 10, 11, 12 | Unbreaks all HR, Finance, Procurement, Reports list tables | **DONE a428513** |
-| 2 | FK field `_id` / `_name` aliases in serializers | 01–05, 09, 10 | Unbreaks technician/employee/customer display across 7 modules |
-| 3 | Shop isolation on detail views | 01, 03, 04, 09, 10 | Security: closes cross-tenant UUID enumeration |
+| 2 | FK field `_id` / `_name` aliases in serializers | 01–05, 09, 10 | Unbreaks technician/employee/customer display across 7 modules | **DONE 2975383** |
+| 3 | Shop isolation on detail views | 01, 03, 04, 09, 10 | Security: closes cross-tenant UUID enumeration | **DONE 227a2fd** |
 | 4 | Settings backend (new app) | 12 | Unbreaks all user/role/shop/WA settings — required before first customer | **DONE 2ef123d** |
 | 5 | Celery beat schedule | 01, 02, 03, 04, 11 | Enables all scheduled work: overdue tasks, reminders, auto-renewals, exports | **DONE 45202c5** |
-| 6 | Reports export pipeline (3-part fix) | 11 | Unbreaks all 37 PDF/CSV exports |
+| 6 | Reports export pipeline (3-part fix) | 11 | Unbreaks all 37 PDF/CSV exports | **DONE 5a7fe73** |
 | 7 | WhatsApp shared service | All | Enables all 31 notification templates | **DONE 2ef123d** |
-| 8 | Stock deduction | 02, 03 | Inventory correctness: sales/repairs stop silently ignoring stock |
+| 8 | Stock deduction | 02, 03 | Inventory correctness: sales/repairs stop silently ignoring stock | **DONE 8e8a485** |
 | 9 | Money type alignment | 10, 11 | ₹ formatting in Reports and Finance |
 | 10 | OTP brute-force guard | 12 | Auth security: max-attempts enforcement on OTP verify |
 
