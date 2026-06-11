@@ -53,10 +53,11 @@ export const qk = {
   categories:    () => ['categories'] as const,
 
   // Procurement
-  purchaseOrders: listKey('purchase-orders'),
-  purchaseOrder:  (id: string) => ['purchase-order', id] as const,
-  suppliers:      listKey('suppliers'),
-  supplier:       (id: string) => ['supplier', id] as const,
+  purchaseOrders:  listKey('purchase-orders'),
+  purchaseOrder:   (id: string) => ['purchase-order', id] as const,
+  suppliers:       listKey('suppliers'),
+  supplier:        (id: string) => ['supplier', id] as const,
+  purchaseReturns: (invoiceId: string) => ['purchase-returns', invoiceId] as const,
 
   // Billing
   invoices: listKey('invoices'),
