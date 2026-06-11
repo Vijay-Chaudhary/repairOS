@@ -101,6 +101,27 @@ export interface PurchasePayment {
   recorded_by_name?: string | null;
 }
 
+export interface PurchaseReturnItem {
+  id: string;
+  variant: string;
+  variant_name: string;
+  quantity: string;
+  unit_cost: string;
+  line_total: string;
+}
+
+export interface PurchaseReturn {
+  id: string;
+  purchase_invoice: string;
+  return_number: string;
+  reason: string;
+  status: ReturnStatus;
+  total_amount: string;
+  items: PurchaseReturnItem[];
+  debit_note_number: string | null;
+  created_at: string;
+}
+
 export interface SupplierLedgerEntry {
   id: string;
   type: 'invoice' | 'payment';
@@ -210,6 +231,19 @@ export const procurementApi = {
     reference_id?: string;
     paid_at?: string;
   }) => apiPost<PurchasePayment>('/procurement/purchase-payments/', body),
+
+  // Purchase Returns
+  listReturns: (invoiceId: string) =>
+    apiGet<PurchaseReturn[]>('/procurement/purchase-returns/', { invoice_id: invoiceId }),
+
+  createReturn: (body: {
+    purchase_invoice_id: string;
+    reason: string;
+    items: Array<{ variant_id: string; quantity: string; unit_cost: string }>;
+  }) => apiPost<PurchaseReturn>('/procurement/purchase-returns/', body),
+
+  dispatchReturn: (returnId: string) =>
+    apiPatch<PurchaseReturn>(`/procurement/purchase-returns/${returnId}/dispatch/`, {}),
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
