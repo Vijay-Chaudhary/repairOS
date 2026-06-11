@@ -4,7 +4,10 @@ Tests for core notification pipeline.
 Covers:
 - send_whatsapp(): opt-out, empty phone, Celery dispatch
 - dispatch_whatsapp_message task: no-config skip, is_active flag,
-  correct API payload, retry on HTTP error
+  correct API payload, retry on HTTP error, NotificationLog written,
+  SMS fallback queued after exhaustion
+- send_email(): empty address no-op, dispatch queued
+- dispatch_email_message task: success + failure log
 """
 
 import json
@@ -157,7 +160,7 @@ class TestDispatchWhatsAppMessageTask:
 
     @override_settings(WHATSAPP_PHONE_NUMBER_ID="PH_ID", WHATSAPP_ACCESS_TOKEN="TOKEN")
     def test_retries_on_http_error(self, db):
-        """An HTTP 500 from Meta must trigger Celery retry."""
+        """An HTTP 500 triggers retry on attempt 0 (retries=0 means first attempt)."""
         from core.tasks import dispatch_whatsapp_message
 
         http_err = urllib.error.HTTPError(
@@ -168,24 +171,162 @@ class TestDispatchWhatsAppMessageTask:
             fp=BytesIO(b"error body"),
         )
         with patch("urllib.request.urlopen", side_effect=http_err):
-            with pytest.raises(Exception):  # retry raises
+            with pytest.raises(Exception):  # retry raises when retries < max_retries
                 dispatch_whatsapp_message.apply(
-                    kwargs=dict(
-                        phone="+91990",
-                        template_name="job_created",
-                        variables={},
-                    ),
-                    retries=3,  # exhaust retries so it raises instead of re-queuing
+                    kwargs=dict(phone="+91990", template_name="job_created", variables={}),
+                    retries=0,  # first attempt → still has retries left → must retry-raise
                 )
 
     @override_settings(WHATSAPP_PHONE_NUMBER_ID="PH_ID", WHATSAPP_ACCESS_TOKEN="TOKEN")
+    def test_retries_exhausted_queues_sms_fallback(self, db):
+        """After retries are exhausted, SMS fallback is queued instead of raising."""
+        from core.tasks import dispatch_whatsapp_message, dispatch_sms_fallback
+
+        with patch("urllib.request.urlopen", side_effect=OSError("Connection refused")):
+            with patch.object(dispatch_sms_fallback, "delay") as mock_sms:
+                # retries=3 == max_retries → exhausted path, no retry raise
+                dispatch_whatsapp_message.apply(
+                    kwargs=dict(phone="+91990", template_name="job_created", variables={}),
+                    retries=3,
+                )
+
+        mock_sms.assert_called_once()
+
+    @override_settings(WHATSAPP_PHONE_NUMBER_ID="PH_ID", WHATSAPP_ACCESS_TOKEN="TOKEN")
     def test_retries_on_connection_error(self, db):
-        """A network-level exception must trigger Celery retry."""
+        """A network-level exception on attempt 0 triggers Celery retry."""
         from core.tasks import dispatch_whatsapp_message
 
         with patch("urllib.request.urlopen", side_effect=OSError("Connection refused")):
             with pytest.raises(Exception):
                 dispatch_whatsapp_message.apply(
                     kwargs=dict(phone="+91990", template_name="job_created", variables={}),
+                    retries=0,
+                )
+
+    @override_settings(WHATSAPP_PHONE_NUMBER_ID="PH_ID", WHATSAPP_ACCESS_TOKEN="TOKEN")
+    def test_notification_log_written_on_success(self, db):
+        """A successful send must create a NotificationLog row with status=sent."""
+        from core.tasks import dispatch_whatsapp_message
+        from core.models import NotificationLog
+
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"messages": [{"id": "msg_777"}]}).encode()
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            dispatch_whatsapp_message(
+                phone="+919900000099",
+                template_name="job_received",
+                variables={"customer_name": "Alice"},
+            )
+
+        log = NotificationLog.objects.get(template_name="job_received")
+        assert log.status == NotificationLog.Status.SENT
+        assert log.whatsapp_message_id == "msg_777"
+        assert log.sent_at is not None
+        assert log.attempt_count == 1
+        assert log.recipient_phone == "+919900000099"
+
+    @override_settings(WHATSAPP_PHONE_NUMBER_ID="", WHATSAPP_ACCESS_TOKEN="")
+    def test_notification_log_written_on_no_credentials(self, db):
+        """No-credentials path must still create a log row with status=failed."""
+        from core.tasks import dispatch_whatsapp_message
+        from core.models import NotificationLog
+
+        dispatch_whatsapp_message(
+            phone="+919900000088",
+            template_name="device_ready",
+            variables={},
+        )
+
+        log = NotificationLog.objects.get(template_name="device_ready")
+        assert log.status == NotificationLog.Status.FAILED
+        assert "credentials" in log.failed_reason.lower()
+
+    @override_settings(WHATSAPP_PHONE_NUMBER_ID="PH_ID", WHATSAPP_ACCESS_TOKEN="TOKEN")
+    def test_sms_fallback_queued_after_retry_exhaustion(self, db):
+        """After all retries fail, dispatch_sms_fallback must be queued."""
+        from core.tasks import dispatch_whatsapp_message, dispatch_sms_fallback
+
+        with patch("urllib.request.urlopen", side_effect=OSError("timeout")):
+            with patch.object(dispatch_sms_fallback, "delay") as mock_sms:
+                dispatch_whatsapp_message.apply(
+                    kwargs=dict(phone="+91999", template_name="job_received", variables={}),
                     retries=3,
                 )
+
+        mock_sms.assert_called_once()
+        call_kwargs = mock_sms.call_args.kwargs
+        assert call_kwargs["phone"] == "+91999"
+        assert call_kwargs["template_name"] == "job_received"
+
+
+# ── send_email() ──────────────────────────────────────────────────────────────
+
+class TestSendEmail:
+    """Unit tests for the send_email() public API."""
+
+    def test_empty_address_is_a_no_op(self):
+        from core.notifications import send_email
+        with patch("core.tasks.dispatch_email_message.delay") as mock_delay:
+            send_email(to="", subject="Hello", body="World")
+        mock_delay.assert_not_called()
+
+    def test_none_address_is_a_no_op(self):
+        from core.notifications import send_email
+        with patch("core.tasks.dispatch_email_message.delay") as mock_delay:
+            send_email(to=None, subject="Hello", body="World")
+        mock_delay.assert_not_called()
+
+    def test_valid_address_dispatches(self):
+        from core.notifications import send_email
+        with patch("core.tasks.dispatch_email_message.delay") as mock_delay:
+            send_email(to="manager@shop.com", subject="Bill Due", body="Pay up", template_name="purchase_bill_due")
+        mock_delay.assert_called_once_with(
+            to="manager@shop.com",
+            subject="Bill Due",
+            body="Pay up",
+            template_name="purchase_bill_due",
+        )
+
+
+# ── dispatch_email_message task ───────────────────────────────────────────────
+
+@pytest.mark.django_db
+class TestDispatchEmailMessageTask:
+
+    def _run_task(self, **kwargs):
+        from core.tasks import dispatch_email_message
+        dispatch_email_message(**kwargs)
+
+    def test_success_writes_sent_log(self, db):
+        from core.models import NotificationLog
+        with patch("django.core.mail.send_mail") as mock_mail:
+            self._run_task(
+                to="mgr@shop.com",
+                subject="Test",
+                body="Hello",
+                template_name="purchase_bill_due",
+            )
+        mock_mail.assert_called_once()
+        log = NotificationLog.objects.get(template_name="purchase_bill_due")
+        assert log.status == NotificationLog.Status.SENT
+        assert log.channel == NotificationLog.Channel.EMAIL
+        assert log.recipient_email == "mgr@shop.com"
+        assert log.sent_at is not None
+
+    def test_failure_after_retries_writes_failed_log(self, db):
+        from core.tasks import dispatch_email_message
+        from core.models import NotificationLog
+
+        with patch("django.core.mail.send_mail", side_effect=Exception("SMTP error")):
+            dispatch_email_message.apply(
+                kwargs=dict(to="bad@shop.com", subject="X", body="Y", template_name="purchase_bill_due"),
+                retries=3,
+            )
+
+        log = NotificationLog.objects.filter(template_name="purchase_bill_due").last()
+        assert log.status == NotificationLog.Status.FAILED
+        assert "SMTP error" in log.failed_reason

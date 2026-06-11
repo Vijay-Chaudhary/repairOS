@@ -789,3 +789,160 @@ class TestE2E:
         invoice_entries = [e for e in ledger_res.data["items"] if e["type"] == "invoice"]
         assert len(invoice_entries) == 1
         assert Decimal(str(invoice_entries[0]["debit"])) == grand_total
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Notification tests (Pattern 1 + Procurement #14)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+class TestPONotifications:
+    """Procurement #14 — PO email + GRN WhatsApp."""
+
+    def test_send_po_triggers_email_to_supplier(self, db, draft_po, supplier, admin_user):
+        """Transitioning a PO to 'sent' queues an email to the supplier."""
+        supplier.email = "supplier@alpha.com"
+        supplier.save()
+
+        from procurement.services import update_purchase_order
+        from procurement.models import PurchaseOrder
+        from unittest.mock import patch
+
+        with patch("core.tasks.dispatch_email_message.delay") as mock_delay:
+            update_purchase_order(draft_po, {"status": PurchaseOrder.Status.SENT}, admin_user)
+
+        mock_delay.assert_called_once()
+        kwargs = mock_delay.call_args.kwargs
+        assert kwargs["to"] == "supplier@alpha.com"
+        assert kwargs["template_name"] == "po_confirmation_supplier"
+        assert draft_po.po_number in kwargs["subject"]
+
+    def test_send_po_no_email_skips_silently(self, db, draft_po, supplier, admin_user):
+        """If supplier has no email, no email task is queued."""
+        supplier.email = ""
+        supplier.save()
+
+        from procurement.services import update_purchase_order
+        from procurement.models import PurchaseOrder
+        from unittest.mock import patch
+
+        with patch("core.tasks.dispatch_email_message.delay") as mock_delay:
+            update_purchase_order(draft_po, {"status": PurchaseOrder.Status.SENT}, admin_user)
+
+        mock_delay.assert_not_called()
+
+    def test_grn_receipt_triggers_spare_part_received_wa(
+        self, db, shop, sent_po, product_variant, admin_user
+    ):
+        """Receiving a GRN queues spare_part_received WhatsApp to the PO creator."""
+        from procurement.services import receive_grn
+        from unittest.mock import patch
+
+        with patch("core.tasks.dispatch_whatsapp_message.delay") as mock_delay:
+            receive_grn(
+                shop=shop,
+                po=sent_po,
+                data={
+                    "received_date": "2026-06-11",
+                    "items": [{
+                        "po_item_id": str(sent_po.items.first().id),
+                        "quantity_received": "10",
+                        "quantity_accepted": "10",
+                        "quantity_rejected": "0",
+                    }],
+                },
+                user=admin_user,
+            )
+
+        # PO creator has a phone; dispatch must be called for spare_part_received
+        mock_delay.assert_called()
+        calls = [c for c in mock_delay.call_args_list if c.kwargs.get("template_name") == "spare_part_received"]
+        assert len(calls) == 1
+        assert calls[0].kwargs["phone"] == admin_user.phone
+
+
+@pytest.mark.django_db
+class TestBillDueReminders:
+    """Procurement #14 — send_bill_due_reminders beat task."""
+
+    def test_emails_manager_for_unpaid_invoices_due_in_3_days(self, db, shop, supplier):
+        from datetime import timedelta
+        from django.utils import timezone
+        from procurement.models import PurchaseInvoice
+        from procurement.tasks import send_bill_due_reminders
+        from unittest.mock import patch
+
+        target = timezone.localdate() + timedelta(days=3)
+        shop.email = "mgr@myshop.com"
+        shop.save()
+
+        PurchaseInvoice.objects.create(
+            shop=shop,
+            supplier=supplier,
+            bill_number="BILL-001",
+            bill_date=timezone.localdate(),
+            grand_total=Decimal("5000.00"),
+            payment_status="unpaid",
+            due_date=target,
+        )
+
+        with patch("core.tasks.dispatch_email_message.delay") as mock_delay:
+            send_bill_due_reminders()
+
+        mock_delay.assert_called_once()
+        kwargs = mock_delay.call_args.kwargs
+        assert kwargs["to"] == "mgr@myshop.com"
+        assert kwargs["template_name"] == "purchase_bill_due"
+        assert "BILL-001" in kwargs["subject"]
+
+    def test_paid_invoices_are_skipped(self, db, shop, supplier):
+        from datetime import timedelta
+        from django.utils import timezone
+        from procurement.models import PurchaseInvoice
+        from procurement.tasks import send_bill_due_reminders
+        from unittest.mock import patch
+
+        target = timezone.localdate() + timedelta(days=3)
+        shop.email = "mgr@myshop.com"
+        shop.save()
+
+        PurchaseInvoice.objects.create(
+            shop=shop,
+            supplier=supplier,
+            bill_number="BILL-002",
+            bill_date=timezone.localdate(),
+            grand_total=Decimal("5000.00"),
+            payment_status="paid",
+            due_date=target,
+        )
+
+        with patch("core.tasks.dispatch_email_message.delay") as mock_delay:
+            send_bill_due_reminders()
+
+        mock_delay.assert_not_called()
+
+    def test_invoices_not_due_in_3_days_skipped(self, db, shop, supplier):
+        from datetime import timedelta
+        from django.utils import timezone
+        from procurement.models import PurchaseInvoice
+        from procurement.tasks import send_bill_due_reminders
+        from unittest.mock import patch
+
+        shop.email = "mgr@myshop.com"
+        shop.save()
+
+        # Due tomorrow — not 3 days out
+        PurchaseInvoice.objects.create(
+            shop=shop,
+            supplier=supplier,
+            bill_number="BILL-003",
+            bill_date=timezone.localdate(),
+            grand_total=Decimal("3000.00"),
+            payment_status="unpaid",
+            due_date=timezone.localdate() + timedelta(days=1),
+        )
+
+        with patch("core.tasks.dispatch_email_message.delay") as mock_delay:
+            send_bill_due_reminders()
+
+        mock_delay.assert_not_called()

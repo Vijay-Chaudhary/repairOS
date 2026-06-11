@@ -530,7 +530,7 @@ def _notify_po_sent(po: PurchaseOrder) -> None:
     from core.notifications import send_email
 
     delivery = str(po.expected_delivery_date) if po.expected_delivery_date else "TBD"
-    total = po.items.aggregate(t=Sum(F("quantity_ordered") * F("unit_price")))["t"] or 0
+    total = po.items.aggregate(t=Sum(F("quantity_ordered") * F("unit_cost")))["t"] or 0
 
     body = (
         f"Dear {po.supplier.name},\n\n"
