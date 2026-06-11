@@ -500,3 +500,77 @@ class TestPayoutAPI:
         rows = TechnicianCommission.objects.filter(job=job)
         assert rows.count() == 1
         assert rows.first().commission_amount == Decimal("240.00")   # 800 × 30%
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TestPayoutPDF — Commissions #13
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestPayoutPDF:
+    """generate_payout_pdf renders a PDF and sets payout.pdf_url."""
+
+    def test_generate_payout_pdf_sets_pdf_url(self, db, shop, customer, tech1, rule):
+        """generate_payout_pdf called directly sets payout.pdf_url to a non-empty path."""
+        import uuid as uuid_mod
+        from commissions.models import CommissionPayout
+        from commissions.tasks import generate_payout_pdf
+
+        # Create a bare payout row (no commissions needed — template handles empty list)
+        payout = CommissionPayout.objects.create(
+            technician=tech1,
+            period_start=datetime.date(2026, 6, 1),
+            period_end=datetime.date(2026, 6, 30),
+            total_commission=Decimal("300.00"),
+            status=CommissionPayout.Status.DRAFT,
+        )
+
+        generate_payout_pdf(str(payout.id))
+
+        payout.refresh_from_db()
+        assert payout.pdf_url != ""
+        assert payout.pdf_url.endswith(".pdf")
+
+    def test_generate_payout_pdf_file_is_nonempty(self, db, shop, customer, tech1, rule, tmp_path, settings):
+        """The generated PDF file exists and contains actual bytes."""
+        import os
+        settings.MEDIA_ROOT = str(tmp_path)
+        settings.MEDIA_URL = "/media/"
+
+        from commissions.models import CommissionPayout
+        from commissions.tasks import generate_payout_pdf
+
+        payout = CommissionPayout.objects.create(
+            technician=tech1,
+            period_start=datetime.date(2026, 6, 1),
+            period_end=datetime.date(2026, 6, 30),
+            total_commission=Decimal("600.00"),
+            status=CommissionPayout.Status.DRAFT,
+        )
+
+        generate_payout_pdf(str(payout.id))
+        payout.refresh_from_db()
+
+        full_path = os.path.join(str(tmp_path), payout.pdf_url.removeprefix("/media/"))
+        assert os.path.exists(full_path)
+        assert os.path.getsize(full_path) > 0
+
+    def test_payout_creation_dispatches_pdf_task(self, db, shop, customer, tech1, rule):
+        """create_payout dispatches generate_payout_pdf (ALWAYS_EAGER runs it sync)."""
+        from commissions import services
+
+        job = make_job(shop, customer, tech1, Decimal("500.00"), "TST-PDF-003")
+        add_stage(job, tech1, 1)
+        services.accrue_commission(job)
+
+        # CELERY_TASK_ALWAYS_EAGER = True → task runs synchronously inside create_payout
+        payout = services.create_payout(tech1, datetime.date(2026, 1, 1), datetime.date(2026, 12, 31), tech1)
+        payout.refresh_from_db()
+        assert payout.pdf_url != ""
+
+    def test_generate_payout_pdf_missing_payout_is_no_op(self, db):
+        """A missing payout ID must not raise — task exits gracefully."""
+        import uuid
+        from commissions.tasks import generate_payout_pdf
+        generate_payout_pdf(str(uuid.uuid4()))  # should not raise

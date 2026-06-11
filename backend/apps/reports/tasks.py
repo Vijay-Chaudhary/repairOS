@@ -2,8 +2,7 @@
 Reports async export tasks.
 
 run_export: process a queued ExportJob — call the report service, serialize
-to CSV (PDF requires weasyprint, not yet installed), save to MEDIA_ROOT,
-and update job.file_url + job.status.
+to CSV or PDF (WeasyPrint), save to MEDIA_ROOT, and update job.file_url + status.
 """
 
 import csv
@@ -83,12 +82,44 @@ def run_export(self, job_id: str) -> None:
             mode = "w"
 
         else:
-            # PDF generation requires weasyprint (not installed).
-            raise NotImplementedError(
-                "PDF export requires weasyprint. Add it to requirements/base.txt."
+            # PDF export via WeasyPrint
+            data = fn(shop_ids, job.filters)
+
+            # Extract the first list in the data dict as rows
+            rows = None
+            for v in data.values():
+                if isinstance(v, list) and v:
+                    rows = v
+                    break
+
+            from django.utils import timezone as tz
+            from core.pdf import render_and_save_pdf
+
+            title = job.report_type.replace("-", " ").title()
+            context = {
+                "title": title,
+                "rows": rows or [],
+                "columns": list(rows[0].keys()) if rows else [],
+                "generated_at": tz.now().strftime("%d %b %Y %H:%M"),
+                "date_from": job.filters.get("date_from", ""),
+                "date_to": job.filters.get("date_to", ""),
+            }
+
+            file_url = render_and_save_pdf(
+                template_name="pdf/report_export.html",
+                context=context,
+                subdir="exports",
+                filename=f"{job.report_type}-{uuid.uuid4().hex[:10]}",
             )
 
-        # Save to MEDIA_ROOT
+            job.file_url = file_url
+            job.status = ExportJob.Status.READY
+            job.completed_at = timezone.now()
+            job.save(update_fields=["file_url", "status", "completed_at"])
+            logger.info("run_export: PDF job %s ready at %s", job_id, file_url)
+            return
+
+        # Save CSV to MEDIA_ROOT
         rel_path = f"exports/{job.report_type}-{uuid.uuid4().hex[:10]}.{ext}"
         full_path = os.path.join(settings.MEDIA_ROOT, rel_path)
         os.makedirs(os.path.dirname(full_path), exist_ok=True)

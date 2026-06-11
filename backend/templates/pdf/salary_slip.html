@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  body  { font-family: Arial, sans-serif; font-size: 12px; color: #222; margin: 40px; }
+  h1    { font-size: 18px; margin-bottom: 2px; }
+  .sub  { color: #555; font-size: 11px; margin-bottom: 24px; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 32px; margin-bottom: 24px; }
+  .info-grid .label { color: #666; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  th    { background: #1e3a5f; color: #fff; padding: 8px 12px; text-align: left; font-size: 11px; }
+  td    { padding: 7px 12px; border-bottom: 1px solid #e0e0e0; }
+  td.amount { text-align: right; font-variant-numeric: tabular-nums; }
+  .total-row td { font-weight: bold; border-top: 2px solid #1e3a5f; border-bottom: none; }
+  .net-box { margin-top: 20px; padding: 12px 16px; background: #1e3a5f; color: #fff;
+             font-size: 14px; font-weight: bold; display: inline-block; border-radius: 4px; }
+  .footer { margin-top: 36px; font-size: 10px; color: #999; text-align: center; }
+</style>
+</head>
+<body>
+
+<h1>Salary Slip</h1>
+<p class="sub">{{ month_name }} {{ slip.year }} &nbsp;|&nbsp; Generated {{ generated_at }}</p>
+
+<div class="info-grid">
+  <div><span class="label">Employee Name</span><br><strong>{{ slip.employee.full_name }}</strong></div>
+  <div><span class="label">Employee Code</span><br>{{ slip.employee.employee_code }}</div>
+  <div><span class="label">Designation</span><br>{{ slip.employee.designation|default:"—" }}</div>
+  <div><span class="label">Department</span><br>{{ slip.employee.department|default:"—" }}</div>
+  <div><span class="label">Pay Period</span><br>{{ month_name }} {{ slip.year }}</div>
+  <div><span class="label">Days Worked</span><br>{{ slip.present_days }} / {{ slip.working_days }}</div>
+</div>
+
+<table>
+  <thead>
+    <tr><th>Earnings</th><th class="amount" style="text-align:right;">Amount (₹)</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Gross Earned</td><td class="amount">{{ slip.gross_earned }}</td></tr>
+    <tr class="total-row"><td>Total Earnings</td><td class="amount">{{ slip.gross_earned }}</td></tr>
+  </tbody>
+</table>
+
+<table style="margin-top:16px;">
+  <thead>
+    <tr><th>Deductions</th><th class="amount" style="text-align:right;">Amount (₹)</th></tr>
+  </thead>
+  <tbody>
+    {% if slip.pf_deduction %}<tr><td>PF (Employee)</td><td class="amount">{{ slip.pf_deduction }}</td></tr>{% endif %}
+    {% if slip.esic_deduction %}<tr><td>ESIC (Employee)</td><td class="amount">{{ slip.esic_deduction }}</td></tr>{% endif %}
+    {% if slip.advance_deduction %}<tr><td>Advance Recovery</td><td class="amount">{{ slip.advance_deduction }}</td></tr>{% endif %}
+    {% if slip.other_deductions %}<tr><td>Other Deductions</td><td class="amount">{{ slip.other_deductions }}</td></tr>{% endif %}
+    <tr class="total-row"><td>Total Deductions</td><td class="amount">{{ slip.total_deductions }}</td></tr>
+  </tbody>
+</table>
+
+<p class="net-box">Net Salary: ₹{{ slip.net_salary }}</p>
+
+<p class="footer">This is a system-generated salary slip. No signature required.</p>
+</body>
+</html>

@@ -202,4 +202,7 @@ def create_payout(technician, period_start, period_end, created_by) -> Commissio
             is_paid=True, payout=payout
         )
 
+    from commissions.tasks import generate_payout_pdf
+    generate_payout_pdf.delay(str(payout.id))
+
     return payout

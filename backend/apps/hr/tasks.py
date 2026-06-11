@@ -1,7 +1,7 @@
 """
 HR Celery tasks.
 
-- generate_salary_pdf: triggered after slip approval; generates and uploads PDF.
+- generate_salary_pdf: triggered after slip approval; renders PDF via WeasyPrint.
 - send_payroll_reminders: scheduled beat task reminding HR managers to run payroll.
 """
 
@@ -21,18 +21,33 @@ def generate_salary_pdf(self, slip_id: str) -> None:
     """
     from hr.models import SalarySlip
 
+    import calendar
+    from django.utils import timezone
+    from core.pdf import render_and_save_pdf
+
     try:
         slip = SalarySlip.objects.select_related("employee").get(id=slip_id)
     except SalarySlip.DoesNotExist:
         logger.error("generate_salary_pdf: SalarySlip %s not found", slip_id)
         return
 
-    # TODO: integrate with WeasyPrint + file storage once the PDF infra is in place.
-    logger.warning(
-        "generate_salary_pdf: PDF generation not yet implemented (WeasyPrint not installed). "
-        "slip_id=%s employee=%s %s/%s",
-        slip_id, slip.employee.employee_code, slip.month, slip.year,
-    )
+    try:
+        context = {
+            "slip": slip,
+            "month_name": calendar.month_name[slip.month],
+            "generated_at": timezone.now().strftime("%d %b %Y %H:%M"),
+        }
+        url = render_and_save_pdf(
+            template_name="pdf/salary_slip.html",
+            context=context,
+            subdir="pdfs/salary_slips",
+            filename=f"slip-{slip.employee.employee_code}-{slip.year}-{slip.month:02d}",
+        )
+        SalarySlip.objects.filter(id=slip_id).update(pdf_url=url)
+        logger.info("generate_salary_pdf: slip %s → %s", slip_id, url)
+    except Exception as exc:
+        logger.error("generate_salary_pdf: failed for slip %s: %s", slip_id, exc)
+        raise self.retry(exc=exc)
 
 
 @app.task(name="hr.send_payroll_reminders")

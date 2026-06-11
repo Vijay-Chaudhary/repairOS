@@ -411,11 +411,49 @@ class TestExportJob:
             "shop_id": str(shop.id),
             "date_from": "2026-01-01",
             "date_to": "2026-12-31",
-            "export": "pdf",
+            "export": "csv",
         })
         res = rpt_client.get("/api/v1/reports/export-jobs/")
         assert res.status_code == status.HTTP_200_OK
         assert len(res.data) >= 1
+
+    def test_pdf_export_produces_nonempty_file_url(self, rpt_client, shop):
+        """PDF export (Reports PDF item) must complete with a non-empty file_url."""
+        res = rpt_client.get(self.report_url, {
+            "shop_id": str(shop.id),
+            "date_from": "2026-01-01",
+            "date_to": "2026-12-31",
+            "export": "pdf",
+        })
+        assert res.status_code == status.HTTP_202_ACCEPTED
+
+        from reports.models import ExportJob
+        job = ExportJob.objects.get(id=res.data["export_job_id"])
+        # CELERY_TASK_ALWAYS_EAGER means run_export ran synchronously
+        assert job.status == ExportJob.Status.READY
+        assert job.file_url != ""
+        assert job.file_url.endswith(".pdf")
+
+    def test_pdf_export_file_is_nonempty(self, rpt_client, shop, settings, tmp_path):
+        """The generated PDF file contains actual bytes."""
+        import os
+        settings.MEDIA_ROOT = str(tmp_path)
+        settings.MEDIA_URL = "/media/"
+
+        res = rpt_client.get(self.report_url, {
+            "shop_id": str(shop.id),
+            "date_from": "2026-01-01",
+            "date_to": "2026-12-31",
+            "export": "pdf",
+        })
+
+        from reports.models import ExportJob
+        job = ExportJob.objects.get(id=res.data["export_job_id"])
+        assert job.status == ExportJob.Status.READY
+
+        full_path = os.path.join(str(tmp_path), job.file_url.removeprefix("/media/"))
+        assert os.path.exists(full_path)
+        assert os.path.getsize(full_path) > 0
 
 
 # ──────────────────────────────────────────────────────────────────────────────

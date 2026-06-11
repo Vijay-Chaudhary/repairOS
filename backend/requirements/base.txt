@@ -12,3 +12,4 @@ redis==5.2.0
 bcrypt==4.2.0
 cryptography==43.0.1
 django-cors-headers==4.4.0
+weasyprint==69.0
