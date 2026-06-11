@@ -211,10 +211,12 @@ class TestRunExportTask:
         assert job.status == ExportJob.Status.FAILED
 
     @override_settings(CELERY_TASK_EAGER_PROPAGATES=False)
-    def test_pdf_export_sets_failed_status(self, user):
-        """PDF generation requires weasyprint (not installed): task sets FAILED."""
+    def test_pdf_export_bad_template_sets_failed_status(self, user, settings):
+        """run_export with a bad PDF template path catches the error and marks job FAILED."""
+        from unittest.mock import patch
         from reports.models import ExportJob
         from reports.tasks import run_export
+
         job = ExportJob.objects.create(
             report_type="revenue-summary",
             format="pdf",
@@ -222,7 +224,8 @@ class TestRunExportTask:
             requested_by=user,
             filters={"shop_ids": []},
         )
-        run_export.apply(args=[str(job.id)])
+        with patch("core.pdf.render_and_save_pdf", side_effect=RuntimeError("bad template")):
+            run_export.apply(args=[str(job.id)])
         job.refresh_from_db()
         assert job.status == ExportJob.Status.FAILED
 

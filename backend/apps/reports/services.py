@@ -41,7 +41,7 @@ def _shop_filter(shop_ids: list) -> Q:
 
 
 def dashboard(shop_ids: list) -> dict:
-    today = timezone.now().date()
+    today = timezone.localdate()
     month_start = date(today.year, today.month, 1)
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
