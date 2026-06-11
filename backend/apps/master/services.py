@@ -25,6 +25,160 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+class SmsNotConfiguredError(Exception):
+    pass
+
+
+class RegistrationNotFoundError(Exception):
+    pass
+
+
+class OtpInvalidError(Exception):
+    pass
+
+
+class EmailCodeInvalidError(Exception):
+    pass
+
+
+class OtpMaxAttemptsError(Exception):
+    pass
+
+
+def _send_registration_otp(phone: str, otp: str) -> bool:
+    """Send phone OTP via SMS. Returns True on success (always True in DEBUG)."""
+    if getattr(settings, "DEBUG", False):
+        logger.info("[DEV] Registration OTP for %s: %s", phone, otp)
+        return True
+    # Production: wire MSG91 / SMS gateway here
+    logger.warning("SMS gateway not configured — cannot send registration OTP to %s", phone)
+    return False
+
+
+def _send_registration_email_code(email: str, name: str, code: str) -> None:
+    """Send email verification code. Logs in DEBUG; uses Django email backend in production."""
+    from django.core.mail import send_mail
+    if getattr(settings, "DEBUG", False):
+        logger.info("[DEV] Registration email code for %s: %s", email, code)
+        return
+    try:
+        send_mail(
+            subject="Your RepairOS verification code",
+            message=(
+                f"Hi {name},\n\n"
+                f"Your email verification code is: {code}\n\n"
+                "This code expires in 10 minutes."
+            ),
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@repaiross.app"),
+            recipient_list=[email],
+            fail_silently=False,
+        )
+    except Exception as exc:
+        logger.error("Failed to send registration email code to %s: %s", email, exc)
+
+
+def initiate_registration(data: dict) -> dict:
+    """
+    Step 1 of 2-step registration: validate slug/plan, store pending data in Redis,
+    and send phone OTP + email verification code.
+
+    Returns {slug, phone_masked, expires_in} (plus dev_* codes when DEBUG=True).
+    Does NOT create the Tenant — that happens in verify_registration().
+
+    Raises ValueError on slug collision or missing plan.
+    Raises SmsNotConfiguredError if SMS gateway is not available.
+    """
+    import random
+    import uuid as _uuid
+    from django.core import signing
+    from django.core.cache import cache
+
+    from .models import SubscriptionPlan, Tenant
+
+    slug = data["slug"].lower().strip()
+
+    if Tenant.objects.filter(slug=slug).exists():
+        raise ValueError(f"Slug '{slug}' is already taken.")
+
+    try:
+        SubscriptionPlan.objects.get(id=data["plan_id"])
+    except SubscriptionPlan.DoesNotExist:
+        raise ValueError("Plan not found.")
+
+    phone_otp = f"{random.randint(0, 999999):06d}"
+    email_code = f"{random.randint(0, 999999):06d}"
+
+    # JSON-serialize: convert UUID fields to str so signing.dumps can use json.dumps
+    serializable = {k: str(v) if isinstance(v, _uuid.UUID) else v for k, v in data.items()}
+
+    cache.set(f"reg_pending:{slug}", {
+        "signed_data": signing.dumps(serializable),
+        "phone_otp": phone_otp,
+        "email_code": email_code,
+        "otp_attempts": 0,
+    }, timeout=600)
+
+    sms_ok = _send_registration_otp(data["phone"], phone_otp)
+    if not sms_ok:
+        cache.delete(f"reg_pending:{slug}")
+        raise SmsNotConfiguredError()
+
+    _send_registration_email_code(data["email"], data.get("owner_name", ""), email_code)
+
+    phone = data["phone"]
+    phone_masked = phone[:3] + "****" + phone[-4:]
+
+    result: dict = {"slug": slug, "phone_masked": phone_masked, "expires_in": 600}
+
+    if getattr(settings, "DEBUG", False):
+        result["dev_phone_otp"] = phone_otp
+        result["dev_email_code"] = email_code
+
+    return result
+
+
+def verify_registration(slug: str, phone_otp: str, email_code: str) -> "Tenant":
+    """
+    Step 2 of 2-step registration: verify phone OTP + email code, then create the Tenant.
+
+    Raises RegistrationNotFoundError if the pending entry is missing or expired.
+    Raises OtpMaxAttemptsError after 5 failed attempts (returns 429 to the caller).
+    Raises OtpInvalidError if phone_otp doesn't match.
+    Raises EmailCodeInvalidError if email_code doesn't match.
+    """
+    from django.core import signing
+    from django.core.cache import cache
+
+    pending = cache.get(f"reg_pending:{slug}")
+    if pending is None:
+        raise RegistrationNotFoundError()
+
+    if pending["otp_attempts"] >= 5:
+        raise OtpMaxAttemptsError()
+
+    if phone_otp != pending["phone_otp"]:
+        pending["otp_attempts"] += 1
+        # Keep the entry (don't delete) so the pre-check above fires on attempt 6+
+        cache.set(f"reg_pending:{slug}", pending, timeout=600)
+        raise OtpInvalidError()
+
+    if email_code != pending["email_code"]:
+        # Email failures also increment; phone is already verified so no lockout needed,
+        # but we still protect against brute force on the email code.
+        pending["otp_attempts"] += 1
+        cache.set(f"reg_pending:{slug}", pending, timeout=600)
+        raise EmailCodeInvalidError()
+
+    try:
+        form_data = signing.loads(pending["signed_data"])
+    except signing.BadSignature:
+        cache.delete(f"reg_pending:{slug}")
+        raise RegistrationNotFoundError()
+
+    cache.delete(f"reg_pending:{slug}")
+    return register_tenant(form_data)
+
+
 def register_tenant(data: dict) -> Tenant:
     """
     Create a Tenant record (status=provisioning) and a TenantSubscription,

@@ -22,6 +22,7 @@ from . import services
 from .models import SubscriptionPlan, Tenant
 from .serializers import (
     RegisterTenantSerializer,
+    RegisterVerifySerializer,
     SubscriptionPlanSerializer,
     TenantDetailSerializer,
     TenantListSerializer,
@@ -46,30 +47,78 @@ class IsPlatformAdmin(BasePermission):
 
 
 class RegisterView(APIView):
+    """
+    POST /register/ — Step 1 of 2-step registration.
+
+    Validates the form, stores pending data in Redis, sends phone OTP + email code.
+    Returns 202 with {slug, phone_masked, expires_in}.  The Tenant is NOT created here.
+    """
+
     permission_classes = [AllowAny]
 
     def post(self, request: Request) -> Response:
         serializer = RegisterTenantSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+
+        try:
+            result = services.initiate_registration(dict(serializer.validated_data))
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except services.SmsNotConfiguredError:
+            return Response(
+                {"code": "SMS_NOT_CONFIGURED", "detail": "SMS service is not available."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        return Response(result, status=status.HTTP_202_ACCEPTED)
+
+
+class RegisterVerifyView(APIView):
+    """
+    POST /register/verify/ — Step 2 of 2-step registration.
+
+    Verifies phone OTP + email code, then creates the Tenant and triggers provisioning.
+    Returns 201 with {tenant_id, slug, status}.
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request: Request) -> Response:
+        serializer = RegisterVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        from master.models import SubscriptionPlan as SP
         try:
-            SP.objects.get(id=data["plan_id"])
-        except SP.DoesNotExist:
-            return Response({"detail": "Plan not found."}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            tenant = services.register_tenant(data)
+            tenant = services.verify_registration(
+                slug=data["slug"],
+                phone_otp=data["phone_otp"],
+                email_code=data["email_code"],
+            )
+        except services.RegistrationNotFoundError:
+            return Response(
+                {"code": "REGISTRATION_NOT_FOUND", "detail": "No pending registration found. Please restart."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except services.OtpMaxAttemptsError:
+            return Response(
+                {"code": "OTP_MAX_ATTEMPTS", "detail": "Too many failed attempts. Please restart registration."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        except services.OtpInvalidError:
+            return Response(
+                {"code": "OTP_INVALID", "detail": "Invalid phone OTP."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except services.EmailCodeInvalidError:
+            return Response(
+                {"code": "EMAIL_CODE_INVALID", "detail": "Invalid email verification code."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(
-            {
-                "tenant_id": str(tenant.id),
-                "slug": tenant.slug,
-                "db_status": tenant.status,
-            },
+            {"tenant_id": str(tenant.id), "slug": tenant.slug, "status": tenant.status},
             status=status.HTTP_201_CREATED,
         )
 
@@ -170,11 +219,25 @@ class SubscriptionPlanListCreateView(APIView):
 class SubscriptionPlanDetailView(APIView):
     permission_classes = [IsAuthenticated, IsPlatformAdmin]
 
-    def get(self, request: Request, plan_id) -> Response:
+    def _get_plan(self, plan_id):
         try:
-            plan = SubscriptionPlan.objects.using("default").get(id=plan_id)
+            return SubscriptionPlan.objects.using("default").get(id=plan_id)
         except SubscriptionPlan.DoesNotExist:
+            return None
+
+    def get(self, request: Request, plan_id) -> Response:
+        plan = self._get_plan(plan_id)
+        if not plan:
             return Response({"detail": "Plan not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(SubscriptionPlanSerializer(plan).data)
+
+    def patch(self, request: Request, plan_id) -> Response:
+        plan = self._get_plan(plan_id)
+        if not plan:
+            return Response({"detail": "Plan not found."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = SubscriptionPlanSerializer(plan, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
         return Response(SubscriptionPlanSerializer(plan).data)
 
 

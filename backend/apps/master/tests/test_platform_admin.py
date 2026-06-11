@@ -2,9 +2,11 @@
 Platform Admin module tests — §10 acceptance criteria + §11 test cases.
 
 Covers:
-- Tenant registration: slug sanitised, uniqueness enforced, status=provisioning
-- Invalid slug rejected (spaces, uppercase, reserved)
-- Registration dispatches provisioning task and stores signed credentials in cache
+- Tenant registration (2-step): init returns 202, does not create tenant yet
+- Slug uniqueness enforced at init time; invalid slugs rejected
+- Verify step: phone OTP + email code both required; creates tenant on success
+- Verify step: wrong OTP → 400, max 5 attempts → 429, expired → 404
+- Verify step: dispatches provisioning task, stores credentials in cache, writes audit log
 - do_provision_tenant: seeds roles, creates Tenant Admin, activates tenant
 - provision_tenant task marks provisioning_failed after max retries
 - Platform admin can list all tenants
@@ -107,113 +109,217 @@ def active_tenant(db, starter_plan):
 
 
 class TestRegistration:
+    """Tests for Step 1 of 2-step registration: POST /register/ (init)."""
+
     url = "/api/v1/register/"
 
-    def test_register_creates_tenant_with_provisioning_status(self, db, starter_plan):
+    def _post(self, client, starter_plan, slug="joycomputer", **overrides):
+        payload = {
+            "business_name": "Joy Computer", "slug": slug,
+            "owner_name": "Joy Owner", "phone": "+919811100001",
+            "email": f"owner@{slug}.com", "password": "SecurePass123!",
+            "plan_id": str(starter_plan.id),
+            **overrides,
+        }
+        return client.post(self.url, payload, format="json")
+
+    def test_register_init_returns_202(self, db, starter_plan):
         from unittest.mock import patch
         from rest_framework.test import APIClient
         client = APIClient()
-        with patch("master.tasks.provision_tenant.delay"):
-            res = client.post(self.url, {
-                "business_name": "Joy Computer",
-                "slug": "joycomputer",
-                "owner_name": "Joy Owner",
-                "phone": "+919811100001",
-                "email": "owner@joycomputer.com",
-                "password": "SecurePass123!",
-                "plan_id": str(starter_plan.id),
-            }, format="json")
-        assert res.status_code == status.HTTP_201_CREATED
-        assert res.data["db_status"] == "provisioning"
-        assert "tenant_id" in res.data
+        with patch("master.services._send_registration_otp", return_value=True), \
+             patch("master.services._send_registration_email_code"):
+            res = self._post(client, starter_plan)
+        assert res.status_code == status.HTTP_202_ACCEPTED
+        assert res.data["slug"] == "joycomputer"
+        assert "phone_masked" in res.data
+        assert res.data["expires_in"] == 600
 
+    def test_register_init_does_not_create_tenant(self, db, starter_plan):
+        from unittest.mock import patch
+        from rest_framework.test import APIClient
         from master.models import Tenant
-        t = Tenant.objects.get(id=res.data["tenant_id"])
-        assert t.slug == "joycomputer"
-        assert t.status == Tenant.Status.PROVISIONING
+        client = APIClient()
+        with patch("master.services._send_registration_otp", return_value=True), \
+             patch("master.services._send_registration_email_code"):
+            self._post(client, starter_plan)
+        assert not Tenant.objects.filter(slug="joycomputer").exists()
+
+    def test_register_init_stores_pending_in_cache(self, db, starter_plan):
+        from unittest.mock import patch
+        from django.core.cache import cache
+        from rest_framework.test import APIClient
+        client = APIClient()
+        with patch("master.services._send_registration_otp", return_value=True), \
+             patch("master.services._send_registration_email_code"):
+            res = self._post(client, starter_plan)
+        assert res.status_code == status.HTTP_202_ACCEPTED
+        pending = cache.get("reg_pending:joycomputer")
+        assert pending is not None
+        assert "phone_otp" in pending and "email_code" in pending
+        assert pending["otp_attempts"] == 0
 
     def test_duplicate_slug_blocked(self, db, active_tenant, starter_plan):
         from unittest.mock import patch
         from rest_framework.test import APIClient
         client = APIClient()
-        with patch("master.tasks.provision_tenant.delay"):
-            res = client.post(self.url, {
-                "business_name": "Another Corp",
-                "slug": "activecorp",
-                "owner_name": "Another Owner",
-                "phone": "+919811100002",
-                "email": "other@test.com",
-                "password": "SecurePass123!",
-                "plan_id": str(starter_plan.id),
-            }, format="json")
+        with patch("master.services._send_registration_otp", return_value=True), \
+             patch("master.services._send_registration_email_code"):
+            res = self._post(client, starter_plan, slug="activecorp")
         assert res.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_invalid_slug_rejected(self, db, starter_plan):
         from rest_framework.test import APIClient
         client = APIClient()
         for bad_slug in ["Joy Computer", "UPPER", "ab"]:
-            res = client.post(self.url, {
-                "business_name": "Test", "slug": bad_slug,
-                "owner_name": "Owner", "phone": "+919811100003",
-                "email": "t@test.com", "password": "SecurePass123!",
-                "plan_id": str(starter_plan.id),
-            }, format="json")
+            res = self._post(client, starter_plan, slug=bad_slug)
             assert res.status_code == status.HTTP_400_BAD_REQUEST, f"Slug '{bad_slug}' should be rejected"
 
-    def test_audit_log_written_on_registration(self, db, starter_plan):
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TestRegistrationVerify
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestRegistrationVerify:
+    """Tests for Step 2 of 2-step registration: POST /register/verify/."""
+
+    init_url = "/api/v1/register/"
+    verify_url = "/api/v1/register/verify/"
+
+    def _do_init(self, starter_plan, slug="verifyshop", phone="+919811200100"):
+        """
+        Call POST /register/ with mocked OTP sending.
+        Returns (client, phone_otp, email_code) ready for the verify step.
+        """
         from unittest.mock import patch
+        from django.core.cache import cache
         from rest_framework.test import APIClient
         client = APIClient()
-        with patch("master.tasks.provision_tenant.delay"):
-            client.post(self.url, {
-                "business_name": "Audit Test", "slug": "auditcorp",
-                "owner_name": "Owner", "phone": "+919811100010",
-                "email": "audit@test.com", "password": "SecurePass123!",
+        with patch("master.services._send_registration_otp", return_value=True), \
+             patch("master.services._send_registration_email_code"):
+            res = client.post(self.init_url, {
+                "business_name": "Verify Shop", "slug": slug,
+                "owner_name": "Verify Owner", "phone": phone,
+                "email": f"owner@{slug}.com", "password": "SecurePass123!",
                 "plan_id": str(starter_plan.id),
             }, format="json")
+        assert res.status_code == 202, f"Init failed with {res.status_code}: {res.data}"
+        pending = cache.get(f"reg_pending:{slug}")
+        return client, pending["phone_otp"], pending["email_code"]
 
+    def test_verify_creates_tenant(self, db, starter_plan):
+        from unittest.mock import patch
+        from master.models import Tenant
+        client, phone_otp, email_code = self._do_init(starter_plan)
+        with patch("master.tasks.provision_tenant.delay"):
+            res = client.post(self.verify_url, {
+                "slug": "verifyshop", "phone_otp": phone_otp, "email_code": email_code,
+            }, format="json")
+        assert res.status_code == status.HTTP_201_CREATED
+        assert "tenant_id" in res.data
+        assert Tenant.objects.filter(slug="verifyshop").exists()
+        from master.models import Tenant as T
+        t = T.objects.get(slug="verifyshop")
+        assert t.status == T.Status.PROVISIONING
+
+    def test_verify_dispatches_provisioning_task(self, db, starter_plan):
+        from unittest.mock import patch
+        client, phone_otp, email_code = self._do_init(starter_plan, slug="taskshop2", phone="+919811200101")
+        with patch("master.tasks.provision_tenant.delay") as mock_delay:
+            res = client.post(self.verify_url, {
+                "slug": "taskshop2", "phone_otp": phone_otp, "email_code": email_code,
+            }, format="json")
+        assert res.status_code == status.HTTP_201_CREATED
+        mock_delay.assert_called_once()
+
+    def test_verify_writes_audit_log(self, db, starter_plan):
+        from unittest.mock import patch
         from master.models import AuditLogMaster
+        client, phone_otp, email_code = self._do_init(starter_plan, slug="auditshop2", phone="+919811200102")
+        with patch("master.tasks.provision_tenant.delay"):
+            client.post(self.verify_url, {
+                "slug": "auditshop2", "phone_otp": phone_otp, "email_code": email_code,
+            }, format="json")
         assert AuditLogMaster.objects.filter(event_type="tenant.created").exists()
 
-    def test_register_dispatches_provisioning_task(self, db, starter_plan):
-        """register_tenant() must enqueue the provisioning task."""
-        from unittest.mock import patch
-        from rest_framework.test import APIClient
-
-        client = APIClient()
-        with patch("master.tasks.provision_tenant.delay") as mock_delay:
-            res = client.post(self.url, {
-                "business_name": "Task Corp", "slug": "taskcorp",
-                "owner_name": "Task Owner", "phone": "+919811100020",
-                "email": "owner@taskcorp.com", "password": "SecurePass123!",
-                "plan_id": str(starter_plan.id),
-            }, format="json")
-
-        assert res.status_code == status.HTTP_201_CREATED
-        mock_delay.assert_called_once_with(res.data["tenant_id"])
-
-    def test_register_stores_credentials_in_cache(self, db, starter_plan):
-        """register_tenant() stores signed owner credentials in Redis for the task."""
+    def test_verify_stores_credentials_in_cache(self, db, starter_plan):
         from unittest.mock import patch
         from django.core import signing
         from django.core.cache import cache
-        from rest_framework.test import APIClient
-
-        client = APIClient()
+        client, phone_otp, email_code = self._do_init(starter_plan, slug="credshop", phone="+919811200103")
         with patch("master.tasks.provision_tenant.delay"):
-            res = client.post(self.url, {
-                "business_name": "Cache Corp", "slug": "cachecorp",
-                "owner_name": "Cache Owner", "phone": "+919811100021",
-                "email": "owner@cachecorp.com", "password": "SecurePass123!",
-                "plan_id": str(starter_plan.id),
+            res = client.post(self.verify_url, {
+                "slug": "credshop", "phone_otp": phone_otp, "email_code": email_code,
             }, format="json")
-
         tenant_id = res.data["tenant_id"]
         raw = cache.get(f"tenant_init:{tenant_id}")
-        assert raw is not None, "Signed credentials must be in cache after registration"
+        assert raw is not None, "Signed credentials must be in cache after verify"
         data = signing.loads(raw)
-        assert data["owner_name"] == "Cache Owner"
+        assert data["owner_name"] == "Verify Owner"
         assert data["password"] == "SecurePass123!"
+
+    def test_verify_wrong_phone_otp_returns_400(self, db, starter_plan):
+        client, _, email_code = self._do_init(starter_plan, slug="wrongotp", phone="+919811200104")
+        res = client.post(self.verify_url, {
+            "slug": "wrongotp", "phone_otp": "000000", "email_code": email_code,
+        }, format="json")
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        assert res.data.get("code") == "OTP_INVALID"
+
+    def test_verify_wrong_email_code_returns_400(self, db, starter_plan):
+        client, phone_otp, _ = self._do_init(starter_plan, slug="wrongemail", phone="+919811200105")
+        res = client.post(self.verify_url, {
+            "slug": "wrongemail", "phone_otp": phone_otp, "email_code": "000000",
+        }, format="json")
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        assert res.data.get("code") == "EMAIL_CODE_INVALID"
+
+    def test_verify_max_attempts_returns_429(self, db, starter_plan):
+        client, _, email_code = self._do_init(starter_plan, slug="maxattempts", phone="+919811200106")
+        # 5 failed phone OTP attempts
+        for _ in range(5):
+            client.post(self.verify_url, {
+                "slug": "maxattempts", "phone_otp": "000000", "email_code": email_code,
+            }, format="json")
+        # 6th attempt must be rate-limited
+        res = client.post(self.verify_url, {
+            "slug": "maxattempts", "phone_otp": "000000", "email_code": email_code,
+        }, format="json")
+        assert res.status_code == status.HTTP_429_TOO_MANY_REQUESTS
+
+    def test_verify_expired_or_missing_returns_404(self, db):
+        from rest_framework.test import APIClient
+        res = APIClient().post(self.verify_url, {
+            "slug": "doesnotexist", "phone_otp": "123456", "email_code": "654321",
+        }, format="json")
+        assert res.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_verify_is_public(self, db, starter_plan):
+        """Verify endpoint requires no auth — unauthenticated requests must not get 401/403."""
+        from django.core import signing
+        from django.core.cache import cache
+        from rest_framework.test import APIClient
+        from unittest.mock import patch
+
+        cache.set("reg_pending:pubshop", {
+            "signed_data": signing.dumps({
+                "business_name": "Pub Shop", "slug": "pubshop",
+                "owner_name": "Pub Owner", "phone": "+919811200199",
+                "email": "owner@pubshop.com", "password": "SecurePass123!",
+                "plan_id": str(starter_plan.id),
+            }),
+            "phone_otp": "123456", "email_code": "654321", "otp_attempts": 0,
+        }, timeout=600)
+
+        client = APIClient()  # no credentials
+        with patch("master.tasks.provision_tenant.delay"):
+            res = client.post(self.verify_url, {
+                "slug": "pubshop", "phone_otp": "123456", "email_code": "654321",
+            }, format="json")
+        assert res.status_code not in (
+            status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -534,6 +640,58 @@ class TestSubscriptionPlans:
         assert res.data["features"]["amc"] is False
         assert res.data["features"]["pos"] is True
 
+    def test_patch_plan_price(self, platform_client, starter_plan):
+        res = platform_client.patch(
+            f"{self.url}{starter_plan.id}/",
+            {"price_monthly_inr": "1499.00"},
+            format="json",
+        )
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data["price_monthly_inr"] == "1499.00"
+        starter_plan.refresh_from_db()
+        from decimal import Decimal
+        assert starter_plan.price_monthly_inr == Decimal("1499.00")
+
+    def test_patch_plan_features(self, platform_client, starter_plan):
+        res = platform_client.patch(
+            f"{self.url}{starter_plan.id}/",
+            {"features": {"pos": True, "amc": True, "hr": True,
+                          "segmentation": True, "multi_stage_repair": False,
+                          "wholesale": False, "whatsapp": False}},
+            format="json",
+        )
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data["features"]["amc"] is True
+
+    def test_patch_plan_unknown_returns_404(self, platform_client):
+        import uuid
+        res = platform_client.patch(
+            f"{self.url}{uuid.uuid4()}/",
+            {"price_monthly_inr": "0.00"},
+            format="json",
+        )
+        assert res.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_patch_plan_requires_platform_admin(self, db, starter_plan):
+        from authentication.models import User
+        from rest_framework.test import APIClient
+        from rest_framework_simplejwt.tokens import RefreshToken
+        regular = User.objects.create_user(
+            email="regular2@test.com", phone="+919000000060",
+            full_name="Regular", password="pass",
+        )
+        refresh = RefreshToken.for_user(regular)
+        access = refresh.access_token
+        access["is_platform_admin"] = False
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {str(access)}")
+        res = client.patch(
+            f"/api/v1/platform/plans/{starter_plan.id}/",
+            {"price_monthly_inr": "0.00"},
+            format="json",
+        )
+        assert res.status_code == status.HTTP_403_FORBIDDEN
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # TestRazorpaySubscriptionWebhook
@@ -605,6 +763,70 @@ class TestRazorpaySubscriptionWebhook:
         assert res.status_code == status.HTTP_200_OK
         sub.refresh_from_db()
         assert sub.status == TenantSubscription.Status.CANCELLED
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TestPlatformIsolation
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TestTenantDetailDbStatus
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestTenantDetailDbStatus:
+    """
+    TenantDetailSerializer.get_db_status() must return values inside the FE
+    DbStatus union ('provisioning' | 'active' | 'suspended' | 'deleted').
+    """
+
+    url = "/api/v1/platform/tenants/"
+
+    def _make_tenant(self, db, slug, status_val):
+        from master.models import Tenant
+        return Tenant.objects.create(
+            name=slug, slug=slug, status=status_val,
+            owner_email=f"o@{slug}.com", owner_phone="+919000001000",
+        )
+
+    def _make_tenant_db(self, db, tenant, is_active):
+        from master.models import TenantDatabase
+        td = TenantDatabase(
+            tenant=tenant, db_name=f"db_{tenant.slug}",
+            db_host="localhost", db_port=5432,
+            db_user=f"u_{tenant.slug}",
+        )
+        td.encrypt_password("secret")
+        td.is_active = is_active
+        td.save()
+        return td
+
+    def test_no_tenant_database_returns_provisioning(self, db, platform_client):
+        tenant = self._make_tenant(db, "nodb", "provisioning")
+        res = platform_client.get(f"{self.url}{tenant.id}/")
+        assert res.status_code == 200
+        assert res.data["db_status"] == "provisioning"
+
+    def test_active_tenant_db_returns_active(self, db, platform_client):
+        tenant = self._make_tenant(db, "activedb", "active")
+        self._make_tenant_db(db, tenant, is_active=True)
+        res = platform_client.get(f"{self.url}{tenant.id}/")
+        assert res.status_code == 200
+        assert res.data["db_status"] == "active"
+
+    def test_inactive_tenant_db_returns_suspended(self, db, platform_client):
+        tenant = self._make_tenant(db, "inactivedb", "suspended")
+        self._make_tenant_db(db, tenant, is_active=False)
+        res = platform_client.get(f"{self.url}{tenant.id}/")
+        assert res.status_code == 200
+        assert res.data["db_status"] == "suspended"
+
+    def test_deleted_tenant_returns_deleted(self, db, platform_client):
+        tenant = self._make_tenant(db, "deleteddb", "deleted")
+        res = platform_client.get(f"{self.url}{tenant.id}/")
+        assert res.status_code == 200
+        assert res.data["db_status"] == "deleted"
 
 
 # ──────────────────────────────────────────────────────────────────────────────

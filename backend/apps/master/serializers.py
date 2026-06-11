@@ -49,10 +49,14 @@ class TenantDetailSerializer(serializers.ModelSerializer):
         return TenantSubscriptionSerializer(sub).data if sub else None
 
     def get_db_status(self, obj):
+        from .models import Tenant as T
+        if obj.status == T.Status.DELETED:
+            return "deleted"
         try:
-            return "active" if obj.database.is_active else "inactive"
+            db = obj.database
         except TenantDatabase.DoesNotExist:
-            return "not_provisioned"
+            return "provisioning"
+        return "active" if db.is_active else "suspended"
 
 
 class RegisterTenantSerializer(serializers.Serializer):
@@ -66,3 +70,18 @@ class RegisterTenantSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(min_length=8, write_only=True)
     plan_id = serializers.UUIDField()
+
+
+class RegisterVerifySerializer(serializers.Serializer):
+    slug = serializers.RegexField(
+        regex=r"^[a-z0-9_]{3,50}$",
+        error_messages={"invalid": "Invalid slug format."},
+    )
+    phone_otp = serializers.RegexField(
+        regex=r"^[0-9]{6}$",
+        error_messages={"invalid": "OTP must be exactly 6 digits."},
+    )
+    email_code = serializers.RegexField(
+        regex=r"^[0-9]{6}$",
+        error_messages={"invalid": "Email code must be exactly 6 digits."},
+    )
