@@ -100,6 +100,37 @@ def send_bulk_whatsapp_segment(self, customer_ids: list, template_name: str, var
     return {"sent": sent, "failed": failed}
 
 
+@shared_task(name="crm.send_lead_assigned_notification", bind=True, max_retries=3)
+def send_lead_assigned_notification(self, lead_id: str, assignee_id: str) -> None:
+    """Notify a staff member that a lead has been assigned to them."""
+    from authentication.models import User
+    from .models import Lead
+
+    try:
+        lead = Lead.objects.get(pk=lead_id)
+        assignee = User.objects.get(pk=assignee_id)
+    except (Lead.DoesNotExist, User.DoesNotExist):
+        logger.warning(
+            "send_lead_assigned_notification: lead %s or user %s not found", lead_id, assignee_id
+        )
+        return
+
+    if not getattr(assignee, "phone", None):
+        return
+
+    from core.notifications import send_whatsapp
+    send_whatsapp(
+        phone=assignee.phone,
+        template_name="lead_assigned",
+        variables={
+            "staff_name": assignee.full_name,
+            "lead_name": lead.name,
+            "lead_phone": lead.phone,
+            "source": lead.get_source_display(),
+        },
+    )
+
+
 def _notify_task_overdue(task) -> None:
     from core.notifications import send_whatsapp
     customer_name = ""

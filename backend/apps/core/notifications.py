@@ -37,6 +37,7 @@ TEMPLATE_REGISTRY: list[dict[str, Any]] = [
     {"template_name": "spare_part_received",     "module": "repair",    "trigger": "Part received",           "recipient": "staff",    "variables": ["staff_name", "part_name", "job_number", "qty"]},
     {"template_name": "warranty_expiry_reminder","module": "repair",    "trigger": "Warranty expiring",       "recipient": "customer", "variables": ["customer_name", "job_number", "device_type", "expiry_date", "shop_phone"]},
     # CRM
+    {"template_name": "lead_assigned",           "module": "crm",       "trigger": "Lead assigned to staff",  "recipient": "staff",    "variables": ["staff_name", "lead_name", "lead_phone", "source"]},
     {"template_name": "lead_quote_sent",         "module": "crm",       "trigger": "Lead quote sent",         "recipient": "customer", "variables": ["customer_name", "quote_amount", "valid_until", "shop_phone"]},
     {"template_name": "task_overdue",            "module": "crm",       "trigger": "Task overdue",            "recipient": "staff",    "variables": ["staff_name", "task_title", "due_date"]},
     {"template_name": "task_daily_digest",       "module": "crm",       "trigger": "Daily task digest",       "recipient": "staff",    "variables": ["staff_name", "task_count", "task_list"]},

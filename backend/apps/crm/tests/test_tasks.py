@@ -142,3 +142,102 @@ class TestSendTaskDailyDigest:
             send_task_daily_digest()
 
         mock_delay.assert_not_called()
+
+
+# ── lead_assigned signal + task ───────────────────────────────────────────────
+
+@pytest.mark.django_db
+class TestLeadAssignedNotification:
+    """Signal fires send_lead_assigned_notification when assigned_to is set/changed."""
+
+    def test_new_lead_with_assignee_queues_notification(self, shop, assignee):
+        from crm.models import Lead
+        with patch("crm.tasks.send_lead_assigned_notification.delay") as mock_delay:
+            lead = Lead.objects.create(
+                shop=shop, name="Test Lead", phone="+919500000001",
+                source="walk_in", assigned_to=assignee,
+            )
+        mock_delay.assert_called_once_with(
+            lead_id=str(lead.pk), assignee_id=str(assignee.pk)
+        )
+
+    def test_new_lead_without_assignee_does_not_notify(self, shop):
+        from crm.models import Lead
+        with patch("crm.tasks.send_lead_assigned_notification.delay") as mock_delay:
+            Lead.objects.create(
+                shop=shop, name="Unassigned Lead", phone="+919500000002", source="walk_in"
+            )
+        mock_delay.assert_not_called()
+
+    def test_reassignment_queues_notification(self, shop, assignee, db):
+        from authentication.models import User
+        from crm.models import Lead
+        other = User.objects.create_user(
+            email="other@crm.test", phone="+919600000001",
+            full_name="Other Staff", password="pass",
+        )
+        lead = Lead.objects.create(
+            shop=shop, name="Reassigned Lead", phone="+919500000003",
+            source="walk_in", assigned_to=other,
+        )
+        with patch("crm.tasks.send_lead_assigned_notification.delay") as mock_delay:
+            lead.assigned_to = assignee
+            lead.save()
+        mock_delay.assert_called_once_with(
+            lead_id=str(lead.pk), assignee_id=str(assignee.pk)
+        )
+
+    def test_save_without_change_does_not_notify(self, shop, assignee):
+        from crm.models import Lead
+        lead = Lead.objects.create(
+            shop=shop, name="Stable Lead", phone="+919500000004",
+            source="walk_in", assigned_to=assignee,
+        )
+        with patch("crm.tasks.send_lead_assigned_notification.delay") as mock_delay:
+            lead.name = "Stable Lead Updated"
+            lead.save()
+        mock_delay.assert_not_called()
+
+    def test_task_sends_correct_template(self, shop, assignee):
+        from crm.models import Lead
+        from crm.tasks import send_lead_assigned_notification
+        lead = Lead.objects.create(
+            shop=shop, name="Template Lead", phone="+919500000005",
+            source="walk_in",
+        )
+        with patch("core.tasks.dispatch_whatsapp_message.delay") as mock_dispatch:
+            send_lead_assigned_notification(
+                lead_id=str(lead.pk), assignee_id=str(assignee.pk)
+            )
+        mock_dispatch.assert_called_once()
+        kwargs = mock_dispatch.call_args.kwargs
+        assert kwargs["template_name"] == "lead_assigned"
+        assert kwargs["phone"] == assignee.phone
+        assert "staff_name" in kwargs["variables"]
+        assert "lead_name" in kwargs["variables"]
+        assert "lead_phone" in kwargs["variables"]
+
+    def test_task_no_op_when_assignee_has_no_phone(self, shop, db):
+        from authentication.models import User
+        from crm.models import Lead
+        from crm.tasks import send_lead_assigned_notification
+        no_phone = User(email="nophone@crm.test", phone="", full_name="No Phone")
+        no_phone.set_password("pass")
+        no_phone.save()
+        lead = Lead.objects.create(
+            shop=shop, name="No Phone Lead", phone="+919500000006", source="walk_in"
+        )
+        with patch("core.tasks.dispatch_whatsapp_message.delay") as mock_dispatch:
+            send_lead_assigned_notification(
+                lead_id=str(lead.pk), assignee_id=str(no_phone.pk)
+            )
+        mock_dispatch.assert_not_called()
+
+    def test_task_no_op_when_lead_not_found(self, assignee):
+        import uuid
+        from crm.tasks import send_lead_assigned_notification
+        with patch("core.tasks.dispatch_whatsapp_message.delay") as mock_dispatch:
+            send_lead_assigned_notification(
+                lead_id=str(uuid.uuid4()), assignee_id=str(assignee.pk)
+            )
+        mock_dispatch.assert_not_called()
