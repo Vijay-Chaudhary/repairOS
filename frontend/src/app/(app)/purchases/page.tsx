@@ -12,6 +12,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Money } from '@/components/shared/Money';
 import { Can } from '@/components/shared/Can';
 import { PoBuilder } from '@/components/procurement/PoBuilder';
+import { ReturnDialog } from '@/components/procurement/ReturnDialog';
 import {
   procurementApi, PO_STATUS_LABELS, PAYMENT_STATUS_LABELS,
   type PurchaseOrder, type PurchaseInvoice, type PoStatus, type PurchasePaymentStatus,
@@ -89,6 +90,7 @@ export default function PurchasesPage() {
   const [poBuilderOpen, setPoBuilderOpen] = useState(false);
   const [poCursor, setPoCursor] = useState<string | undefined>(undefined);
   const [invCursor, setInvCursor] = useState<string | undefined>(undefined);
+  const [selectedInvoice, setSelectedInvoice] = useState<PurchaseInvoice | null>(null);
 
   const poFilters = {
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
@@ -181,6 +183,7 @@ export default function PurchasesPage() {
               data={invData?.items}
               loading={invLoading}
               keyExtractor={(r) => r.id}
+              onRowClick={(r) => setSelectedInvoice(r)}
               emptyTitle="No purchase invoices"
               emptyDescription="Record supplier bills here after receiving goods."
               hasNextPage={!!invData?.meta?.next_cursor}
@@ -198,6 +201,14 @@ export default function PurchasesPage() {
         suppliers={suppliers}
         onSuccess={() => {}}
       />
+
+      {selectedInvoice && (
+        <ReturnDialog
+          open={!!selectedInvoice}
+          onOpenChange={(v) => { if (!v) setSelectedInvoice(null); }}
+          invoice={selectedInvoice}
+        />
+      )}
     </div>
   );
 }
