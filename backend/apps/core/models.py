@@ -216,3 +216,50 @@ class NotificationTemplate(BaseModel):
 
     def __str__(self) -> str:
         return self.template_name
+
+
+class NotificationLog(BaseModel):
+    """
+    Audit trail for every notification send attempt (WhatsApp, email, SMS).
+    One row per attempt; status updated in-place as the Celery task progresses.
+    """
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Queued"
+        SENT = "sent", "Sent"
+        DELIVERED = "delivered", "Delivered"
+        READ = "read", "Read"
+        FAILED = "failed", "Failed"
+
+    class Channel(models.TextChoices):
+        WHATSAPP = "whatsapp", "WhatsApp"
+        EMAIL = "email", "Email"
+        SMS = "sms", "SMS"
+
+    # Optional FKs stored as UUID to avoid cross-app circular imports.
+    customer_id = models.UUIDField(null=True, blank=True, db_index=True)
+    lead_id = models.UUIDField(null=True, blank=True, db_index=True)
+
+    template_name = models.CharField(max_length=100, db_index=True)
+    channel = models.CharField(max_length=10, choices=Channel.choices, default=Channel.WHATSAPP)
+    recipient_phone = models.CharField(max_length=20, blank=True, default="")
+    recipient_email = models.EmailField(blank=True, default="")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.QUEUED)
+
+    whatsapp_message_id = models.CharField(max_length=100, blank=True, default="")
+    attempt_count = models.IntegerField(default=0)
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    failed_reason = models.TextField(blank=True, default="")
+
+    class Meta:
+        app_label = "core"
+        db_table = "notification_logs"
+        indexes = [
+            models.Index(fields=["template_name", "status"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.channel}/{self.template_name} → {self.recipient_phone or self.recipient_email} [{self.status}]"

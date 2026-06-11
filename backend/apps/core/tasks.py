@@ -1,7 +1,10 @@
 """
-Core Celery tasks.
+Core Celery tasks for the notification pipeline.
 
-dispatch_whatsapp_message — calls Meta Cloud API to send a WhatsApp template message.
+dispatch_whatsapp_message — Meta Cloud API send, exponential retry (5/10/45 min),
+                             writes NotificationLog, SMS fallback on exhaustion.
+dispatch_sms_fallback     — MSG91 stub; logs if gateway not configured.
+dispatch_email_message    — Django send_mail; console backend in dev.
 """
 
 import json
@@ -9,16 +12,29 @@ import logging
 import urllib.request
 import urllib.error
 
+from django.utils import timezone
+
 from config.celery import app
 
 logger = logging.getLogger(__name__)
 
+# Retry countdowns per attempt index: 5 min, 10 min, 45 min
+_RETRY_COUNTDOWNS = [300, 600, 2700]
+
+
+def _retry_countdown(attempt: int) -> int:
+    try:
+        return _RETRY_COUNTDOWNS[attempt]
+    except IndexError:
+        return _RETRY_COUNTDOWNS[-1]
+
+
+# ── WhatsApp ──────────────────────────────────────────────────────────────────
 
 @app.task(
     name="core.dispatch_whatsapp_message",
     bind=True,
     max_retries=3,
-    default_retry_delay=30,
 )
 def dispatch_whatsapp_message(
     self,
@@ -26,15 +42,42 @@ def dispatch_whatsapp_message(
     phone: str,
     template_name: str,
     variables: dict,
+    log_id: str | None = None,
 ) -> None:
     """
     Send a WhatsApp template message via Meta Cloud API.
 
     Required env vars: WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN.
-    If either is absent the task logs a warning and exits silently — this
-    allows dev environments without WhatsApp credentials to run without errors.
+    Absent credentials → warning log + exit (safe in dev/local).
+    Writes / updates NotificationLog for every attempt.
+    After max_retries exhausted → queues SMS fallback.
     """
     from django.conf import settings
+    from core.models import NotificationLog
+
+    now = timezone.now()
+
+    # Resolve or create the log row (one row per logical send, updated per retry).
+    log: NotificationLog | None = None
+    if log_id:
+        try:
+            log = NotificationLog.objects.get(id=log_id)
+        except NotificationLog.DoesNotExist:
+            pass
+
+    if log is None:
+        log = NotificationLog.objects.create(
+            template_name=template_name,
+            channel=NotificationLog.Channel.WHATSAPP,
+            recipient_phone=phone,
+            status=NotificationLog.Status.QUEUED,
+            attempt_count=0,
+        )
+
+    log.attempt_count += 1
+    log.last_attempt_at = now
+    log.status = NotificationLog.Status.QUEUED
+    log.save(update_fields=["attempt_count", "last_attempt_at", "status", "updated_at"])
 
     phone_number_id: str = getattr(settings, "WHATSAPP_PHONE_NUMBER_ID", "")
     access_token: str = getattr(settings, "WHATSAPP_ACCESS_TOKEN", "")
@@ -42,10 +85,13 @@ def dispatch_whatsapp_message(
     if not phone_number_id or not access_token:
         logger.warning(
             "WhatsApp not configured (WHATSAPP_PHONE_NUMBER_ID / WHATSAPP_ACCESS_TOKEN missing). "
-            "Skipping template=%s phone=%s",
+            "Would send template=%s to phone=%s",
             template_name,
             phone,
         )
+        log.status = NotificationLog.Status.FAILED
+        log.failed_reason = "WhatsApp credentials not configured"
+        log.save(update_fields=["status", "failed_reason", "updated_at"])
         return
 
     # Check DB override: if a NotificationTemplate row exists and is_active=False, skip.
@@ -54,12 +100,14 @@ def dispatch_whatsapp_message(
         tmpl_override = NotificationTemplate.objects.filter(template_name=template_name).first()
         if tmpl_override is not None and not tmpl_override.is_active:
             logger.debug("Template %s disabled by tenant override, skipping", template_name)
+            log.status = NotificationLog.Status.FAILED
+            log.failed_reason = "Template disabled by tenant"
+            log.save(update_fields=["status", "failed_reason", "updated_at"])
             return
     except Exception:
         pass  # DB errors must not block the notification path
 
     # Build Meta Cloud API payload.
-    # Variables are passed as ordered body parameters.
     body_params = [{"type": "text", "text": str(v)} for v in variables.values()]
     payload = {
         "messaging_product": "whatsapp",
@@ -94,6 +142,11 @@ def dispatch_whatsapp_message(
                 phone,
                 msg_id,
             )
+            log.status = NotificationLog.Status.SENT
+            log.whatsapp_message_id = msg_id
+            log.sent_at = timezone.now()
+            log.save(update_fields=["status", "whatsapp_message_id", "sent_at", "updated_at"])
+
     except urllib.error.HTTPError as exc:
         body = exc.read().decode(errors="replace")
         logger.error(
@@ -103,7 +156,110 @@ def dispatch_whatsapp_message(
             exc.code,
             body,
         )
-        raise self.retry(exc=exc)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=_retry_countdown(self.request.retries))
+        log.status = NotificationLog.Status.FAILED
+        log.failed_reason = f"HTTP {exc.code}: {body[:500]}"
+        log.save(update_fields=["status", "failed_reason", "updated_at"])
+        dispatch_sms_fallback.delay(
+            log_id=str(log.id), phone=phone, template_name=template_name, variables=variables
+        )
+
     except Exception as exc:
         logger.error("WhatsApp send failed: template=%s phone=%s error=%s", template_name, phone, exc)
-        raise self.retry(exc=exc)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=_retry_countdown(self.request.retries))
+        log.status = NotificationLog.Status.FAILED
+        log.failed_reason = str(exc)[:500]
+        log.save(update_fields=["status", "failed_reason", "updated_at"])
+        dispatch_sms_fallback.delay(
+            log_id=str(log.id), phone=phone, template_name=template_name, variables=variables
+        )
+
+
+# ── SMS fallback ──────────────────────────────────────────────────────────────
+
+@app.task(name="core.dispatch_sms_fallback", bind=True, max_retries=1)
+def dispatch_sms_fallback(
+    self,
+    *,
+    log_id: str,
+    phone: str,
+    template_name: str,
+    variables: dict,
+) -> None:
+    """
+    SMS fallback triggered after WhatsApp retries are exhausted.
+    Production: set SMS_GATEWAY_KEY to enable MSG91 sends.
+    Dev/local: logs what would be sent; does not raise.
+    """
+    from django.conf import settings
+    from core.models import NotificationLog
+
+    gateway_key: str = getattr(settings, "SMS_GATEWAY_KEY", "")
+    message = " | ".join([template_name] + [f"{k}={v}" for k, v in variables.items()])
+
+    if not gateway_key:
+        logger.warning(
+            "SMS fallback: gateway not configured — would send to %s: %s",
+            phone,
+            message[:120],
+        )
+        try:
+            log = NotificationLog.objects.get(id=log_id)
+            log.failed_reason = (log.failed_reason + " | SMS fallback: gateway not configured")[:1000]
+            log.save(update_fields=["failed_reason", "updated_at"])
+        except Exception:
+            pass
+        return
+
+    # MSG91 integration — replace with real HTTP call when key is available.
+    logger.info("SMS fallback: would send to %s via MSG91 (not yet implemented)", phone)
+
+
+# ── Email ─────────────────────────────────────────────────────────────────────
+
+@app.task(name="core.dispatch_email_message", bind=True, max_retries=3)
+def dispatch_email_message(
+    self,
+    *,
+    to: str,
+    subject: str,
+    body: str,
+    template_name: str = "email",
+) -> None:
+    """
+    Send a plain-text email via Django's mail backend.
+    Dev: prints to console (EMAIL_BACKEND = console).
+    Production: configure EMAIL_BACKEND + EMAIL_HOST_* in settings.
+    Writes a NotificationLog row.
+    """
+    from django.conf import settings
+    from django.core.mail import send_mail
+    from core.models import NotificationLog
+
+    now = timezone.now()
+    log = NotificationLog.objects.create(
+        template_name=template_name,
+        channel=NotificationLog.Channel.EMAIL,
+        recipient_email=to,
+        status=NotificationLog.Status.QUEUED,
+        attempt_count=1,
+        last_attempt_at=now,
+    )
+
+    from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@repaiross.app")
+
+    try:
+        send_mail(subject=subject, message=body, from_email=from_email, recipient_list=[to])
+        log.status = NotificationLog.Status.SENT
+        log.sent_at = timezone.now()
+        log.save(update_fields=["status", "sent_at", "updated_at"])
+        logger.info("Email sent: template=%s to=%s", template_name, to)
+    except Exception as exc:
+        logger.error("Email send failed: template=%s to=%s error=%s", template_name, to, exc)
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=_retry_countdown(self.request.retries))
+        log.status = NotificationLog.Status.FAILED
+        log.failed_reason = str(exc)[:500]
+        log.save(update_fields=["status", "failed_reason", "updated_at"])

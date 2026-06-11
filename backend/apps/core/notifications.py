@@ -2,10 +2,14 @@
 Shared notification utilities.
 
 send_whatsapp(phone, template_name, variables, customer=None)
-  — Checks opt-out, then dispatches core.dispatch_whatsapp_message via Celery.
+  — Checks opt-out, dispatches core.dispatch_whatsapp_message via Celery.
+
+send_email(to, subject, body, template_name="email")
+  — Queues core.dispatch_email_message via Celery.
+    Dev: console backend. Production: set EMAIL_BACKEND + EMAIL_HOST_*.
 
 TEMPLATE_REGISTRY
-  — Canonical list of all 31 WhatsApp templates used across modules.
+  — Canonical list of all 31 WhatsApp templates + 2 email templates.
     GET /notifications/templates/ merges these defaults with DB overrides.
 """
 
@@ -59,6 +63,9 @@ TEMPLATE_REGISTRY: list[dict[str, Any]] = [
     {"template_name": "payment_overdue",         "module": "billing",   "trigger": "Invoice overdue",         "recipient": "customer", "variables": ["customer_name", "invoice_number", "amount_due", "overdue_days"]},
     {"template_name": "gst_summary_ready",       "module": "billing",   "trigger": "Monthly GST summary",     "recipient": "manager",  "variables": ["manager_name", "month", "year", "total_gst"]},
     {"template_name": "commission_paid",         "module": "commissions","trigger": "Commission disbursed",   "recipient": "staff",    "variables": ["staff_name", "amount", "period"]},
+    # Procurement — email channel
+    {"template_name": "po_confirmation_supplier","module": "procurement","trigger": "PO sent to supplier",     "recipient": "supplier", "channel": "email", "variables": ["supplier_name", "po_number", "delivery_date", "total_value"]},
+    {"template_name": "purchase_bill_due",       "module": "procurement","trigger": "Bill due in 3 days",      "recipient": "manager",  "channel": "email", "variables": ["manager_name", "supplier_name", "amount_due", "due_date"]},
 ]
 
 _TEMPLATE_MAP: dict[str, dict[str, Any]] = {t["template_name"]: t for t in TEMPLATE_REGISTRY}
@@ -86,3 +93,20 @@ def send_whatsapp(
 
     from core.tasks import dispatch_whatsapp_message  # avoid circular at module load
     dispatch_whatsapp_message.delay(phone=phone, template_name=template_name, variables=variables)
+
+
+def send_email(
+    to: str,
+    subject: str,
+    body: str,
+    *,
+    template_name: str = "email",
+) -> None:
+    """
+    Queue a plain-text email via Celery.
+    No-ops silently on empty address so callers don't need to guard.
+    """
+    if not to:
+        return
+    from core.tasks import dispatch_email_message  # avoid circular at module load
+    dispatch_email_message.delay(to=to, subject=subject, body=body, template_name=template_name)
