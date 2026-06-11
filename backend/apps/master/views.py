@@ -10,6 +10,7 @@ No tenant DB access — all queries run against the master ('default') DB.
 
 import logging
 
+from django.db import models
 from rest_framework import status
 from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework.request import Request
@@ -156,9 +157,36 @@ class TenantListView(APIView):
     permission_classes = [IsAuthenticated, IsPlatformAdmin]
 
     def get(self, request: Request) -> Response:
-        tenants = Tenant.objects.using("default").order_by("-created_at")
+        from .models import TenantSubscription
+        qs = (
+            Tenant.objects.using("default")
+            .select_related("database")
+            .prefetch_related(
+                models.Prefetch(
+                    "subscriptions",
+                    queryset=TenantSubscription.objects.select_related("plan").order_by("-created_at"),
+                    to_attr="_prefetched_subscriptions",
+                )
+            )
+            .order_by("-created_at")
+        )
+        search = request.query_params.get("search")
+        if search:
+            qs = qs.filter(
+                models.Q(name__icontains=search) | models.Q(slug__icontains=search)
+            )
+        db_status = request.query_params.get("db_status")
+        if db_status == "deleted":
+            qs = qs.filter(status=Tenant.Status.DELETED)
+        elif db_status == "provisioning":
+            qs = qs.filter(status=Tenant.Status.PROVISIONING).exclude(database__isnull=False)
+        elif db_status == "active":
+            qs = qs.filter(database__is_active=True)
+        elif db_status == "suspended":
+            qs = qs.filter(database__is_active=False)
+
         paginator = RepairOSCursorPagination()
-        page = paginator.paginate_queryset(tenants, request)
+        page = paginator.paginate_queryset(qs, request)
         data = TenantListSerializer(page, many=True).data
         return paginator.get_paginated_response(data)
 
@@ -207,7 +235,7 @@ class SubscriptionPlanListCreateView(APIView):
 
     def get(self, request: Request) -> Response:
         plans = SubscriptionPlan.objects.using("default").order_by("price_monthly_inr")
-        return Response(SubscriptionPlanSerializer(plans, many=True).data)
+        return Response({"items": SubscriptionPlanSerializer(plans, many=True).data})
 
     def post(self, request: Request) -> Response:
         serializer = SubscriptionPlanSerializer(data=request.data)

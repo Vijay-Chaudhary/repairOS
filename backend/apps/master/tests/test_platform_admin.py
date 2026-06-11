@@ -522,6 +522,49 @@ class TestPlatformAdminTenants:
         slugs = [t["slug"] for t in res.data["items"]]
         assert "activecorp" in slugs
 
+    def test_list_tenant_includes_fe_required_fields(self, platform_client, active_tenant, starter_plan):
+        """TenantListSerializer must emit the fields the FE Tenant interface expects."""
+        res = platform_client.get(self.list_url)
+        tenant = next(t for t in res.data["items"] if t["slug"] == "activecorp")
+        assert tenant["db_status"] == "provisioning"  # no TenantDatabase row
+        assert tenant["plan_name"] == starter_plan.name
+        assert str(tenant["plan_id"]) == str(starter_plan.id)
+        assert tenant["subscription_status"] == "active"
+        assert tenant["is_active"] is True
+        assert tenant["trial_ends_at"] is None  # status=active, not trialing
+
+    def test_list_tenant_trial_ends_at_set_for_trialing(self, platform_client, starter_plan, db):
+        from master.models import Tenant, TenantSubscription
+        import datetime
+        tenant = Tenant.objects.create(
+            name="Trial Corp", slug="trialcorp",
+            status=Tenant.Status.ACTIVE,
+            owner_email="owner@trialcorp.com",
+            owner_phone="+919000000101",
+        )
+        TenantSubscription.objects.create(
+            tenant=tenant, plan=starter_plan,
+            status=TenantSubscription.Status.TRIALING,
+            current_period_start=datetime.date(2026, 6, 1),
+            current_period_end=datetime.date(2026, 7, 1),
+        )
+        res = platform_client.get(self.list_url)
+        t_data = next((t for t in res.data["items"] if t["slug"] == "trialcorp"), None)
+        assert t_data is not None
+        assert t_data["trial_ends_at"] == "2026-07-01"
+        assert t_data["subscription_status"] == "trialing"
+
+    def test_list_search_filter(self, platform_client, active_tenant):
+        res = platform_client.get(self.list_url, {"search": "activecorp"})
+        assert res.status_code == status.HTTP_200_OK
+        assert len(res.data["items"]) == 1
+        assert res.data["items"][0]["slug"] == "activecorp"
+
+    def test_list_search_no_match(self, platform_client, active_tenant):
+        res = platform_client.get(self.list_url, {"search": "nonexistent-xyz"})
+        assert res.status_code == status.HTTP_200_OK
+        assert len(res.data["items"]) == 0
+
     def test_get_tenant_detail(self, platform_client, active_tenant):
         res = platform_client.get(f"{self.list_url}{active_tenant.id}/")
         assert res.status_code == status.HTTP_200_OK
@@ -617,7 +660,8 @@ class TestSubscriptionPlans:
     def test_list_plans(self, platform_client, starter_plan, professional_plan):
         res = platform_client.get(self.url)
         assert res.status_code == status.HTTP_200_OK
-        names = [p["name"] for p in res.data]
+        assert "items" in res.data
+        names = [p["name"] for p in res.data["items"]]
         assert "Starter" in names
         assert "Professional" in names
 

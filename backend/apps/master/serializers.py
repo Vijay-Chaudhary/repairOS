@@ -24,12 +24,60 @@ class TenantSubscriptionSerializer(serializers.ModelSerializer):
 
 
 class TenantListSerializer(serializers.ModelSerializer):
+    db_status = serializers.SerializerMethodField()
+    plan_id = serializers.SerializerMethodField()
+    plan_name = serializers.SerializerMethodField()
+    subscription_status = serializers.SerializerMethodField()
+    is_active = serializers.SerializerMethodField()
+    trial_ends_at = serializers.SerializerMethodField()
+
     class Meta:
         model = Tenant
         fields = [
-            "id", "name", "slug", "status", "plan",
+            "id", "name", "slug",
+            "db_status", "plan_id", "plan_name",
+            "subscription_status", "is_active", "trial_ends_at",
             "owner_email", "owner_phone", "created_at",
         ]
+
+    def _latest_sub(self, obj):
+        # Subscriptions prefetched by the view as `_prefetched_subscriptions`
+        subs = getattr(obj, "_prefetched_subscriptions", None)
+        if subs is not None:
+            return subs[0] if subs else None
+        return obj.subscriptions.select_related("plan").order_by("-created_at").first()
+
+    def get_db_status(self, obj) -> str:
+        if obj.status == Tenant.Status.DELETED:
+            return "deleted"
+        try:
+            db = obj.database
+        except TenantDatabase.DoesNotExist:
+            return "provisioning"
+        return "active" if db.is_active else "suspended"
+
+    def get_plan_id(self, obj) -> str | None:
+        sub = self._latest_sub(obj)
+        return str(sub.plan_id) if sub else None
+
+    def get_plan_name(self, obj) -> str:
+        sub = self._latest_sub(obj)
+        if sub:
+            return sub.plan.name
+        return obj.get_plan_display()
+
+    def get_subscription_status(self, obj) -> str | None:
+        sub = self._latest_sub(obj)
+        return sub.status if sub else None
+
+    def get_is_active(self, obj) -> bool:
+        return obj.status == Tenant.Status.ACTIVE
+
+    def get_trial_ends_at(self, obj) -> str | None:
+        sub = self._latest_sub(obj)
+        if sub and sub.status == TenantSubscription.Status.TRIALING:
+            return sub.current_period_end.isoformat()
+        return None
 
 
 class TenantDetailSerializer(serializers.ModelSerializer):
