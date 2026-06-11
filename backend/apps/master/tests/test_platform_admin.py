@@ -4,6 +4,9 @@ Platform Admin module tests — §10 acceptance criteria + §11 test cases.
 Covers:
 - Tenant registration: slug sanitised, uniqueness enforced, status=provisioning
 - Invalid slug rejected (spaces, uppercase, reserved)
+- Registration dispatches provisioning task and stores signed credentials in cache
+- do_provision_tenant: seeds roles, creates Tenant Admin, activates tenant
+- provision_tenant task marks provisioning_failed after max retries
 - Platform admin can list all tenants
 - Platform admin can suspend a tenant
 - Suspended tenant is blocked at the login endpoint (auth-level block)
@@ -107,17 +110,19 @@ class TestRegistration:
     url = "/api/v1/register/"
 
     def test_register_creates_tenant_with_provisioning_status(self, db, starter_plan):
+        from unittest.mock import patch
         from rest_framework.test import APIClient
         client = APIClient()
-        res = client.post(self.url, {
-            "business_name": "Joy Computer",
-            "slug": "joycomputer",
-            "owner_name": "Joy Owner",
-            "phone": "+919811100001",
-            "email": "owner@joycomputer.com",
-            "password": "SecurePass123!",
-            "plan_id": str(starter_plan.id),
-        }, format="json")
+        with patch("master.tasks.provision_tenant.delay"):
+            res = client.post(self.url, {
+                "business_name": "Joy Computer",
+                "slug": "joycomputer",
+                "owner_name": "Joy Owner",
+                "phone": "+919811100001",
+                "email": "owner@joycomputer.com",
+                "password": "SecurePass123!",
+                "plan_id": str(starter_plan.id),
+            }, format="json")
         assert res.status_code == status.HTTP_201_CREATED
         assert res.data["db_status"] == "provisioning"
         assert "tenant_id" in res.data
@@ -128,17 +133,19 @@ class TestRegistration:
         assert t.status == Tenant.Status.PROVISIONING
 
     def test_duplicate_slug_blocked(self, db, active_tenant, starter_plan):
+        from unittest.mock import patch
         from rest_framework.test import APIClient
         client = APIClient()
-        res = client.post(self.url, {
-            "business_name": "Another Corp",
-            "slug": "activecorp",
-            "owner_name": "Another Owner",
-            "phone": "+919811100002",
-            "email": "other@test.com",
-            "password": "SecurePass123!",
-            "plan_id": str(starter_plan.id),
-        }, format="json")
+        with patch("master.tasks.provision_tenant.delay"):
+            res = client.post(self.url, {
+                "business_name": "Another Corp",
+                "slug": "activecorp",
+                "owner_name": "Another Owner",
+                "phone": "+919811100002",
+                "email": "other@test.com",
+                "password": "SecurePass123!",
+                "plan_id": str(starter_plan.id),
+            }, format="json")
         assert res.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_invalid_slug_rejected(self, db, starter_plan):
@@ -154,17 +161,187 @@ class TestRegistration:
             assert res.status_code == status.HTTP_400_BAD_REQUEST, f"Slug '{bad_slug}' should be rejected"
 
     def test_audit_log_written_on_registration(self, db, starter_plan):
+        from unittest.mock import patch
         from rest_framework.test import APIClient
         client = APIClient()
-        client.post(self.url, {
-            "business_name": "Audit Test", "slug": "auditcorp",
-            "owner_name": "Owner", "phone": "+919811100010",
-            "email": "audit@test.com", "password": "SecurePass123!",
-            "plan_id": str(starter_plan.id),
-        }, format="json")
+        with patch("master.tasks.provision_tenant.delay"):
+            client.post(self.url, {
+                "business_name": "Audit Test", "slug": "auditcorp",
+                "owner_name": "Owner", "phone": "+919811100010",
+                "email": "audit@test.com", "password": "SecurePass123!",
+                "plan_id": str(starter_plan.id),
+            }, format="json")
 
         from master.models import AuditLogMaster
         assert AuditLogMaster.objects.filter(event_type="tenant.created").exists()
+
+    def test_register_dispatches_provisioning_task(self, db, starter_plan):
+        """register_tenant() must enqueue the provisioning task."""
+        from unittest.mock import patch
+        from rest_framework.test import APIClient
+
+        client = APIClient()
+        with patch("master.tasks.provision_tenant.delay") as mock_delay:
+            res = client.post(self.url, {
+                "business_name": "Task Corp", "slug": "taskcorp",
+                "owner_name": "Task Owner", "phone": "+919811100020",
+                "email": "owner@taskcorp.com", "password": "SecurePass123!",
+                "plan_id": str(starter_plan.id),
+            }, format="json")
+
+        assert res.status_code == status.HTTP_201_CREATED
+        mock_delay.assert_called_once_with(res.data["tenant_id"])
+
+    def test_register_stores_credentials_in_cache(self, db, starter_plan):
+        """register_tenant() stores signed owner credentials in Redis for the task."""
+        from unittest.mock import patch
+        from django.core import signing
+        from django.core.cache import cache
+        from rest_framework.test import APIClient
+
+        client = APIClient()
+        with patch("master.tasks.provision_tenant.delay"):
+            res = client.post(self.url, {
+                "business_name": "Cache Corp", "slug": "cachecorp",
+                "owner_name": "Cache Owner", "phone": "+919811100021",
+                "email": "owner@cachecorp.com", "password": "SecurePass123!",
+                "plan_id": str(starter_plan.id),
+            }, format="json")
+
+        tenant_id = res.data["tenant_id"]
+        raw = cache.get(f"tenant_init:{tenant_id}")
+        assert raw is not None, "Signed credentials must be in cache after registration"
+        data = signing.loads(raw)
+        assert data["owner_name"] == "Cache Owner"
+        assert data["password"] == "SecurePass123!"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TestProvisioning
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestProvisioning:
+    """Unit tests for do_provision_tenant() — PG creation and migrations are mocked."""
+
+    @pytest.fixture
+    def provisioning_tenant(self, db, starter_plan):
+        from master.models import Tenant, TenantSubscription
+        import datetime
+        tenant = Tenant.objects.create(
+            name="Prov Corp", slug="provcorp",
+            status=Tenant.Status.PROVISIONING,
+            owner_email="owner@provcorp.com",
+            owner_phone="+919811200001",
+        )
+        TenantSubscription.objects.create(
+            tenant=tenant, plan=starter_plan,
+            status=TenantSubscription.Status.TRIALING,
+            current_period_start=datetime.date(2026, 1, 1),
+            current_period_end=datetime.date(2026, 1, 31),
+        )
+        return tenant
+
+    def _patch_infra(self):
+        """Return a context manager that stubs out PG creation and migrations."""
+        from unittest.mock import patch, MagicMock
+        import contextlib
+
+        @contextlib.contextmanager
+        def ctx():
+            # call_command is imported locally inside do_provision_tenant, so patch
+            # the real source rather than a module-level alias.
+            with patch("master.services._create_pg_resources"), \
+                 patch("django.core.management.call_command"), \
+                 patch("django.db.connections") as mock_conns:
+                mock_conns.databases = {}
+                yield
+        return ctx()
+
+    def test_do_provision_tenant_activates_tenant(self, db, provisioning_tenant):
+        from django.core import signing
+        from django.core.cache import cache
+        from master.services import do_provision_tenant
+        from master.models import Tenant
+
+        # Seed cache as register_tenant() would
+        payload = signing.dumps({"owner_name": "Prov Owner", "password": "Pass@123!"})
+        cache.set(f"tenant_init:{provisioning_tenant.id}", payload, timeout=3600)
+
+        with self._patch_infra():
+            do_provision_tenant(str(provisioning_tenant.id))
+
+        provisioning_tenant.refresh_from_db()
+        assert provisioning_tenant.status == Tenant.Status.ACTIVE
+
+    def test_do_provision_tenant_seeds_roles(self, db, provisioning_tenant):
+        from django.core import signing
+        from django.core.cache import cache
+        from master.services import do_provision_tenant
+        from authentication.models import Role
+
+        payload = signing.dumps({"owner_name": "Prov Owner", "password": "Pass@123!"})
+        cache.set(f"tenant_init:{provisioning_tenant.id}", payload, timeout=3600)
+
+        with self._patch_infra():
+            do_provision_tenant(str(provisioning_tenant.id))
+
+        assert Role.objects.filter(name="Tenant Admin").exists()
+        assert Role.objects.filter(name="Shop Manager").exists()
+
+    def test_do_provision_tenant_creates_admin_user(self, db, provisioning_tenant):
+        from django.core import signing
+        from django.core.cache import cache
+        from master.services import do_provision_tenant
+        from authentication.models import User
+
+        payload = signing.dumps({"owner_name": "Prov Owner", "password": "Pass@123!"})
+        cache.set(f"tenant_init:{provisioning_tenant.id}", payload, timeout=3600)
+
+        with self._patch_infra():
+            do_provision_tenant(str(provisioning_tenant.id))
+
+        assert User.objects.filter(email="owner@provcorp.com").exists()
+
+    def test_do_provision_tenant_writes_audit_log(self, db, provisioning_tenant):
+        from django.core import signing
+        from django.core.cache import cache
+        from master.services import do_provision_tenant
+        from master.models import AuditLogMaster
+
+        payload = signing.dumps({"owner_name": "Prov Owner", "password": "Pass@123!"})
+        cache.set(f"tenant_init:{provisioning_tenant.id}", payload, timeout=3600)
+
+        with self._patch_infra():
+            do_provision_tenant(str(provisioning_tenant.id))
+
+        assert AuditLogMaster.objects.filter(event_type="tenant.provisioned").exists()
+
+    def test_do_provision_tenant_idempotent_if_already_active(self, db, active_tenant):
+        """Calling do_provision_tenant on an already-active tenant is a no-op."""
+        from master.services import do_provision_tenant
+        from master.models import Tenant
+        original_status = active_tenant.status
+
+        with self._patch_infra():
+            do_provision_tenant(str(active_tenant.id))  # must not raise
+
+        active_tenant.refresh_from_db()
+        assert active_tenant.status == original_status
+
+    def test_provision_task_marks_failed_after_max_retries(self, db, provisioning_tenant):
+        from unittest.mock import patch, MagicMock
+        from celery.exceptions import MaxRetriesExceededError
+        from master.tasks import provision_tenant
+        from master.models import Tenant
+
+        with patch("master.services.do_provision_tenant", side_effect=RuntimeError("PG down")), \
+             patch.object(provision_tenant, "retry", side_effect=MaxRetriesExceededError()):
+            with pytest.raises(MaxRetriesExceededError):
+                provision_tenant(str(provisioning_tenant.id))
+
+        provisioning_tenant.refresh_from_db()
+        assert provisioning_tenant.status == Tenant.Status.PROVISIONING_FAILED
 
 
 # ──────────────────────────────────────────────────────────────────────────────
