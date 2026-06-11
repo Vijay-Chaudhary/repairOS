@@ -307,6 +307,17 @@ class PurchaseReturnView(APIView):
     def get_permissions(self):
         return [require_permission("erp.purchase_returns.create")()]
 
+    def get(self, request):
+        token = getattr(request, "auth", None)
+        shop_ids = token.get("shop_ids", []) if token else []
+        qs = PurchaseReturn.objects.filter(
+            purchase_invoice__shop_id__in=shop_ids
+        ).order_by("-created_at").select_related("debit_note")
+        invoice_id = request.query_params.get("invoice_id")
+        if invoice_id:
+            qs = qs.filter(purchase_invoice_id=invoice_id)
+        return Response(PurchaseReturnSerializer(qs, many=True).data)
+
     def post(self, request):
         serializer = CreatePurchaseReturnSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
