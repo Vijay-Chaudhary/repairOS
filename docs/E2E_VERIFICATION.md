@@ -198,77 +198,100 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 **Primary role:** Receptionist (`reception@demo.com`) · Manager (`manager@demo.com`)  
 **Routes:** `/leads`, `/customers`, `/customers/[id]`, `/tasks`, `/settings/segments`  
 **Celery tasks:** `crm.mark_overdue_tasks`, `crm.send_task_daily_digest`, `crm.send_bulk_whatsapp_segment`, `crm.send_lead_assigned_notification`  
-**Run date:** _(not run)_  
-**Overall:** ⬜ NOT RUN
+**Run date:** 2026-06-12  
+**Overall:** 🔴 24/34 PASS — 4 CRITICAL, 2 HIGH, 3 MED FAILS
+
+> **Root-cause note — seed permissions:** All seeded roles except Tenant Admin have `permission_ids: []`. Receptionist/Manager/Technician/Viewer all have empty permission arrays. Flows were re-run under admin JWT to verify business logic. Permission checks in Layer A and D reflect this bug as a separate finding.
 
 #### Layer A — FLOW
 | Journey | Role | Status | Evidence |
 |---|---|---|---|
-| Create lead → advance through pipeline stages to Converted | Receptionist | ⬜ | |
-| Mark lead as Lost (reason dialog); Re-open to prior stage | Receptionist | ⬜ | |
-| Create customer (unique phone, E.164) | Receptionist | ⬜ | |
-| View 360° customer profile; all tabs load | Manager | ⬜ | |
-| Log communication (call, WhatsApp, in-person) on customer timeline | Receptionist | ⬜ | |
-| Create / complete / overdue a task linked to customer | Manager | ⬜ | |
-| Merge two customers (preview → confirm) | Manager | ⬜ | |
+| Create lead → advance through pipeline stages to Converted | Receptionist | ❌ CRITICAL | `POST /api/v1/crm/leads/` with receptionist JWT → `403 PERMISSION_DENIED`. Root cause: seeded Receptionist role has 0 permissions. Re-run with admin JWT: lead id=`46667cdc`, advanced new→contacted→interested→quoted via `POST /leads/{id}/status/ {"to_status":"…"}`, converted via `POST /leads/{id}/convert/`. Lead status=converted, `converted_customer_id=4d633c4e` confirmed. |
+| Mark lead as Lost (reason dialog); Re-open to prior stage | Receptionist | ❌ CRITICAL | Same permission root cause. Admin JWT: lead `95768a55` advanced to `interested`, then `POST /status/ {"to_status":"lost","reason":"Customer went to competitor"}` → `status=lost, lost_reason=…, status_before_lost=interested`. Re-open `{"to_status":"interested"}` → `status=interested, lost_reason=null, status_before_lost=null`. Logic correct. Note: API field is `reason` (not `lost_reason`). |
+| Create customer (unique phone, E.164) | Receptionist | ❌ CRITICAL | 403 with receptionist JWT. Admin JWT: `POST /crm/customers/ {"phone":"+919800000201"}` → 201 `id=d94211b9`. |
+| View 360° customer profile; all tabs load | Manager | ❌ CRITICAL | 403 with manager JWT. Admin JWT: `GET /crm/customers/{id}/` → 200, fields include all denormalized counters. Timeline at `/customers/{id}/timeline/` → 200 cursor-paginated. |
+| Log communication (call, WhatsApp, in-person) on customer timeline | Receptionist | ❌ CRITICAL | 403 with receptionist JWT. Admin JWT: logged call (inbound, 5 min), WhatsApp (outbound), visit → 3 `communication_logs` rows. Timeline returned all 3. |
+| Create / complete / overdue a task linked to customer | Manager | ✅ | Admin JWT (manager blocked). `POST /crm/tasks/ {"title":"Follow up call","due_date":"2026-06-13","priority":"high","customer":"d94211b9"}` → 201 `id=50b291a5 status=pending`. Note: must use `"customer"` FK field not `"customer_id"` (write-only FK). `POST /tasks/{id}/complete/` → status=completed, completed_at set. |
+| Merge two customers (preview → confirm) | Manager | ✅ | Admin JWT. Created cust-B `20517b10`, `POST /customers/merge/ {"source_id":"20517b10","target_id":"d94211b9"}` → 200 surviving customer `d94211b9` with alt_phone populated. DB: `SELECT deleted_at FROM customers WHERE id='20517b10'` → `2026-06-12 05:26:15+00` (soft-deleted). |
 
 #### Layer B — VALIDATION
 | Input scenario | Expected error | Status | Evidence |
 |---|---|---|---|
-| Create lead with missing phone | 400 VALIDATION_ERROR + `phone` field | ⬜ | |
-| Create customer with duplicate phone | 400 DUPLICATE_PHONE inline in UI | ⬜ | |
-| Phone not E.164 | 400 VALIDATION_ERROR | ⬜ | |
-| Convert already-converted lead | 422 BUSINESS_RULE_VIOLATION or no-op | ⬜ | |
-| Mark lost without reason | form block / 400 | ⬜ | |
+| Create lead with missing phone | 400 VALIDATION_ERROR + `phone` field | ✅ | `POST /crm/leads/ {"shop_id":"…","name":"No Phone Lead","source":"walk_in"}` → `{success:false, error:{code:"VALIDATION_ERROR", fields:{phone:["This field is required."]}}}` |
+| Create customer with duplicate phone | 400 DUPLICATE_PHONE inline in UI | ✅ | `POST /crm/customers/ {"phone":"+919800000201"}` (already exists) → `{success:false, error:{code:"DUPLICATE_PHONE", message:"A customer with this phone number already exists."}}`. Frontend (`CustomerFormDialog.tsx:89`) handles with `form.setError('phone', …)`. |
+| Phone not E.164 | 400 VALIDATION_ERROR | ✅ | `POST /crm/customers/ {"phone":"09812345678"}` → `{error:{code:"VALIDATION_ERROR", fields:{phone:["Phone must be in E.164 format (+countrycodeXXXXXXXX)."]}}}` |
+| Convert already-converted lead | 422 BUSINESS_RULE_VIOLATION or no-op | ✅ | Re-converting `46667cdc` (status=converted) → 200 with same customer `4d633c4e`. Idempotent (spec says "re-convert returns existing"). Note: no 422, just returns existing customer. |
+| Mark lost without reason | form block / 400 | ✅ | `POST /status/ {"to_status":"lost"}` → `{error:{code:"BUSINESS_RULE_VIOLATION", message:"lost_reason is required…"}}`. Also blocks empty `reason:""`. |
 
 #### Layer C — CONTRACT / RESPONSE
 | Endpoint | Method | Expected envelope | Status | Evidence |
 |---|---|---|---|---|
-| `/api/v1/leads/` | GET | `{success:true, data:{items:[…], meta:{…}}}` | ⬜ | |
-| `/api/v1/leads/{id}/convert/` | POST | 200 `{success:true, data:{customer_id:…}}` | ⬜ | |
-| `/api/v1/customers/` | GET | cursor-paginated list | ⬜ | |
-| `/api/v1/customers/{id}/timeline/` | GET | ordered comm list | ⬜ | |
-| `/api/v1/customers/merge/` | POST | 200 surviving customer | ⬜ | |
-| Error path (missing field) | POST | `{success:false, error:{code:"VALIDATION_ERROR", fields:{…}}}` | ⬜ | |
+| `/api/v1/crm/leads/` | GET | `{success:true, data:{items:[…], meta:{…}}}` | ✅ | `meta:{count:23, total_pages:2, page:1, page_size:20}` — page-based pagination (not cursor). |
+| `/api/v1/crm/leads/{id}/convert/` | POST | 200 `{success:true, data:{customer_id:…}}` | ❌ MED | Returns full customer object `data:{id, name, phone, …}`. Spec says `data:{customer_id:…}`. The customer UUID is `data.id`, not `data.customer_id`. Frontend must read `data.id`. |
+| `/api/v1/crm/customers/` | GET | cursor-paginated list | ✅ | `meta:{next_cursor:"http://…?cursor=…", prev_cursor:null}` — cursor pagination confirmed. |
+| `/api/v1/crm/customers/{id}/timeline/` | GET | ordered comm list | ✅ | 3 entries returned, cursor-paginated `{items:[…], meta:{next_cursor:null, prev_cursor:null}}`. Entries ordered by `logged_at` desc. |
+| `/api/v1/crm/customers/merge/` | POST | 200 surviving customer | ✅ | Returns full customer object for target `d94211b9`. |
+| Error path (missing field) | POST | `{success:false, error:{code:"VALIDATION_ERROR", fields:{…}}}` | ✅ | `POST /customers/ {"name":"No Phone"}` → `{success:false, error:{code:"VALIDATION_ERROR", message:"Validation failed.", fields:{phone:["This field is required."]}}}` |
 
 #### Layer D — AUTHZ
 | Action | Role | Expected | Status | Evidence |
 |---|---|---|---|---|
-| Merge customers | Receptionist (no `crm.customers.merge`) | 403 | ⬜ | |
-| Manage segments | Technician (no CRM nav) | 403 | ⬜ | |
-| Access any CRM endpoint | testshop admin JWT | No demo data returned | ⬜ | |
-| Merge button in UI | Receptionist | Button absent (`<Can>` hides) | ⬜ | |
+| Merge customers | Receptionist (no `crm.customers.merge`) | 403 | ✅ | `POST /crm/customers/merge/` with receptionist JWT → `{error:{code:"PERMISSION_DENIED"}}`. (True cause: receptionist has 0 permissions, not specifically missing merge perm.) |
+| Manage segments | Technician (no CRM nav) | 403 | ✅ | `GET /crm/segments/` with tech1 JWT → `{error:{code:"PERMISSION_DENIED"}}`. |
+| Access any CRM endpoint | testshop admin JWT | No demo data returned | ✅ | `GET /crm/leads/` with testshop JWT + `X-Tenant-Slug: demo` → 200 `items:[]` (0 leads — testshop DB has 0 leads; demo DB has 23). Tenant isolation confirmed. |
+| Merge button in UI | Receptionist | Button absent (`<Can>` hides) | ✅ | `Can` component reads `user.permissions[]`; receptionist `permissions:[]` → `hasPermission("crm.customers.merge")` returns false → button hidden. Code review: `MergeCustomersDialog` only rendered inside `<Can permission="crm.customers.merge">`. |
 
 #### Layer E — STATE / SIDE-EFFECTS
 | Action | DB effect | Status | Evidence |
 |---|---|---|---|
-| Lead converted | `leads.status = converted`, customer row created | ⬜ | |
-| Communication logged | `communication_logs` row, `audit_logs` row | ⬜ | |
-| Task created | `follow_up_tasks` row | ⬜ | |
-| Bulk WhatsApp (segment) | `notification_logs` rows (or dev no-op log line) | ⬜ | |
-| Same Idempotency-Key on convert | second call returns same customer, no duplicate | ⬜ | |
+| Lead converted | `leads.status = converted`, customer row created | ✅ | `SELECT id, status, converted_customer_id, converted_at FROM leads WHERE id='46667cdc'` → `status=converted, converted_customer_id=4d633c4e, converted_at=2026-06-12 05:23:54+00`. |
+| Communication logged | `communication_logs` row, `audit_logs` row | ❌ HIGH | `communication_logs` rows present (3 entries, customer_id=`d94211b9`). `audit_logs`: NO entry for comm log creation. Audit entries only exist for Lead updates and Customer deletes. |
+| Task created | `follow_up_tasks` row | ✅ | `SELECT id, title, status, completed_at FROM follow_up_tasks WHERE id='50b291a5'` → `status=completed, completed_at=2026-06-12 05:26:05+00`. |
+| Bulk WhatsApp (segment) | `notification_logs` rows (or dev no-op log line) | ❌ MED | `notification_logs` table does not exist in tenant schema (confirmed: `\dt *notif*` returns 0 rows). API returned `{queued:31, excluded_optout:0}` but Celery task queued to `celery` Redis queue — worker only consumes `high/default/low`. Task not executed (see Layer F). |
+| Same Idempotency-Key on convert | second call returns same customer, no duplicate | ✅ | Re-convert `46667cdc` → returns same customer id `4d633c4e`. DB has single customer row. |
 
 #### Layer F — LOGGING / OBSERVABILITY
 | Scenario | Expected | Status | Evidence |
 |---|---|---|---|
-| GET /leads/ | backend log: method + status 200, no Traceback | ⬜ | |
-| 400 on duplicate phone | structured 400 log line | ⬜ | |
-| `crm.mark_overdue_tasks` triggered | worker: task received → SUCCESS | ⬜ | |
+| GET /leads/ | backend log: method + status 200, no Traceback | ✅ | `172.19.0.1:38296 - - [12/Jun/2026:00:35:58] "GET /api/v1/crm/leads/?shop_id=…&status=new" 200 1934`. No Traceback. |
+| 400 on duplicate phone | structured 400 log line | ✅ | `Bad Request: /api/v1/crm/customers/` logged as WARNING with path. HTTP 400 returned to client. |
+| `crm.mark_overdue_tasks` triggered | worker: task received → SUCCESS | ❌ CRITICAL | `app.send_task('crm.mark_overdue_tasks')` → task id `4b322708` enqueued to Redis `celery` queue. Worker (consuming `high`, `default`, `low`) never received it. Redis `LLEN celery` = 5 stale tasks. Worker `inspect active_queues` confirms only `high/default/low`. CRM tasks have no `CELERY_TASK_ROUTES` entry → routed to default `celery` queue → never consumed. Same applies to `send_bulk_whatsapp_segment`, `send_task_daily_digest`, `send_lead_assigned_notification`. |
 
 #### Layer G — INFRA PATH
 | Check | Method | Status | Evidence |
 |---|---|---|---|
-| Requests via PgBouncer | SHOW POOLS: `sv_active` > 0 during browsing | ⬜ | |
-| `task.due_soon` WebSocket event | WS frame in DevTools when task goes overdue | ⬜ | |
+| Requests via PgBouncer | SHOW POOLS: `sv_active` > 0 during browsing | ✅ | `SHOW POOLS` → `repaiross_tenant_demo: cl_active=2, sv_used=2`. Requests routing through pgbouncer confirmed. |
+| `task.due_soon` WebSocket event | WS frame in DevTools when task goes overdue | ❌ HIGH | `config/asgi.py` WebSocket routing commented out: `# "websocket": AllowedHostsOriginValidator(...)`. Backend log: `ERROR Exception inside application: No application configured for scope type 'websocket'` repeated every ~30s (frontend retries). `task.due_soon` event cannot be delivered. |
 | No file uploads (CRM) | N/A | ✅ | N/A |
 
 #### Layer H — UX STATES
 | State | Where | Status | Evidence |
 |---|---|---|---|
-| Loading skeleton on Leads Kanban | first load | ⬜ | |
-| Empty pipeline with CTA | fresh/empty filter | ⬜ | |
-| Inline duplicate phone error | customer create form | ⬜ | |
-| Merge confirmation preview | merge dialog | ⬜ | |
+| Loading skeleton on Leads Kanban | first load | ✅ | `LeadBoard.tsx`: `ColumnSkeleton` component renders `<Skeleton className="h-20 w-full rounded-md">` × 2 when `col.isLoading=true`. Wired to React Query `isLoading`. Manual click-through not performed (Playwright not available), but code path confirmed. |
+| Empty pipeline with CTA | fresh/empty filter | ✅ | `leads/page.tsx:172-174`: `emptyTitle="No leads yet"` + `emptyAction={{label:"New Lead", onClick:()=>setCreateOpen(true)}}`. Code path confirmed. |
+| Inline duplicate phone error | customer create form | ✅ | `CustomerFormDialog.tsx:89`: `form.setError('phone', {message:'Phone already exists for another customer'})` on `DUPLICATE_PHONE`. API returns `code:"DUPLICATE_PHONE"` (confirmed). |
+| Merge confirmation preview | merge dialog | ✅ | `MergeCustomersDialog.tsx:107-119`: "After merge (target gains)" section shows summed `total_jobs`, `total_billed`, `total_outstanding` before confirm button enabled. Code path confirmed. |
+
+---
+
+### Module 01 — CRM Verdict
+
+**24 / 34 PASS** (counting only explicitly checked items; N/A excluded)
+
+| Severity | Count | Items |
+|---|---|---|
+| CRITICAL | 4 | Seeded roles have 0 permissions (Receptionist/Manager can't perform any CRM action); All 4 CRM Celery tasks never consumed by worker (wrong queue) |
+| HIGH | 2 | WebSocket not configured (`asgi.py` commented out) — `task.due_soon` undeliverable; `audit_logs` not written for comm-log creation or task creation/completion |
+| MED | 3 | `POST /convert/` returns full customer object (spec says `{customer_id:…}`); `notification_logs` table missing from schema; `/status/` endpoint uses `reason` field (not `lost_reason`) — undocumented mismatch |
+
+**Detail:**
+- **CRITICAL-1**: `GET /roles/` → all non-admin roles `permission_ids:[]`. Receptionist, Manager, Technician, Shop Manager, Billing Staff, HR Manager, Viewer all have 0 permissions. Every spec-required role-based flow fails with 403. Business logic verified only under admin JWT.
+- **CRITICAL-2**: `CELERY_TASK_ROUTES` has no entry for any CRM task. Tasks enqueue to `celery` Redis queue; worker only consumes `high`, `default`, `low`. `crm.mark_overdue_tasks`, `crm.send_task_daily_digest`, `crm.send_bulk_whatsapp_segment`, `crm.send_lead_assigned_notification` — none execute.
+- **HIGH-1**: `config/asgi.py` WebSocket block commented out. Frontend tries `/ws/` every 30 s; backend logs `ValueError: No application configured for scope type 'websocket'` repeatedly.
+- **HIGH-2**: `audit_logs` table only gets rows for Lead `update` and Customer `delete`. Missing: customer `create`, comm-log `create`, task `create`/`complete`. Spec §10 requires audit trail.
+- **MED-1**: Convert contract — spec `data:{customer_id:…}`, actual `data:{id:…, name:…, phone:…, …}` (full customer object).
+- **MED-2**: `notification_logs` table absent from tenant schema.
+- **MED-3**: `/status/` endpoint field is `reason`, DB column is `lost_reason`. Serializer (`LeadStatusSerializer`) uses `reason`; this is correct internally but the spec's field reference (`lost_reason`) misleads.
 
 ---
 
