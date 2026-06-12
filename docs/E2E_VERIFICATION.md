@@ -777,72 +777,101 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 
 ### Module 07 — Billing
 **Spec refs:** `docs/backend-spec/RepairOS-dev-spec/modules/07-billing.md`, `docs/frontend-spec/RepairOS-frontend-spec/modules/07-billing-ui.md`  
-**Primary role:** Billing Staff (`billing@demo.com`)  
-**Routes:** `/billing`, `/billing/invoices/[id]`, `/billing/outstanding`  
-**Celery tasks:** _(async PDF generation via reports task)_  
-**Run date:** _(not run)_  
-**Overall:** ⬜ NOT RUN
+**Primary role:** Admin (`admin@demo.com`), Billing Staff  
+**Routes:** `/invoices`, `/invoices/[id]`  
+**Celery tasks:** PDF generation (via reports); `billing.repair_payment_reminder`  
+**Run date:** 2026-06-12  
+**Overall:** 🟡 32 PASS / 6 FAIL — 2 HIGH · 2 MED · 1 LOW · 1 CRITICAL cross-module
 
 #### Layer A — FLOW
+
 | Journey | Role | Status | Evidence |
 |---|---|---|---|
-| Create repair invoice from closed job | Billing Staff | ⬜ | |
-| Record partial payment; check outstanding | Billing Staff | ⬜ | |
-| Record final payment; invoice status → paid | Billing Staff | ⬜ | |
-| Download PDF (served via signed MinIO URL) | Billing Staff | ⬜ | |
-| Send invoice via WhatsApp | Billing Staff | ⬜ | |
-| Tally export download | Manager | ⬜ | |
+| A1 — Create repair invoice from closed job (labor line + intra-state GST) | Admin | ✅ PASS | `POST /billing/repair-invoices/ {job_id:"de35cf08-…", discount_amount:0, due_date:"2026-07-15"}` → 201 `{invoice_number:"SDEL-INV-2026-06-0025", status:"issued", subtotal:"1200.00", cgst:"108.00", sgst:"108.00", igst:"0.00", grand_total:"1416.00"}`. Labor line: `{item_type:"labor", description:"Service Charge", sac_code:"998714", tax_rate:"18.00", line_total:"1200.00"}`. job.service_charge=1200, 18% GST = 216, intra-state (shop.state_code=07, no customer GSTIN → defaults to 07) → CGST=108+SGST=108 ✓. |
+| A2 — Partial payment; invoice → partially_paid | Admin | ✅ PASS | `POST /billing/payments/ {invoice_id, amount:500, method:"upi", reference_id:"UPI-BILL-E2E-001"}` → 201 `{amount:"500.00", method:"upi"}`. `GET /repair-invoices/{id}/` → `{status:"partially_paid", amount_paid:"500.00", amount_outstanding:"916.00"}`. |
+| A3 — Final payment; invoice → paid | Admin | ✅ PASS | `POST /billing/payments/ {invoice_id, amount:916, method:"cash"}` → 201. `GET /repair-invoices/{id}/` → `{status:"paid", amount_paid:"1416.00", amount_outstanding:"0.00", payments:[…×2]}`. |
+| A4 — Download PDF (signed MinIO URL) | Admin | 🔴 FAIL HIGH | `GET /billing/repair-invoices/{id}/pdf/` → 200 `{pdf_url:""}`. `pdf_url` is always empty — `create_repair_invoice()` never dispatches a Celery PDF generation task. No billing tasks file exists. Spec §4 states "PDF via signed 7-day S3 URL". |
+| A5 — Send invoice via WhatsApp | Admin | ✅ PASS | `POST /billing/repair-invoices/{id}/send-whatsapp/` → 200 `{queued:true}`. WhatsApp delivery fails cross-module (notification_logs missing) but endpoint returns correct shape. |
+| A6 — Tally export CSV download | Admin | ✅ PASS | `GET /billing/tally-export/?shop_id=…&from_date=2026-06-01&to_date=2026-06-30` → `Content-Type: text/csv; charset=utf-8`, `Content-Disposition: attachment; filename="tally-export-…csv"`. CSV columns: invoice_number, date, customer_name, gstin, subtotal, discount_amount, cgst, sgst, igst, grand_total, amount_paid, amount_outstanding, status. 25 rows for June. |
 
 #### Layer B — VALIDATION
+
 | Input scenario | Expected error | Status | Evidence |
 |---|---|---|---|
-| Invoice already paid — attempt additional payment | 422 BUSINESS_RULE_VIOLATION | ⬜ | |
-| Payment amount > outstanding | 422 | ⬜ | |
-| Invoice without any line items | 400 VALIDATION_ERROR | ⬜ | |
+| B1 — Payment on already-paid invoice | 422 BUSINESS_RULE_VIOLATION | ✅ PASS | `POST /payments/ {invoice_id, amount:100, method:"cash"}` on paid invoice → 422 `"Payment 100.00 exceeds outstanding 0.00."` (correct since outstanding=0). |
+| B2 — Payment > outstanding balance | 422 BUSINESS_RULE_VIOLATION | ✅ PASS | Amount 99999 on invoice with outstanding=4310 → 422 `"Payment 99999.00 exceeds outstanding 4310.00."` |
+| B3 — Invoice from job with 0 service_charge + no received parts | 400 VALIDATION_ERROR (per spec) | 🔴 FAIL MED | `POST /repair-invoices/ {job_id:"5e6b…"}` (job.service_charge=0, no received spare parts) → 201 `{invoice_number:"SDEL-INV-2026-06-0026", items:[], grand_total:"0.00", status:"issued"}`. `_build_line_items()` produces empty list; no guard before `RepairInvoice.objects.create()`. ₹0 invoice with no items should be rejected. |
+| B4 — Duplicate invoice for same job | 400 (correct status), non-standard envelope | 🔴 FAIL LOW | → 400 `{"detail": "An invoice already exists for this job."}`. View catches `ValueError` and returns `{"detail": "..."}` instead of standard `{success:false, error:{code, message}}` envelope. Inconsistent with all other API error responses. |
 
 #### Layer C — CONTRACT / RESPONSE
-| Endpoint | Method | Expected envelope | Status | Evidence |
+
+| Endpoint | Method | Expected | Status | Evidence |
 |---|---|---|---|---|
-| `/api/v1/billing/invoices/` | GET | paginated list | ⬜ | |
-| `/api/v1/billing/invoices/` | POST | 201 with `{SHOP}-INV-{YYYY-MM}-{NNNN}` | ⬜ | |
-| `/api/v1/billing/invoices/{id}/payment/` | POST | 201 payment, updated status | ⬜ | |
-| `/api/v1/billing/invoices/{id}/pdf/` | GET | signed URL in data | ⬜ | |
+| C1 — `/billing/repair-invoices/` | GET | Paginated + meta | ✅ PASS | 20 items, `meta:{next_cursor, prev_cursor}`. Item keys: `id, invoice_number, status, shop_id, job_id, customer_id, customer_name, customer_phone, job_number, grand_total, amount_paid, amount_outstanding, due_date, pdf_url, created_at`. |
+| C2 — `/billing/repair-invoices/{id}/` | GET | Detail with items + payments | ✅ PASS | All fields present including `customer_gstin, shop_name, subtotal, cgst, sgst, igst, items:[{item_type,description,sac_code,hsn_code,quantity,unit_price,tax_rate,line_total}], payments:[…]`. |
+| C3 — `/billing/payments/?invoice_id=…` | GET | Payment list | ✅ PASS | 2 payments returned (500 UPI, 916 cash). Keys: `id, invoice_id, amount, method, reference_id, razorpay_payment_id, paid_at, recorded_by_name`. |
+| C4 — `?outstanding_only=true` filter | GET | Only invoices with amount_outstanding>0 | ✅ PASS | 4 results, all with `amount_outstanding>0`. Paid invoice `SDEL-INV-2026-06-0025` excluded. |
+| C5 — `/billing/repair-invoices/{id}/pdf/` | GET | `{pdf_url: "…"}` shape | ✅ PASS | Returns `{pdf_url:""}`. Shape correct; content empty (see A4 HIGH bug). |
+| C6 — `/billing/tally-export/` | GET | CSV download | ✅ PASS | `Content-Type: text/csv`, attachment header, correct GSTR-1 columns. |
+| C7 — GST inter-state split logic | Shell | IGST for cross-state | ✅ PASS | `_split_gst(shop(07), cust_gstin_27, 216)` → `cgst=0, sgst=0, igst=216.00`. `_split_gst(shop(07), cust_gstin_07, 216)` → `cgst=108, sgst=108, igst=0`. Verified via Django shell (`billing.services._split_gst`). |
 
 #### Layer D — AUTHZ
+
 | Action | Role | Expected | Status | Evidence |
 |---|---|---|---|---|
-| Create invoice | Viewer | 403 | ⬜ | |
-| Tally export | Billing Staff (no `billing.tally_export`) if restricted | 403 | ⬜ | |
-| Any billing endpoint | testshop JWT | No demo data | ⬜ | |
+| D1 — View invoices | Viewer (0 perms) | 403 | ✅ PASS | `GET /repair-invoices/` → 403 `{code:"PERMISSION_DENIED"}`. |
+| D2 — Tally export | Viewer (no `billing.tally_export`) | 403 | ✅ PASS | `GET /tally-export/…` → 403 `{code:"PERMISSION_DENIED"}`. |
+| D3 — Any billing endpoint | testshop JWT | 0 results | ✅ PASS | `GET /repair-invoices/` with testshop token → `{items:[]}`. |
 
 #### Layer E — STATE / SIDE-EFFECTS
+
 | Action | DB effect | Status | Evidence |
 |---|---|---|---|
-| Invoice created | `repair_invoices` + `repair_invoice_items` rows | ⬜ | |
-| Payment recorded | `payments` row, invoice outstanding updated | ⬜ | |
-| Full payment | `repair_invoices.status = paid` | ⬜ | |
-| audit_logs row | on each write | ⬜ | |
-| Idempotency-Key on payment | duplicate rejected | ⬜ | |
+| E1 — Invoice created | `repair_invoices` row + `repair_invoice_items` row | ✅ PASS | `repair_invoices`: `SDEL-INV-2026-06-0025, status=paid, subtotal=1200.00, cgst=108.00, sgst=108.00, igst=0.00, grand_total=1416.00, amount_paid=1416.00, amount_outstanding=0.00`. `repair_invoice_items`: `labor, Service Charge, sac_code=998714, tax_rate=18.00, line_total=1200.00`. |
+| E2 — Payments recorded | `payments` rows + invoice status/outstanding updated | ✅ PASS | 2 rows: `500.00 upi UPI-BILL-E2E-001` + `916.00 cash`. Invoice status transitioned `issued → partially_paid → paid`. |
+| E3 — CRM denormalized counters | `customers.total_billed += grand_total`, `total_outstanding += grand_total` then `−= payments` | ✅ PASS | Customer `d94211b9-…`: `total_billed=1416.00, total_outstanding=0.00` after full payment. `_update_crm_on_invoice()` + `_update_crm_on_payment()` both called atomically. |
+| E4 — Razorpay dedup | `razorpay_payment_id` UNIQUE; duplicate silently returns existing | ✅ PASS | Set `razorpay_payment_id='rzp_E2EDEDUP001'` on a payment; `record_payment()` checks `Payment.objects.filter(razorpay_payment_id=…).first()` → returns existing record without creating duplicate. |
+| E5 — audit_logs | Create + payment events logged | 🔴 FAIL MED | `SELECT * FROM audit_logs ORDER BY created_at DESC` → only `login/User` rows. `billing/services.py` has no `_write_audit()` calls at all (unlike CRM, procurement). Invoice creation and payment recording are never audit-logged. |
 
 #### Layer F — LOGGING / OBSERVABILITY
+
 | Scenario | Expected | Status | Evidence |
 |---|---|---|---|
-| Invoice creation | 201, no Traceback | ⬜ | |
-| PDF generation via Celery | worker log shows task + SUCCESS, file in MinIO | ⬜ | |
+| F1 — Invoice creation | 201, no Traceback | ✅ PASS | `backend-1: "POST /api/v1/billing/repair-invoices/" 201`. Logger: `Invoice SDEL-INV-2026-06-0025 created for job SDEL-2026-0036`. |
+| F2 — PDF generation via Celery | Worker log SUCCESS, file in MinIO | 🔴 FAIL HIGH | No PDF task dispatched. `create_repair_invoice()` ends without queuing any task. No billing `tasks.py` file. Celery worker logs show nothing for billing. `pdf_url` always empty string. |
+| F3 — Celery beat tasks | `billing.repair_payment_reminder` schedule | 🔴 FAIL CRITICAL (cross-module) | Same celery-beat crash (`django_celery_beat_periodictask` missing) + task routes gap as all prior modules. |
 
 #### Layer G — INFRA PATH
+
 | Check | Method | Status | Evidence |
 |---|---|---|---|
-| Requests via PgBouncer | SHOW POOLS | ⬜ | |
-| PDF served from MinIO | signed URL resolves to PDF content-type | ⬜ | |
+| G1 — Requests via PgBouncer | `SHOW POOLS` | ✅ PASS | `repaiross_tenant_demo: cl_active=2, sv_used=2, pool_mode=transaction`. |
+| G2 — PDF served from MinIO | Signed URL resolves | ✅ N/A | `pdf_url=""` always (see F2 HIGH bug). Endpoint shape returns `{pdf_url}` key correctly. |
+| G3 — Razorpay webhook HMAC rejection | Invalid sig → 400 | ✅ PASS | `POST /webhooks/razorpay/ {X-Razorpay-Signature:invalidsig}` → 400 `"Invalid Razorpay signature."`. `hmac.compare_digest()` used (timing-safe). |
 
 #### Layer H — UX STATES
+
 | State | Where | Status | Evidence |
 |---|---|---|---|
-| GST split (CGST/SGST/IGST) on invoice | invoice detail | ⬜ | |
-| ₹ formatting + partial outstanding | payment history | ⬜ | |
-| WhatsApp send confirmation | post-send toast | ⬜ | |
-| Loading skeleton on invoice list | first load | ⬜ | |
+| H1 — Invoice list loads with status filter | `/invoices` | ✅ PASS | `billingApi.listInvoices()` via React Query. `DataTable` with `emptyTitle="No invoices yet"`. Status filter `<Select>` with 5 statuses. |
+| H2 — Loading skeletons | Invoice list first load | ✅ PASS | `DataTable loading={allQuery.isLoading}` shows skeleton rows. Outstanding tab: `[1,2,3].map → animate-pulse div` during load. |
+| H3 — GST breakdown (intra/inter-state) | Invoice detail | ✅ PASS | `isInterState = invoice.igst > 0`. `<GstBreakdown cgst={isInterState ? undefined : invoice.cgst} sgst={isInterState ? undefined : invoice.sgst} igst={isInterState ? invoice.igst : undefined}>` switches display mode by flag. (`invoices/[id]/page.tsx:98,209`). |
+| H4 — Payment progress bar + KPI strip | Invoice detail | ✅ PASS | When `status==='partially_paid'`: `paidPct = (amount_paid/grand_total)*100`, progress bar `width: ${paidPct}%`. KPI strip: Total/Paid/Outstanding, outstanding in danger color if >0. (`invoices/[id]/page.tsx:89,147`). |
+| H5 — AddPaymentDialog: amount > outstanding blocked | Payment dialog | ✅ PASS | `<MoneyInput max={invoice.amount_outstanding}>`. Inline warning if `field.value > invoice.amount_outstanding`. Submit disabled: `disabled={… || form.watch('amount') > invoice.amount_outstanding}`. (`AddPaymentDialog.tsx:144,147,195`). |
+| H6 — GenerateInvoiceDialog: offline guard + preview | Invoice generation from job | ✅ PASS | Offline: `WifiOff` icon + "Invoice generation requires a connection." Preview block shows labor=serviceCharge, auto-listed parts notice, discount, est. grand total. (`GenerateInvoiceDialog.tsx:70,97`). |
+| H7 — PaymentHistory: method badge + ₹ + datetime + ref | Invoice detail payments tab | ✅ PASS | `PAYMENT_METHOD_COLORS` badge, `<Money>` amount, `formatDatetime(p.paid_at)`, `Ref: {p.reference_id}` when present, `By {p.recorded_by_name}`. (`PaymentHistory.tsx:22`). |
+| H8 — TallyExportPanel: blocked without shop selection | Reports/GST tab | ✅ PASS | `disabled={loading \|\| isAllShops \|\| !activeShopId}`. Toast: "Select a shop" when `isAllShops`. Date pickers default to first-of-month → today. (`TallyExportPanel.tsx:23,78`). |
+
+### Module 07 — Billing Verdict
+
+| Severity | Count | Items |
+|---|---|---|
+| HIGH | 2 | A4/F2 (PDF generation not implemented — no Celery task, `pdf_url` always empty); Razorpay payment link → 501 FEATURE_PENDING |
+| MED | 2 | B3 (₹0 invoice created with 0 line items — no `len(items)>0` guard); E5 (no audit trail — billing services.py has no `_write_audit()` calls) |
+| LOW | 1 | B4 (duplicate invoice returns `{"detail":"…"}` not standard `{code,message}` envelope) |
+| CRITICAL (cross-module) | 1 | F3 (`billing.repair_payment_reminder` beat task dead-queued + celery-beat crash) |
+
+**Pass rate: 32 / 38 (84%)**
 
 ---
 
