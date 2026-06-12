@@ -318,7 +318,7 @@ def _create_pg_resources(db_name: str, db_user: str, db_password: str) -> None:
 
 
 def _seed_roles_and_permissions() -> None:
-    """Seed system roles, the full permission catalogue, and grant all to Tenant Admin."""
+    """Seed system roles, the full permission catalogue, and grant defaults per spec §4–5."""
     from authentication.models import Permission, Role, RolePermission
 
     system_roles = [
@@ -368,11 +368,11 @@ def _seed_roles_and_permissions() -> None:
         ("billing.repair_invoices.view", "billing"), ("billing.repair_invoices.create", "billing"),
         ("billing.sales_invoices.view", "billing"), ("billing.payments.record", "billing"),
         ("billing.outstanding.view", "billing"), ("billing.tally_export", "billing"),
-        # reports
+        # reports — spec §5: revenue/hr/crm/repair/inventory/gst/pl + amc for AMC reports
         ("reports.revenue.view", "reports"), ("reports.hr.view", "reports"),
         ("reports.crm.view", "reports"), ("reports.repair.view", "reports"),
         ("reports.inventory.view", "reports"), ("reports.gst.view", "reports"),
-        ("reports.pl.view", "reports"),
+        ("reports.pl.view", "reports"), ("reports.amc.view", "reports"),
         # settings
         ("settings.shop.edit", "settings"), ("settings.roles.manage", "settings"),
         ("settings.users.manage", "settings"),
@@ -385,15 +385,124 @@ def _seed_roles_and_permissions() -> None:
             defaults={"module": module, "label": codename.replace(".", " ").title()},
         )
 
+    # ── Default permissions per spec §4 system roles ──────────────────────────
+    # Tenant Admin gets all permissions; others get a scoped subset.
+    DEFAULT_ROLE_PERMISSIONS: dict[str, list[str]] = {
+        "Tenant Admin": [],  # handled separately below (all perms)
+        "Shop Manager": [
+            # CRM — full access
+            "crm.leads.view", "crm.leads.create", "crm.leads.edit", "crm.leads.convert",
+            "crm.customers.view", "crm.customers.create", "crm.customers.edit",
+            "crm.customers.merge", "crm.communications.log", "crm.tasks.manage",
+            "crm.segments.manage",
+            # Repair — full access
+            "repair.jobs.view", "repair.jobs.create", "repair.jobs.edit",
+            "repair.jobs.change_status", "repair.jobs.assign_tech",
+            "repair.estimates.send", "repair.estimates.approve", "repair.templates.manage",
+            "repair.warranty.view", "repair.spare_parts.request", "repair.spare_parts.approve",
+            # POS — full access
+            "pos.counter_sale.create", "pos.wholesale_sale.create", "pos.job_sale.create",
+            "pos.discount.apply", "pos.returns.create", "pos.returns.approve",
+            # ERP — full access
+            "erp.inventory.view", "erp.inventory.adjust", "erp.suppliers.manage",
+            "erp.purchase_orders.create", "erp.grn.receive", "erp.purchase_invoices.record",
+            "erp.purchase_returns.create", "erp.expenses.view", "erp.expenses.create",
+            "erp.budget.manage", "erp.assets.manage",
+            # AMC — full access
+            "amc.contracts.view", "amc.contracts.create", "amc.contracts.edit",
+            "amc.visits.schedule", "amc.visits.complete", "amc.renewals.manage",
+            # HR — view + attendance (no salary generate, no petty cash)
+            "hr.employees.view", "hr.attendance.view", "hr.attendance.mark",
+            "hr.leaves.manage", "hr.salary.view",
+            # Billing — full access
+            "billing.repair_invoices.view", "billing.repair_invoices.create",
+            "billing.sales_invoices.view", "billing.payments.record",
+            "billing.outstanding.view", "billing.tally_export",
+            # Reports — all
+            "reports.revenue.view", "reports.hr.view", "reports.crm.view",
+            "reports.repair.view", "reports.inventory.view", "reports.gst.view",
+            "reports.pl.view", "reports.amc.view",
+        ],
+        "Receptionist": [
+            # CRM — create/edit leads & customers, log comms
+            "crm.leads.view", "crm.leads.create", "crm.leads.edit", "crm.leads.convert",
+            "crm.customers.view", "crm.customers.create", "crm.customers.edit",
+            "crm.communications.log", "crm.tasks.manage",
+            # Repair — create & manage jobs; no approve
+            "repair.jobs.view", "repair.jobs.create", "repair.jobs.edit",
+            "repair.jobs.change_status", "repair.warranty.view",
+            "repair.spare_parts.request",
+            # POS — counter sales only (no billing write)
+            "pos.counter_sale.create", "pos.returns.create",
+            # AMC — view + schedule visits
+            "amc.contracts.view", "amc.visits.schedule", "amc.visits.complete",
+        ],
+        "Technician": [
+            # Repair — own jobs/stages, spare parts
+            "repair.jobs.view", "repair.jobs.edit", "repair.jobs.change_status",
+            "repair.warranty.view", "repair.spare_parts.request",
+            # ERP — inventory view to check stock
+            "erp.inventory.view",
+        ],
+        "Billing Staff": [
+            # Billing — full access
+            "billing.repair_invoices.view", "billing.repair_invoices.create",
+            "billing.sales_invoices.view", "billing.payments.record",
+            "billing.outstanding.view", "billing.tally_export",
+            # POS — all sale types + returns
+            "pos.counter_sale.create", "pos.wholesale_sale.create", "pos.job_sale.create",
+            "pos.returns.create", "pos.returns.approve",
+            # Repair — view jobs to raise invoices
+            "repair.jobs.view",
+            # Reports — financial
+            "reports.revenue.view", "reports.gst.view", "reports.pl.view",
+        ],
+        "HR Manager": [
+            # HR — full access
+            "hr.employees.view", "hr.employees.manage", "hr.attendance.view",
+            "hr.attendance.mark", "hr.leaves.manage", "hr.salary.view",
+            "hr.salary.generate", "hr.petty_cash.manage",
+            # Reports — HR only
+            "reports.hr.view",
+        ],
+        "Viewer": [
+            # Read-only across key modules
+            "crm.leads.view", "crm.customers.view",
+            "repair.jobs.view", "repair.warranty.view",
+            "erp.inventory.view",
+            "amc.contracts.view",
+            "billing.repair_invoices.view", "billing.outstanding.view",
+            "reports.repair.view", "reports.crm.view", "reports.inventory.view",
+        ],
+    }
+
+    # Grant Tenant Admin all permissions
     admin_role = Role.objects.get(name="Tenant Admin")
     all_permissions = Permission.objects.all()
-    existing = set(
+    existing_admin = set(
         RolePermission.objects.filter(role=admin_role).values_list("permission_id", flat=True)
     )
     RolePermission.objects.bulk_create(
-        [RolePermission(role=admin_role, permission=p) for p in all_permissions if p.id not in existing],
+        [RolePermission(role=admin_role, permission=p) for p in all_permissions if p.id not in existing_admin],
         ignore_conflicts=True,
     )
+
+    # Grant each other role its spec-defined defaults
+    perm_map = {p.codename: p for p in all_permissions}
+    for role_name, codenames in DEFAULT_ROLE_PERMISSIONS.items():
+        if role_name == "Tenant Admin" or not codenames:
+            continue
+        role = Role.objects.get(name=role_name)
+        existing_role = set(
+            RolePermission.objects.filter(role=role).values_list("permission_id", flat=True)
+        )
+        new_rps = [
+            RolePermission(role=role, permission=perm_map[c])
+            for c in codenames
+            if c in perm_map and perm_map[c].id not in existing_role
+        ]
+        if new_rps:
+            RolePermission.objects.bulk_create(new_rps, ignore_conflicts=True)
 
 
 def _create_admin_user(name: str, email: str, phone: str, password: str) -> None:

@@ -1,6 +1,9 @@
 from .context import get_tenant_db_alias
 
+# These apps live on the master DB alongside the `master` app.
+# django_celery_beat stores its periodic-task schedule in the default DB.
 MASTER_APP_LABELS = frozenset({"master"})
+MASTER_ONLY_APP_LABELS = frozenset({"master", "django_celery_beat", "django_celery_results"})
 MASTER_ALIAS = "default"
 
 
@@ -34,7 +37,7 @@ class TenantDatabaseRouter:
 
     def allow_migrate(self, db, app_label, model_name=None, **hints):
         if db == MASTER_ALIAS:
-            # Only master app migrations go to the master DB
-            return app_label in MASTER_APP_LABELS
-        # Every other alias is a tenant DB — migrate all non-master apps
-        return app_label not in MASTER_APP_LABELS
+            # master app + celery-beat schedule tables live on the master DB
+            return app_label in MASTER_ONLY_APP_LABELS
+        # Every other alias is a tenant DB — migrate all non-master-only apps
+        return app_label not in MASTER_ONLY_APP_LABELS

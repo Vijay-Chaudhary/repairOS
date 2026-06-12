@@ -176,14 +176,34 @@ EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
 EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@repaiross.app")
 
+# Wildcard patterns in Celery only work when kombu fnmatch is enabled;
+# explicit per-name routes are safer and more predictable.
+CELERY_TASK_DEFAULT_QUEUE = "default"
 CELERY_TASK_ROUTES = {
+    # ── core notifications (high priority) ──
     "core.dispatch_whatsapp_message": {"queue": "high"},
     "core.dispatch_sms_fallback": {"queue": "high"},
     "core.dispatch_email_message": {"queue": "high"},
-    "*.tasks.send_whatsapp_*": {"queue": "high"},
-    "*.tasks.generate_pdf_*": {"queue": "high"},
-    "*.tasks.generate_report_*": {"queue": "low"},
-    "master.tasks.*": {"queue": "low"},
+    # ── PDF generation (high priority, users waiting) ──
+    "hr.generate_salary_pdf": {"queue": "high"},
+    "commissions.generate_payout_pdf": {"queue": "high"},
+    # ── tenant provisioning (low priority, one-shot) ──
+    "master.provision_tenant": {"queue": "low"},
+    # ── async report exports (low priority) ──
+    "reports.tasks.run_export": {"queue": "low"},
+    # ── scheduled beat tasks (default queue) ──
+    "crm.mark_overdue_tasks": {"queue": "default"},
+    "crm.send_task_daily_digest": {"queue": "default"},
+    "crm.send_bulk_whatsapp_segment": {"queue": "default"},
+    "crm.send_lead_assigned_notification": {"queue": "default"},
+    "repair.send_warranty_expiry_reminders": {"queue": "default"},
+    "pos.send_wholesale_payment_reminders": {"queue": "default"},
+    "amc.mark_missed_visits": {"queue": "default"},
+    "amc.send_renewal_reminders": {"queue": "default"},
+    "amc.send_visit_reminders": {"queue": "default"},
+    "amc.process_auto_renewals": {"queue": "default"},
+    "hr.send_payroll_reminders": {"queue": "default"},
+    "procurement.send_bill_due_reminders": {"queue": "default"},
 }
 CELERY_BEAT_SCHEDULE = {
     # CRM

@@ -244,9 +244,11 @@ class Command(BaseCommand):
                 email=email,
                 defaults={"phone": phone, "full_name": name, "is_active": True},
             )
-            if created:
-                user.set_password(DEMO_PASSWORD)
-                user.save(update_fields=["password"])
+            # Always reset to DEMO_PASSWORD on seed so repeated runs stay predictable
+            user.set_password(DEMO_PASSWORD)
+            user.failed_login_attempts = 0
+            user.locked_until = None
+            user.save(update_fields=["password", "failed_login_attempts", "locked_until"])
 
             role = Role.objects.get(name=role_name)
 
@@ -261,6 +263,10 @@ class Command(BaseCommand):
                 tech_idx += 1
                 key = f"technician_{tech_idx}"
             users[key] = user
+
+        # Ensure role-permission defaults are always up-to-date on every seed run
+        from master.services import _seed_roles_and_permissions
+        _seed_roles_and_permissions()
 
         return users
 
