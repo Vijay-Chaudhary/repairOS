@@ -877,59 +877,95 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 
 ### Module 08 — Commissions
 **Spec refs:** `docs/backend-spec/RepairOS-dev-spec/modules/08-commissions.md`, `docs/frontend-spec/RepairOS-frontend-spec/modules/08-commissions-ui.md`  
-**Primary role:** Technician (self-view), Manager (payout)  
-**Routes:** `/commissions`, `/commissions/payouts`  
+**Primary role:** Technician `tech1@demo.com` (self-view), Admin (payout management)  
+**Routes:** `/commissions`, `/commissions/[techId]`, `/settings/commission-rules`  
 **Celery tasks:** `commissions.generate_payout_pdf`  
-**Run date:** _(not run)_  
-**Overall:** ⬜ NOT RUN
+**Run date:** 2026-06-12  
+**Overall:** 🟡 28 PASS / 3 FAIL — 1 HIGH · 1 MED · 1 LOW
 
 #### Layer A — FLOW
+
 | Journey | Role | Status | Evidence |
 |---|---|---|---|
-| Technician views own accruals (only own) | tech1 | ⬜ | |
-| Manager views all technician accruals | Manager | ⬜ | |
-| Create payout — preview matches accruals | Manager | ⬜ | |
-| Verify warranty job shows ₹0 commission | Manager | ⬜ | |
+| A1 — Admin views technician ledger with breakdown | Admin | ✅ PASS | `GET /commissions/technician/3aabffc6-…/?period_start=2026-01-01&period_end=2026-12-31` → `{technician_name:"Rohit Kumar", total_earned:6990.0, total_paid:180.0, total_unpaid:6810.0, commissions:[…×13]}`. First row: `{job_number:"SDEL-2026-0036", sc_amount:"1200.00", rate:"30.00", commission_amount:"360.00", is_lead:true, is_paid:false}`. |
+| A2 — List commission rules | Admin | ✅ PASS | `GET /commissions/rules/` → `{items:[{name:"repair", rate:"30.00", lead_tech_share:"50.00", effective_from:"2026-06-05", effective_to:"2026-06-30"}, {rate:"10.00", lead_tech_share:"60.00", effective_to:null}, {rate:"12.00", job_type:"iPhone"}]}`. 3 rules, correct keys. |
+| A3 — Create payout batch (draft) | Admin | ✅ PASS | `POST /commissions/payouts/ {technician_id, period_start:"2026-06-01", period_end:"2026-06-30"}` → 201 `{id:"70c169db-…", total_commission:"6810.00", status:"draft", pdf_url:"", technician_name:"Rohit Kumar"}`. Total matches sum of 12 unpaid rows (6810.00 = 6990.00 − 180.00 pre-paid) ✓. |
+| A4 — Advance payout draft→approved | Admin | ✅ PASS | `PATCH /commissions/payouts/70c169db-…/` → `{status:"approved", total_commission:"6810.00"}`. |
+| A5 — Advance payout approved→paid | Admin | ✅ PASS | `PATCH /commissions/payouts/70c169db-…/` → `{status:"paid", paid_at:"2026-06-12T17:38:08+05:30"}`. |
+| A6 — Accruals marked is_paid after payout | Admin | ✅ PASS | `GET /commissions/technician/$TECH1/?period_start=2026-06-01&period_end=2026-06-30` → `{total_unpaid:0.0, total_paid:6990.0}`. All 13 rows `is_paid=true`, 12 with `payout_id="70c169db-…"`. |
+| A7 — Warranty job → no commission accrual | Admin | ✅ PASS | `SELECT COUNT(*) FROM technician_commissions WHERE sc_amount=0` → 0. `accrue_commission()` returns early when `job.service_charge <= 0` (`services.py:39`). Frontend shows `Warranty` label when `c.sc_amount === 0` (`commissions/page.tsx:155`). |
 
 #### Layer B — VALIDATION
+
 | Input scenario | Expected error | Status | Evidence |
 |---|---|---|---|
-| Double-pay same period | 422 BUSINESS_RULE_VIOLATION | ⬜ | |
+| B1 — Double-pay same period (all accruals already paid) | 422 BUSINESS_RULE_VIOLATION | ✅ PASS | `POST /payouts/ {technician_id, period_start:2026-06-01, period_end:2026-06-30}` → 422 `{code:"BUSINESS_RULE_VIOLATION", message:"No unpaid commissions for this technician in this period."}` |
+| B2 — Advance payout that is already paid | 422, non-standard envelope | 🔴 FAIL LOW | → 422 `{"detail": "Payout is already 'paid'; no further transitions."}`. Non-standard envelope (should be `{code, message}`); same pattern as billing. |
+| B3 — period_end < period_start | 400 VALIDATION_ERROR | ✅ PASS | → 400 `{code:"VALIDATION_ERROR", fields:{non_field_errors:["period_end must be >= period_start."]}}` |
 
 #### Layer C — CONTRACT / RESPONSE
-| Endpoint | Method | Expected envelope | Status | Evidence |
+
+| Endpoint | Method | Expected | Status | Evidence |
 |---|---|---|---|---|
-| `/api/v1/commissions/` | GET | list of accruals | ⬜ | |
-| `/api/v1/commissions/payouts/` | POST | 201 payout record | ⬜ | |
+| C1 — `/commissions/rules/` | GET | `{items:[…]}` with rule fields | ✅ PASS | Keys: `id, name, rate, lead_tech_share, applies_to_job_type, effective_from, effective_to`. 3 rules returned. |
+| C2 — `/commissions/technician/{id}/` | GET | Ledger with per-job commissions | ✅ PASS | Top-level keys: `technician_id, technician_name, total_earned, total_paid, total_unpaid, commissions`. Commission keys: `id, job_number, job_closed_at, sc_amount, rate, commission_amount, is_lead, is_paid, payout_id`. |
+| C3 — `/commissions/payouts/` | GET | Paginated payout list | ✅ PASS | `meta:{next_cursor, prev_cursor}`, 2 payouts. Keys: `id, technician_id, technician_name, period_start, period_end, total_commission, status, paid_at, pdf_url`. |
+| C4 — `/commissions/payouts/{id}/` | GET | Payout detail | ✅ PASS | Same keys as list; `technician_name` resolved from FK. |
 
 #### Layer D — AUTHZ
+
 | Action | Role | Expected | Status | Evidence |
 |---|---|---|---|---|
-| View another technician's commissions | tech1 (no `settings.commission_rules.manage`) | 403 or filtered | ⬜ | |
-| Create payout | Technician | 403 | ⬜ | |
+| D1 — Technician views own ledger | `tech1@demo.com` (no `hr.salary.view`) | 200 own data | ✅ PASS | `GET /commissions/technician/{tech1_id}/` with tech1 JWT → 200 `{technician_name:"Rohit Kumar"}`. View checks `str(request.user.id) == str(tech_id)` → bypasses permission check. |
+| D2 — Technician views another's ledger | tech1 views tech2 | 403 | ✅ PASS | → 403 `{code:"PERMISSION_DENIED"}`. View falls through to `require_permission("hr.salary.view")` when IDs differ. |
+| D3 — Technician creates payout | tech1 (no `hr.salary.generate`) | 403 | ✅ PASS | `POST /payouts/` → 403 `{code:"PERMISSION_DENIED"}`. |
+| D4 — Testshop isolation | testshop admin | 0 demo payouts | ✅ PASS | `GET /payouts/` with testshop JWT → `{items:[]}`. |
 
 #### Layer E — STATE / SIDE-EFFECTS
+
 | Action | DB effect | Status | Evidence |
 |---|---|---|---|
-| Payout created | `commission_payouts` row, accruals marked paid | ⬜ | |
-| audit_logs row | on payout | ⬜ | |
+| E1 — Payout row created | `commission_payouts` row with totals | ✅ PASS | `70c169db-… | 6810.00 | paid | 2026-06-12 | ""` (pdf_url empty per F2). |
+| E2 — TechnicianCommission rows marked is_paid | 12 rows linked to payout | ✅ PASS | `SELECT COUNT(*), SUM(commission_amount) FROM technician_commissions WHERE payout_id='70c169db-…' AND is_paid=true` → `12 | 6810.00`. |
+| E3 — Multi-tech split math correct | pool = lead + sum(others), no rounding leak | ✅ PASS | Job SDEL-2026-0005: SC=2500, rate=12%, pool=300. lead(Rohit)=180 (60%), other(Suresh)=120. 180+120=300 ✓. Single-tech jobs: SC×rate%=commission_amount for all 5 checked (360, 540, 270, 450, 360 ✓). |
+| E4 — audit_logs for payout | create/approve/pay events | 🔴 FAIL MED | `SELECT * FROM audit_logs WHERE model_name ILIKE '%commission%'` → 0 rows. `commissions/services.py` and `views.py` have no `_write_audit()` calls. Payout lifecycle not audited. |
 
 #### Layer F — LOGGING / OBSERVABILITY
+
 | Scenario | Expected | Status | Evidence |
 |---|---|---|---|
-| `commissions.generate_payout_pdf` | worker SUCCESS, PDF in MinIO | ⬜ | |
+| F1 — Payout creation request | 201, no Traceback | ✅ PASS | `backend-1: "POST /api/v1/commissions/payouts/" 201`. No tracebacks. |
+| F2 — `commissions.generate_payout_pdf` task | Worker SUCCESS, pdf_url populated | 🔴 FAIL HIGH | Task dispatched via `generate_payout_pdf.delay(payout_id)` in `create_payout()`. Task name `commissions.generate_payout_pdf` does NOT match any `CELERY_TASK_ROUTES` entry (`*.tasks.generate_pdf_*` requires `module.tasks.generate_pdf_*` prefix — task has no `.tasks.` segment and starts with `generate_payout_` not `generate_pdf_`). Routes to dead `celery` queue → never consumed. `pdf_url=""` after payout. Celery worker logs: no output for commission tasks. |
 
 #### Layer G — INFRA PATH
+
 | Check | Method | Status | Evidence |
 |---|---|---|---|
-| Requests via PgBouncer | SHOW POOLS | ⬜ | |
-| Payout PDF | MinIO console object | ⬜ | |
+| G1 — Requests via PgBouncer | `SHOW POOLS` | ✅ PASS | `repaiross_tenant_demo: cl_active=3, sv_used=1, pool_mode=transaction`. |
+| G2 — Payout PDF in MinIO | Check `pdf_url` | ✅ N/A | `pdf_url=""` always (F2 HIGH — task dead-queued). No MinIO object created. |
 
 #### Layer H — UX STATES
+
 | State | Where | Status | Evidence |
 |---|---|---|---|
-| Self-view: only own accruals | technician commission screen | ⬜ | |
-| ₹ formatting on accruals | accrual list | ⬜ | |
+| H1 — Self-view uses logged-in user's ID | `/commissions` ledger tab | ✅ PASS | `commissionsApi.getTechnicianLedger(user?.id ?? '', …)` — query key and fn both use `user?.id`. (`commissions/page.tsx:37-38`). |
+| H2 — Lead badge on multi-tech jobs | Commission ledger table | ✅ PASS | `c.is_lead && <span …>Lead</span>` accent-colored badge. (`commissions/page.tsx:154`). |
+| H3 — Warranty label when SC=0 | Commission ledger table | ✅ PASS | `c.sc_amount === 0 && <span>Warranty</span>`. (`commissions/page.tsx:155`). |
+| H4 — Payout builder blocked without technician | `/commissions` payouts tab | ✅ PASS | `disabled={!payoutTechId.trim() || payoutMutation.isPending}`. (`commissions/page.tsx:204`). |
+| H5 — Advance button label switches | Payout list item | ✅ PASS | `p.status === 'draft' ? 'Approve' : 'Mark paid'`. Hidden when `status==='paid'`. (`commissions/page.tsx:243,251`). |
+| H6 — PDF download shown only when pdf_url set | Payout list item | ✅ PASS | `{p.pdf_url && <a href={p.pdf_url} …><Download …/></a>}`. (`commissions/page.tsx:255-259`). |
+| H7 — Loading skeletons | Ledger + payouts tabs | ✅ PASS | `ledgerLoading → [1,2,3].map(Skeleton)`, `payoutsLoading → [1,2,3].map(Skeleton)`. (`commissions/page.tsx:115-116, 225-226`). |
+| H8 — Commission rules form (rate + lead_tech_share %) | `/settings/commission-rules` | ✅ PASS | `rate: z.number().min(0).max(100)`, `lead_tech_share: z.number().min(0).max(100)`, default values 30/50. (`commission-rules/page.tsx:23-24,44`). |
+
+### Module 08 — Commissions Verdict
+
+| Severity | Count | Items |
+|---|---|---|
+| HIGH | 1 | F2 (`commissions.generate_payout_pdf` → dead `celery` queue; task name mismatches `*.tasks.generate_pdf_*` route pattern; `pdf_url` always empty) |
+| MED | 1 | E4 (no audit trail — payout create/approve/pay lifecycle not logged) |
+| LOW | 1 | B2 (advance already-paid payout returns `{"detail":"…"}` not standard `{code,message}` envelope) |
+
+**Pass rate: 28 / 31 (90%)**
 
 ---
 
