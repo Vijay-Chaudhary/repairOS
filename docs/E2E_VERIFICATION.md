@@ -1061,65 +1061,98 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 
 ### Module 10 — Finance
 **Spec refs:** `docs/backend-spec/RepairOS-dev-spec/modules/10-finance.md`, `docs/frontend-spec/RepairOS-frontend-spec/modules/10-finance-ui.md`  
-**Primary role:** Manager, HR Manager  
-**Routes:** `/finance/petty-cash`, `/finance/expenses`, `/finance/budgets`, `/finance/assets`  
-**Celery tasks:** _(none dedicated)_  
-**Run date:** _(not run)_  
-**Overall:** ⬜ NOT RUN
+**Primary role:** `admin@demo.com` (Tenant Admin, is_tenant_wide)  
+**Routes:** `/api/v1/finance/petty-cash/{shop_id}/`, `/finance/petty-cash/transactions/`, `/finance/budget/`, `/finance/budget/allocations/`, `/finance/expenses/`, `/finance/assets/`, `/finance/assets/{id}/`  
+**Celery tasks:** _(none dedicated — `petty_cash_low` and `budget_exceeded` WhatsApp via `core.dispatch_whatsapp_message`)_  
+**Run date:** 2026-06-12  
+**Overall:** 🟡 22 PASS / 8 FAIL — **73% pass rate**
 
 #### Layer A — FLOW
 | Journey | Role | Status | Evidence |
 |---|---|---|---|
-| Add petty cash transaction; verify running balance | Manager | ⬜ | |
-| Record expense; verify budget actual/variance updates | Manager | ⬜ | |
-| Create budget head; allocate budget | Manager | ⬜ | |
-| Add asset; update condition; dispose asset | Manager | ⬜ | |
+| GET petty cash account | admin | ✅ PASS | `GET /finance/petty-cash/{shop_id}/` → `{name:"Delhi Petty Cash", current_balance:"6280.00", low_balance_threshold:"500.00"}` |
+| List petty cash transactions | admin | ✅ PASS | `GET /finance/petty-cash/transactions/?account_id=…` → 18 transactions, cursor-paginated. Fields: `id, account_id, type, amount, category, description, date, balance_after, recorded_by_name` |
+| Credit petty cash (atomic balance update) | admin | ✅ PASS | `POST {type:"credit", amount:"2000"}` → `{type:"credit", amount:"2000.00", balance_after:"8280.00"}`. DB: `current_balance=8280.00` ✓ atomically (SELECT FOR UPDATE in service) |
+| Debit petty cash | admin | ✅ PASS | `POST {type:"debit", amount:"350"}` → `{balance_after:"7930.00"}` |
+| Create budget head | admin | ✅ PASS | `POST /finance/budget/ {name:"E2E Test Head", category:"variable"}` → 201, `{id, name, category}` |
+| List budget heads | admin | ✅ PASS | `GET /finance/budget/?shop_id=…` → 8 heads, cursor-paginated |
+| Create budget allocation | admin | ✅ PASS | `POST /finance/budget/allocations/ {head_id, month:6, year:2026, budgeted_amount:"10000"}` → 201, `{budgeted:10000, actual:0, variance:0}` |
+| Upsert budget allocation (update existing) | admin | ✅ PASS | Second `POST` same head/month/year with `budgeted:"15000"` → 200, variance recomputed: `actual(11000) - budgeted(15000) = -4000` ✓ |
+| Create expense linked to budget head | admin | ✅ PASS | `POST /finance/expenses/ {shop_id, budget_head_id, amount:"3000", date:"2026-06-12"}` → 201, `{budget_head_name:"E2E Test Head"}`. DB: `budget_allocations.actual_amount=3000, variance=-7000` |
+| Expense increments budget allocation actual + variance | admin | ✅ PASS | Added second expense ₹8000 → DB: `actual_amount=11000, variance=1000` (over budget = positive variance). F() atomic increment used |
+| List expenses with date filter | admin | ✅ PASS | `GET /finance/expenses/?shop_id=…&date_from=2026-06-01` → 7 expenses, correct cursor pagination |
+| List budget allocations filtered | admin | ✅ PASS | `GET /finance/budget/allocations/?month=6&year=2026&shop_id=…` → 9 allocations including E2E Test Head with variance=1000 |
+| Create asset | admin | ✅ PASS | `POST /finance/assets/ {shop_id, name:"E2E Test Asset", asset_code:"SDEL-E2E-001", purchase_cost:"25000"}` → 201, `{condition:"good", is_active:true}` |
+| Update asset condition | admin | ✅ PASS | `PATCH /finance/assets/{id}/ {condition:"under_repair", notes:"…"}` → `{condition:"under_repair", is_active:true}` |
+| Dispose asset → is_active=False | admin | ✅ PASS | `PATCH {condition:"disposed"}` → `{condition:"disposed", is_active:false}`. `services.update_asset()` sets `is_active=False` when `condition==DISPOSED` |
+| Disposed excluded from default asset list | admin | ✅ PASS | `GET /finance/assets/?shop_id=…` (default `is_active=true`) → 6 active assets; `SDEL-E2E-001` absent |
+| is_active=false includes all assets | admin | ✅ PASS | `GET /finance/assets/?shop_id=…&is_active=false` → 7 assets (6 active + 1 disposed); `SDEL-E2E-001` present |
 
 #### Layer B — VALIDATION
 | Input scenario | Expected error | Status | Evidence |
 |---|---|---|---|
-| Expense > budget (over-budget alert) | UI warning surfaced | ⬜ | |
-| Petty cash withdrawal > balance | 422 BUSINESS_RULE_VIOLATION | ⬜ | |
-| Dispose already-disposed asset | 422 | ⬜ | |
+| Debit > current balance (overdraft) | 422 BUSINESS_RULE_VIOLATION | ❌ FAIL **HIGH** | `POST {type:"debit", amount:"99999"}` on account with ₹7930 → 201 `{success:true, balance_after:"-92069.00"}`. `record_petty_cash_txn` has no guard for `new_balance < 0`. Spec says this must be rejected. Petty cash ledger goes negative |
+| Over-budget expense (variance > 0) | succeeds but triggers alert | ✅ PASS | ₹8000 expense on ₹10000 budget head → total actual=₹11000, variance=+1000. `_update_budget_allocation` logs warning and dispatches `budget_exceeded` WhatsApp (see Layer F) |
+| Duplicate asset code | 400 | ❌ FAIL **LOW** | `POST {asset_code:"SDEL-IT-001"}` → `{success:false}` but response is `{"detail":"Asset code already exists."}` — non-standard `{"detail":…}` envelope instead of `{success:false, error:{code,message}}` |
+| Budget head category not validated | any string accepted | ❌ FAIL **MED** | `POST /finance/budget/ {category:"not_a_real_category"}` → 201, `{category:"not_a_real_category"}`. `BudgetHeadListView.post()` reads `request.data.get("category","")` directly — no serializer, no `model.Category.choices` validation. Seed data also has out-of-spec values: `operational`, `marketing`, `capex` vs model choices `fixed/variable/capital` |
 
 #### Layer C — CONTRACT / RESPONSE
 | Endpoint | Method | Expected envelope | Status | Evidence |
 |---|---|---|---|---|
-| `/api/v1/finance/petty-cash/` | GET | list with running balance | ⬜ | |
-| `/api/v1/finance/expenses/` | POST | 201 expense | ⬜ | |
-| `/api/v1/finance/assets/` | POST | 201 asset | ⬜ | |
+| `GET /finance/petty-cash/{shop_id}/` | GET | `{name, current_balance, low_balance_threshold}` | ✅ PASS | All fields match `PettyCashAccount` TS type |
+| `POST /finance/petty-cash/transactions/` | POST | 201 `PettyCashTransaction` | ✅ PASS | `{type, amount, balance_after, recorded_by_name, date, category}` |
+| `PettyCashTransaction.receipt_url` FE vs response | — | field in response | ❌ FAIL **LOW** | `PettyCashTransactionSerializer` fields list: `id, account_id, type, amount, category, description, date, balance_after, recorded_by_name` — no `receipt_url`. FE type `finance.ts:22` declares `receipt_url?: string | null`. FE code reading `txn.receipt_url` gets `undefined` |
+| `POST /finance/expenses/` | POST | 201 `Expense` | ✅ PASS | `{id, shop_id, budget_head_id, budget_head_name, category, amount, date, recorded_by_name}` |
+| `BudgetCategory` FE type vs DB values | — | `'fixed'\|'variable'\|'capital'` | ❌ FAIL **MED** | FE type `BudgetCategory = 'fixed' \| 'variable' \| 'capital'`. Model `choices` same. But DB seed data has `operational`, `marketing`, `capex` (4 distinct values). FE category filter/labels produce blank for these values. Root cause: `BudgetHeadListView.post()` no validation, `BudgetHead.Category` choices never enforced at DB level |
+| `POST /finance/assets/` — supplier_id | — | supplier linked on asset | ❌ FAIL **LOW** | `financeApi.createAsset` sends `supplier_id` field. `CreateAssetSerializer` has no `supplier_id` field → silently ignored. `ShopAsset.supplier` always `null` even when FE provides a supplier. `ShopAssetSerializer` returns `supplier_id:null` in read response |
+| `POST /finance/budget/` | POST | 201 `BudgetHead` | ✅ PASS | `{id, shop_id, name, category}` response shape matches TS type |
 
 #### Layer D — AUTHZ
 | Action | Role | Expected | Status | Evidence |
 |---|---|---|---|---|
-| Manage petty cash | Viewer | 403 | ⬜ | |
-| Any finance endpoint | testshop JWT | No demo data | ⬜ | |
+| Record petty cash txn | Viewer | 403 PERMISSION_DENIED | ✅ PASS | `POST /finance/petty-cash/transactions/` with Viewer token → `{code:"PERMISSION_DENIED"}` |
+| Any finance endpoint unauthenticated | None | 401 NOT_AUTHENTICATED | ✅ PASS | `GET /finance/expenses/` without token → `{code:"NOT_AUTHENTICATED"}` |
+| PettyCash permission prefix mismatch | — | — | ❌ FAIL **LOW** | `PettyCashAccountView` and `PettyCashTransactionView` use `require_permission("hr.petty_cash.manage")` — module prefix `hr.` instead of expected `finance.`. If roles are seeded with `finance.*` permissions, petty cash endpoints would be inaccessible. Functional today only because admin has all permissions |
 
 #### Layer E — STATE / SIDE-EFFECTS
 | Action | DB effect | Status | Evidence |
 |---|---|---|---|
-| Petty cash transaction | `petty_cash_transactions` row, running balance updated | ⬜ | |
-| Expense created | `expenses` row, `budget_allocations.actual` updated | ⬜ | |
-| Asset disposed | `shop_assets.condition = disposed` | ⬜ | |
-| audit_logs row | on each write | ⬜ | |
+| Credit petty cash | `petty_cash_transactions` row + `current_balance` updated | ✅ PASS | New row: `{type:"credit", amount:2000, balance_after:8280}`. `petty_cash_accounts.current_balance=8280` ✓ |
+| Expense creation | `expenses` row + `budget_allocations.actual_amount` incremented atomically | ✅ PASS | F() expression used: `UPDATE budget_allocations SET actual_amount=actual_amount+3000`. Variance recomputed correctly. `actual=3000, variance=-7000` then `actual=11000, variance=1000` after second expense |
+| Asset disposal | `shop_assets.condition=disposed, is_active=False` | ✅ PASS | PATCH → `condition:"disposed"`, `is_active:false` in response and DB |
+| audit_logs for finance writes | rows in `audit_logs` | ❌ FAIL **MED** | `SELECT model_name,action,count(*) FROM audit_logs WHERE model_name IN ('pettycashtransaction','expense','budgetallocation','shopasset') GROUP BY 1,2` → 0 rows. No `_write_audit()` calls anywhere in `finance/services.py` or `finance/views.py` |
 
 #### Layer F — LOGGING / OBSERVABILITY
 | Scenario | Expected | Status | Evidence |
 |---|---|---|---|
-| Expense creation | 201, no Traceback | ⬜ | |
+| Normal expense creation | 201, no Traceback | ✅ PASS | 201 returned, no errors in backend log |
+| `petty_cash_low` WhatsApp when balance < threshold | task in `high` queue, worker executes | ❌ FAIL **CRITICAL** (cross-module) | Drained account below threshold (₹330 < ₹500). `send_whatsapp("petty_cash_low",…)` dispatched → `core.dispatch_whatsapp_message.delay(…)` → `high` queue. Worker picked up task → crashed: `ProgrammingError: relation "notification_logs" does not exist`. Same CRITICAL-3 cross-module as all prior modules |
+| `budget_exceeded` WhatsApp when variance > 0 | dispatched on over-budget expense | ❌ FAIL **CRITICAL** (cross-module) | `_update_budget_allocation` calls `send_whatsapp("budget_exceeded",…)` when variance > 0. Same `notification_logs` crash. The warning log line `Budget exceeded: head 'E2E Test Head' 6/2026 actual=11000.00 budgeted=10000.00` IS written to backend console, but notification fails |
 
 #### Layer G — INFRA PATH
 | Check | Method | Status | Evidence |
 |---|---|---|---|
-| Requests via PgBouncer | SHOW POOLS | ⬜ | |
+| Requests via PgBouncer | SHOW POOLS | ✅ PASS | `SHOW POOLS` → `repaiross_tenant_demo | cl_active=6` — all finance requests proxied through PgBouncer |
 
 #### Layer H — UX STATES
 | State | Where | Status | Evidence |
 |---|---|---|---|
-| Over-budget warning surfaced | expense form | ⬜ | |
-| Petty cash immutable ledger (no edit/delete) | petty cash list | ⬜ | |
-| Disposed asset hidden from active list | assets list | ⬜ | |
-| ₹ formatting on all money fields | throughout | ⬜ | |
+| Petty cash immutable ledger (no edit/delete) | `PettyCashTransactionView` | ✅ PASS | Only GET + POST defined in view. No PUT/PATCH/DELETE endpoints on transactions — immutable by API design |
+| Disposed asset hidden from active list | `GET /finance/assets/` default | ✅ PASS | `is_active_param = qp.get("is_active")` → defaults to `filter(is_active=True)` when absent. `SDEL-E2E-001` absent from default list after disposal |
+| Over-budget warning server-side logged | `finance/services.py:148-164` | ✅ PASS | `logger.info("Budget exceeded: …")` fires when `variance > 0`. WhatsApp dispatched (fails on notification_logs — cross-module) |
+| `BudgetHeadListView.post()` no serializer | `finance/views.py:111-128` | ❌ FAIL **MED** | View reads `name`, `category` directly from `request.data` without a serializer. No required-field enforcement, no `Category.choices` validation. Missing-name or invalid-category accepted silently |
+
+#### Module 10 Bug Summary
+| ID | Severity | Description | Location |
+|---|---|---|---|
+| F10-1 | HIGH | Petty cash overdraft not prevented — `record_petty_cash_txn` allows debit > balance (no `new_balance < 0` guard). Spec: "debit > balance → 422". Ledger can go negative | `finance/services.py:46-51` |
+| F10-2 | MED | `BudgetHeadListView.post()` has no serializer — reads `request.data` directly, accepts any category string. `BudgetHead.Category` choices never enforced. Seed data has `operational/marketing/capex` which don't match model choices `fixed/variable/capital` | `finance/views.py:111-128`, `finance/models.py:71-74` |
+| F10-3 | MED | No audit trail — zero `audit_log` writes in entire finance module | `finance/services.py`, `finance/views.py` |
+| F10-4 | MED | `BudgetCategory` FE type `'fixed'\|'variable'\|'capital'` doesn't cover seed data values `operational/marketing/capex` — FE labels/filters produce blanks for seed data | `finance.ts:5`, seed data |
+| F10-5 | LOW | `PettyCashTransactionSerializer` missing `receipt_url` field — FE type declares it, UI reads `undefined` | `finance/serializers.py:33-45` |
+| F10-6 | LOW | `CreateAssetSerializer` has no `supplier_id` field — FE sends it but BE ignores; `ShopAsset.supplier` always null | `finance/serializers.py:121-134` |
+| F10-7 | LOW | `PettyCashAccountView` + `PettyCashTransactionView` use `hr.petty_cash.manage` permission — wrong `hr.` module prefix for a finance endpoint | `finance/views.py:43,57` |
+| F10-8 | LOW | Duplicate asset code returns non-standard `{"detail":"…"}` envelope | `finance/views.py:263-266` |
 
 ---
 
