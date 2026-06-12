@@ -1160,62 +1160,80 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 **Spec refs:** `docs/backend-spec/RepairOS-dev-spec/modules/11-reports.md`, `docs/frontend-spec/RepairOS-frontend-spec/modules/11-reports-ui.md`  
 **Primary role:** Manager, Admin (Viewer: limited)  
 **Routes:** `/reports`, `/reports/revenue`, `/reports/repair`, `/reports/inventory`, `/reports/crm`, `/reports/gst`, `/reports/hr`  
-**Celery tasks:** `reports.export_report` (async export)  
-**Run date:** _(not run)_  
-**Overall:** ⬜ NOT RUN
+**Celery tasks:** `reports.tasks.run_export` (async export)  
+**Run date:** 2026-06-12  
+**Overall:** ❌ FAIL — 2 Critical bugs block majority of reports and all exports
 
 #### Layer A — FLOW
 | Journey | Role | Status | Evidence |
 |---|---|---|---|
-| View dashboard; all widgets load with seed data | Manager | ⬜ | |
-| Filter revenue report by date range + shop | Manager | ⬜ | |
-| Trigger async export; download via signed URL | Manager | ⬜ | |
-| Verify figures reconcile with source module (spot-check) | Manager | ⬜ | |
+| View dashboard; all widgets load with seed data | Admin | ✅ PASS | `GET /api/v1/reports/dashboard/` → `{"open_jobs":15,"jobs_completed_today":2,"revenue_today":1616.0,"revenue_month":43140.0,"outstanding_amount":8780.0,"new_customers_month":34,"tasks_due_today":2,"amc_visits_this_week":4,"low_stock_alerts":2,"contracts_expiring_this_month":1,"over_budget_heads":11,"revenue_trend":[...]}` — all 12 KPI widgets present |
+| Filter revenue report by date range | Admin | ❌ FAIL | `GET /api/v1/reports/revenue-summary/?date_from=2026-01-01&date_to=2026-06-12` → `{"success":false,"error":{"detail":"Permission denied."}}` — admin has `reports.revenue.view` in JWT but REPORT_REGISTRY expects `reports.billing.view` (see F11-1) |
+| Repair/CRM/HR reports return data | Admin | ✅ PASS | `GET /api/v1/reports/job-status-summary/?date_from=2026-01-01&date_to=2026-06-12` → `{"by_status":{"cancelled":1,"closed":25,"draft":8,"estimate_approved":1,"in_progress":2,"on_hold":1,"open":2,"ready_for_pickup":1},"total":41}`; `salary-register` and `lead-conversion` also return data |
+| Trigger async export (CSV) | Admin | ❌ FAIL | `GET /api/v1/reports/job-status-summary/?export=csv` → 202 `{"export_job_id":"70ba073c-...","status":"queued"}` — but job never processes; 3+ jobs permanently stuck at `queued` in DB; task `reports.tasks.run_export` routes to dead `celery` Redis queue (10 msgs stuck, worker consumes `high/default/low` only) |
+| Spot-check salary register vs HR M09 | Admin | ✅ PASS | `GET /api/v1/reports/salary-register/?month=5&year=2026` → 5 employees listed, EMP-001 `net_salary="0.00"` (draft slips with no approved computation — consistent with M09 seed state) |
 
 #### Layer B — VALIDATION
 | Input scenario | Expected error | Status | Evidence |
 |---|---|---|---|
-| Export with invalid date range | 400 VALIDATION_ERROR | ⬜ | |
-| Report access for shop user cannot access | data filtered to own shop | ⬜ | |
+| Unknown report type | 404 detail | ✅ PASS | `GET /api/v1/reports/does-not-exist/` → `{"success":false,"error":{"detail":"Unknown report 'does-not-exist'."}}` |
+| Invalid date range (end before start) | 400 or empty result | ✅ PASS | `GET /api/v1/reports/job-status-summary/?date_from=2026-12-31&date_to=2026-01-01` → `{"by_status":{},"total":0}` — returns empty, no crash |
+| No authentication | 401 | ✅ PASS | `GET /api/v1/reports/dashboard/` (no token) → `{"success":false,"error":{"code":"NOT_AUTHENTICATED","message":"Authentication required."}}` |
+| Billing/ERP/AMC reports for admin | permission mismatch | ❌ FAIL | 14/28 reports return 403 — see F11-1 |
 
 #### Layer C — CONTRACT / RESPONSE
 | Endpoint | Method | Expected envelope | Status | Evidence |
 |---|---|---|---|---|
-| `/api/v1/reports/dashboard/` | GET | widget data with meta | ⬜ | |
-| `/api/v1/reports/revenue/` | GET | filtered list | ⬜ | |
-| `/api/v1/reports/exports/` | POST | 202 task_id | ⬜ | |
-| `/api/v1/reports/exports/{id}/` | GET | status + signed URL when done | ⬜ | |
+| `/api/v1/reports/dashboard/` | GET | `{success, data:{KPI fields}}` | ✅ PASS | All 12 keys present: `open_jobs`, `jobs_completed_today`, `revenue_today`, `revenue_month`, `outstanding_amount`, `new_customers_month`, `tasks_due_today`, `amc_visits_this_week`, `low_stock_alerts`, `contracts_expiring_this_month`, `over_budget_heads`, `revenue_trend` |
+| `/api/v1/reports/{type}/` | GET | `{success, data:{report fields}}` | ✅ PASS (working reports) | Repair/CRM/HR: correct shape. Billing/ERP/AMC: 403 due to perm mismatch |
+| `/api/v1/reports/{type}/?export=csv` | GET | 202 `{export_job_id, status}` | ✅ PASS | Returns 202 `{"export_job_id":"70ba073c-...","status":"queued"}` |
+| `/api/v1/reports/export-jobs/` | GET | cursor-paginated list | ✅ PASS | `{items:[...], meta:{...}}` cursor pagination; 3 jobs returned |
+| `/api/v1/reports/export-jobs/{id}/` | GET | `{id, report_type, format, status, file_url, created_at, completed_at}` | ⚠️ PARTIAL | Detail returns `file_url: null` when empty; List returns `file_url: ""` (empty string) — contract inconsistency (FE type is `string \| null`) |
+| `/api/v1/reports/gstr1/` | GET | CSV download attachment | ❌ FAIL | 403 — admin has `reports.gst.view` but GSTR1View uses `require_permission("reports.billing.view")` |
 
 #### Layer D — AUTHZ
 | Action | Role | Expected | Status | Evidence |
 |---|---|---|---|---|
-| View GST report | Viewer (no `reports.gst.view`) | 403 | ⬜ | |
-| Any reports endpoint | testshop JWT | No demo data | ⬜ | |
+| Viewer accesses dashboard | Viewer | blocked or empty | ⚠️ NOTE | Viewer has 0 report permissions in JWT; `GET /reports/dashboard/` returns 200 (IsAuthenticated only, no perm check) |
+| Viewer accesses export job by ID | Viewer | 404 (user scoped) | ✅ PASS | `GET /api/v1/reports/export-jobs/{admin_job_id}/` with viewer token → 404 "Export job not found." — isolation correct |
+| Admin accesses billing reports | Admin | 200 (admin has all perms) | ❌ FAIL | 403 — JWT has `reports.revenue.view` not `reports.billing.view` (F11-1) |
 
 #### Layer E — STATE / SIDE-EFFECTS
 | Action | DB effect | Status | Evidence |
 |---|---|---|---|
-| Export triggered | `export_jobs` row created | ⬜ | |
-| Export complete | `export_jobs.status = done`, signed URL populated | ⬜ | |
+| Export triggered | `export_jobs` row created in `queued` state | ✅ PASS | `SELECT * FROM export_jobs ORDER BY created_at DESC` — row `70ba073c` with `status=queued` confirmed |
+| Export complete | `export_jobs.status=ready`, `file_url` populated | ❌ FAIL | All 3 export jobs in DB have `status=queued`, `file_url=""` — task never runs (dead queue routing, see F11-2) |
 
 #### Layer F — LOGGING / OBSERVABILITY
 | Scenario | Expected | Status | Evidence |
 |---|---|---|---|
-| Dashboard load | 200, no Traceback | ⬜ | |
-| `reports.export_report` Celery task | worker SUCCESS, file in MinIO | ⬜ | |
+| Dashboard load | 200, no Traceback | ✅ PASS | 200 returned, all widget queries succeed across 6 app models |
+| `run_export` Celery task routing | `default` or `low` queue | ❌ FAIL | Task name `reports.tasks.run_export` matches NO route in `CELERY_TASK_ROUTES`; routes to dead `celery` queue; Redis `celery` LLEN=10, `default` LLEN=0; worker consumes `high/default/low` only — task never executes |
 
 #### Layer G — INFRA PATH
 | Check | Method | Status | Evidence |
 |---|---|---|---|
-| Requests via PgBouncer | SHOW POOLS | ⬜ | |
-| Export file | MinIO console shows CSV/PDF | ⬜ | |
+| Backend DB via PgBouncer | `settings.DATABASES` | ❌ FAIL | Backend `DATABASES['default']` = `HOST=postgres PORT=5432` — direct postgres connection, NOT via pgbouncer (`HOST=pgbouncer PORT=5432`). PgBouncer is running healthy on `:6432` but bypassed by application |
+| Export file saved to MEDIA_ROOT | export job status | ❌ FAIL | No export ever reaches `ready` state — task routing dead queue (see F11-2) |
 
 #### Layer H — UX STATES
 | State | Where | Status | Evidence |
 |---|---|---|---|
-| Dashboard widgets respect shop access | manager vs receptionist view | ⬜ | |
-| Export progress (async) | export triggered → polling → download | ⬜ | |
-| Empty report (no data in range) | narrow date filter | ⬜ | |
+| Reports page renders | `/reports` frontend | ✅ PASS | `GET http://localhost:3000/reports` → 200 HTML, Next.js SSR responds |
+| Dashboard page renders | `/dashboard` frontend | ✅ PASS | `GET http://localhost:3000/dashboard` → 200 HTML |
+| Empty report (no data in range) | `job-status-summary?date_from=2026-12-31&date_to=2026-01-01` | ✅ PASS | Returns `{"by_status":{},"total":0}` — empty result, not error |
+| Export progress polling (async) | export-jobs poll | ❌ FAIL | Job stays permanently in `queued` — never transitions to `processing/ready/failed` |
+
+#### Findings
+| ID | Severity | Description | Location |
+|---|---|---|---|
+| F11-1 | **Critical** | 14/28 reports return 403 for admin — permission slug mismatch: `REPORT_REGISTRY` uses `reports.billing.view`, `reports.erp.view`, `reports.amc.view` but JWT seeds `reports.revenue.view`, `reports.inventory.view` (no `reports.amc.view` at all). Affected: all billing, ERP, AMC reports + GSTR1/GSTR2 views. | `reports/views.py:269-304`, `authentication/role_permissions` seed |
+| F11-2 | **Critical** | `run_export` Celery task routes to dead `celery` queue — `@shared_task` without `name=` generates name `reports.tasks.run_export`; this matches NO rule in `CELERY_TASK_ROUTES`; Celery default is `celery` queue; worker consumes `high/default/low` only; 10 messages in Redis `celery` queue, never consumed; all export jobs permanently `queued`. | `reports/tasks.py:40`, `config/settings.py:CELERY_TASK_ROUTES` |
+| F11-3 | **High** | `amc_contract_summary` service takes 1 arg but view passes 2 — `_amc_contract_summary()` calls `services.amc_contract_summary(shop_ids, qp.get("status", ""))` but `def amc_contract_summary(shop_ids: list) -> dict` only accepts `shop_ids`; would raise `TypeError` if permission check ever passed. | `reports/views.py:153-154`, `reports/services.py:641` |
+| F11-4 | **High** | Backend bypasses PgBouncer — `DATABASES['default']` connects to `postgres:5432` directly; PgBouncer running on `:6432` but not in the app's connection path. | `config/settings.py`, `docker-compose.yml` |
+| F11-5 | **Medium** | `file_url` contract inconsistency — list endpoint (`ExportJobListView`) returns `""` (empty string via `.values()` query), detail endpoint (`ExportJobDetailView`) returns `None` (explicit `or None`); FE type `file_url?: string \| null`. | `reports/views.py:362`, `reports/views.py:382` |
+| F11-6 | **Medium** | Dashboard accessible without module permission — `DashboardView` uses only `IsAuthenticated`, no module-level permission check; any authenticated user (even viewer with 0 report perms) gets full KPI data. | `reports/views.py:58-63` |
+| F11-7 | **Low** | `commission-ledger` report ignores shop_ids — `_commission_ledger(shop_ids, qp)` discards `shop_ids` entirely; `services.commission_ledger(technician_id, month, year)` queries `TechnicianCommission` without shop filter — potential cross-shop leakage in multi-shop tenant. | `reports/views.py:125-131`, `reports/services.py:534` |
 
 ---
 
