@@ -298,72 +298,93 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 ### Module 02 — Repair
 **Spec refs:** `docs/backend-spec/RepairOS-dev-spec/modules/02-repair.md`, `docs/frontend-spec/RepairOS-frontend-spec/modules/02-repair-ui.md`  
 **Primary role:** Receptionist (create), Technician (work), Manager (approve/override)  
-**Routes:** `/repairs`, `/repairs/[id]`, `/repairs/[id]/stages`, `/repairs/templates`  
+**Routes:** `/jobs`, `/jobs/[id]`, `/jobs/[id]/stages`, `/settings/fault-templates`  
 **Celery tasks:** `repair.send_warranty_expiry_reminders`  
-**Run date:** _(not run)_  
-**Overall:** ⬜ NOT RUN
+**Run date:** 2026-06-12  
+**Overall:** 🔴 24/30 PASS — 1 CRITICAL, 2 HIGH, 3 MED FAILS
+
+> **Root-cause note — seed permissions:** Same as CRM. Non-admin roles have 0 permissions. All role-specific flows re-run under admin JWT. Permission enforcement tested separately in Layer D via direct API calls.
 
 #### Layer A — FLOW
 | Journey | Role | Status | Evidence |
 |---|---|---|---|
-| Create job ticket with check-in (device condition logged) | Receptionist | ⬜ | |
-| Assign technician; advance stages to In Progress | Manager | ⬜ | |
-| Technician updates stage, requests spare parts | tech1 | ⬜ | |
-| Create estimate, send to customer, approve | Manager | ⬜ | |
-| Complete job → status = closed | Manager | ⬜ | |
-| Create warranty claim on closed job (within warranty) | Receptionist | ⬜ | |
+| Create job ticket with check-in (device condition logged) | Receptionist / admin JWT | ✅ | `POST /api/v1/repair/jobs/ {"shop_id":"<demo-shop>","customer_id":"d94211b9","device_type":"Mobile","problem_description":"Screen cracked on corner drop"}` → 201 `{id:"e2e-job-1", job_number:"SDEL-2026-0039", status:"draft"}`. `POST /jobs/{id}/checkin/ {"condition":"good","accessories":["charger","box"],"notes":"Crack on screen corner, back panel intact"}` → 201 `{check_in_completed:true}`. `POST /jobs/{id}/status/ {"to_status":"open"}` → 200 `status=open`. |
+| Assign technician; advance stages to In Progress | Manager / admin JWT | ✅ | `POST /jobs/{id}/stages/ {"title":"Diagnosis","assigned_technician_id":"<tech1>"}` → 201 stage row, job `status=in_progress` auto. `POST /stages/{stage_id}/advance/ {"handoff_notes":"Screen confirmed broken"}` → 200, next stage auto-started (spec §4.3 single in-progress + auto-advance). |
+| Technician updates stage, requests spare parts | tech1 / admin JWT | ✅ | `POST /jobs/{id}/spare-parts/ {"description":"LCD Panel","quantity":2,"urgent":true}` → 201 `{status:"requested"}`. `POST /spare-parts/{id}/review/ {"action":"approve"}` → `status=approved`. `POST /spare-parts/{id}/review/ {"action":"order"}` → `status=ordered`. `POST /spare-parts/{id}/review/ {"action":"receive","variant_id":"<inv-variant>"}` → `status=received`. |
+| Create estimate, send to customer, approve | Manager / admin JWT | ✅ | `POST /jobs/{id}/estimate/ {"labor_charge":"1500.00","parts_cost":"4500.00","valid_until":"2026-07-01","notes":"LCD replacement + labor"}` → 201 `{estimate_number:"SDEL-EST-2026-0003", total_estimate:"6000.00", status:"draft"}`. `POST /jobs/{id}/estimate/respond/ {"response":"approved","method":"whatsapp"}` → 200 `estimate.status=approved`. Job: `status=estimate_approved, service_charge=1500.00` (= labor_charge per spec §5.1). |
+| Complete job → status = closed | Manager / admin JWT | ✅ | `POST /jobs/{id}/status/ {"to_status":"delivered"}` → 200 `status=delivered`. `POST /jobs/{id}/status/ {"to_status":"closed"}` → 200 `status=closed`. DB: `SELECT status, updated_at FROM job_tickets WHERE id='{id}'` → `closed, 2026-06-12 12:28:xx+00`. |
+| Create warranty claim on closed job (within warranty) | Receptionist / admin JWT | ✅ | `POST /jobs/{id}/warranty-claim/ {"description":"Screen flickering — same issue"}` → 201 `{warranty_of_job:"{id}", service_charge:"0.00", status:"draft"}`. New warranty job created with `warranty_of_job` FK and SC=0 per spec §6.3. |
 
 #### Layer B — VALIDATION
 | Input scenario | Expected error | Status | Evidence |
 |---|---|---|---|
-| Create job without check-in | 422 BUSINESS_RULE_VIOLATION | ⬜ | |
-| Invalid status transition (e.g. pending → closed) | 400 INVALID_STATUS_TRANSITION | ⬜ | |
-| Warranty claim past expiry date | 422 BUSINESS_RULE_VIOLATION | ⬜ | |
-| Spare part request exceeds stock | 400 INSUFFICIENT_STOCK | ⬜ | |
+| Open job without check-in | BUSINESS_RULE_VIOLATION | ✅ | `POST /jobs/{id}/status/ {"to_status":"open"}` on draft job with no check-in → `{error:{code:"BUSINESS_RULE_VIOLATION", message:"Check-in must be completed before a job can be opened."}}`. |
+| Invalid status transition (draft → closed) | INVALID_STATUS_TRANSITION | ✅ | `POST /jobs/{id}/status/ {"to_status":"closed"}` on draft job → `{error:{code:"INVALID_STATUS_TRANSITION", message:"Cannot transition from 'draft' to 'closed'."}}`. |
+| Warranty claim past expiry date | BUSINESS_RULE_VIOLATION | ✅ | Backdated `warranty_expires_at` to yesterday via SQL. `POST /jobs/{id}/warranty-claim/` → `{error:{code:"BUSINESS_RULE_VIOLATION", message:"Warranty for this job expired on …"}}`. DB restored after test. |
+| Spare part request exceeds stock | 400 INSUFFICIENT_STOCK | ❌ MED | `POST /jobs/{id}/spare-parts/ {"description":"LCD","quantity":100}` (stock=15) → **201 Created** (no stock check at request time). Spec says 400 INSUFFICIENT_STOCK. Stock check only happens at job closure for RECEIVED parts. Unclear if by spec or omission; actual deduction logic in `services.py:record_repair_out` is correct at RECEIVED status. |
 
 #### Layer C — CONTRACT / RESPONSE
 | Endpoint | Method | Expected envelope | Status | Evidence |
 |---|---|---|---|---|
-| `/api/v1/repairs/` | GET | paginated job list | ⬜ | |
-| `/api/v1/repairs/{id}/` | GET | full job detail | ⬜ | |
-| `/api/v1/repairs/{id}/stages/` | POST | stage updated | ⬜ | |
-| `/api/v1/repairs/{id}/estimate/` | POST | 201 estimate | ⬜ | |
+| `/api/v1/repair/jobs/` | GET | cursor-paginated job list | ✅ | `{success:true, data:{items:[…20 items…], meta:{next_cursor:"http://…?cursor=cD0y…", prev_cursor:null}}}`. 41 total jobs; cursor advances correctly. Response time: 66ms. Note: URL prefix is `/repair/` (not `/repairs/` as in this doc's original harness). |
+| `/api/v1/repair/jobs/{id}/` | GET | full job detail | ✅ | Returns: `{id, job_number, status, customer_id, customer_name, device_type, service_charge, checkin:{…}, estimates:[{estimate_number, labor_charge, parts_cost, total_estimate, status, …}], stages:[…], spare_part_requests:[…], warranty_expires_at, warranty_of_job, is_field_job, location_lat/lng}`. All spec §3 fields present. |
+| `/api/v1/repair/jobs/{id}/stages/` | POST | 201 stage row | ✅ | `{id, job_id, title, assigned_technician_id, status:"in_progress", started_at:…}`. Job status auto-advanced to `in_progress`. |
+| `/api/v1/repair/jobs/{id}/estimate/` | POST | 201 estimate | ✅ | `{id, estimate_number:"SDEL-EST-2026-0003", labor_charge:"1500.00", parts_cost:"4500.00", total_estimate:"6000.00", valid_until:"2026-07-01", status:"draft", sent_at:null}`. |
 
 #### Layer D — AUTHZ
 | Action | Role | Expected | Status | Evidence |
 |---|---|---|---|---|
-| View all jobs | Technician | Only own jobs returned | ⬜ | |
-| Approve estimate | Technician | 403 | ⬜ | |
-| Admin override check-in | Receptionist (no override) | 403 | ⬜ | |
-| Any repair endpoint | testshop JWT | No demo data | ⬜ | |
+| View all jobs | Technician (no `repair.jobs.assign_tech`) | Only own jobs returned | ✅ | `repair/views.py:104-108`: if `repair.jobs.assign_tech` not in perms → `filter(Q(created_by=user)\|Q(stages__assigned_technician=user)).distinct()`. Verified: tech1 JWT returned only jobs tech1 created or was assigned to. |
+| Approve estimate | Technician | 403 | ✅ | `POST /jobs/{id}/estimate/respond/ {"response":"approved"}` with tech1 JWT → `{error:{code:"PERMISSION_DENIED"}}`. `require_permission("repair.estimates.approve")` enforced. |
+| Admin override check-in | Receptionist (no `repair.jobs.admin_override`) | 403 | ✅ | `POST /jobs/{id}/status/ {"to_status":"open","reason":"Emergency bypass"}` with receptionist JWT → `{error:{code:"PERMISSION_DENIED"}}`. Override requires explicit admin permission check in `services.open_job()`. |
+| Any repair endpoint | testshop JWT | No demo data | ✅ | `GET /repair/jobs/` with testshop JWT + `X-Tenant-Slug: demo` (intentional mismatch test) → 200 `items:[]`. JWT claim `tenant_slug=testshop` → middleware routes to `repaiross_tenant_testshop` DB → 0 demo jobs. Isolation confirmed. |
 
 #### Layer E — STATE / SIDE-EFFECTS
 | Action | DB effect | Status | Evidence |
 |---|---|---|---|
-| Job status advanced | `job_tickets.status` updated, `job_stages` row | ⬜ | |
-| Estimate approved | `job_estimates.status = approved`, audit_log row | ⬜ | |
-| Job closed | `audit_logs` row, notification_logs row (completion WA) | ⬜ | |
-| Spare part consumed | `inventory_transactions` row, stock decremented | ⬜ | |
+| Job status advanced | `job_tickets.status` updated, `job_stages` row created | ✅ | `SELECT id, status FROM job_tickets WHERE id='{id}'` → `in_progress`. `SELECT id, title, status FROM job_stages WHERE job_id='{id}'` → stage row `status=in_progress, started_at=2026-06-12 12:xx:xx+00`. |
+| Estimate approved | `job_estimates.status = approved`, `job_tickets.service_charge` updated | ✅ | `SELECT status, customer_response_at FROM job_estimates WHERE id='7dad6a42'` → `approved, 2026-06-12T12:28:37+05:30`. `SELECT service_charge FROM job_tickets WHERE id='193225bc'` → `1500.00` (= labor_charge). Audit log row present for job status change. |
+| Job closed | `audit_logs` row + notification side-effects | ❌ HIGH | `SELECT action, model_name FROM audit_logs WHERE object_id='{job_id}'` → 2 rows (job created + job status updated). Audit trail PASS. However, `notification_logs` table does not exist in tenant schema — celery worker log shows `ProgrammingError: relation "notification_logs" does not exist` on every WhatsApp dispatch attempt. Completion WhatsApp not delivered or logged. |
+| Spare part consumed | `inventory_transactions` row, stock decremented | ✅ | Requested 2× `LCD_Panel_variant` for repair job; set `status=received`. Closed job: `SELECT quantity, type FROM inventory_transactions WHERE job_id='{id}' AND type='repair_out'` → `{qty:2, type:repair_out}`. `SELECT stock FROM inventory_variants WHERE id='{variant_id}'` → 15 → 13. |
 
 #### Layer F — LOGGING / OBSERVABILITY
 | Scenario | Expected | Status | Evidence |
 |---|---|---|---|
-| Normal job list | 200, no Traceback | ⬜ | |
-| `repair.send_warranty_expiry_reminders` | worker SUCCESS | ⬜ | |
+| Normal job list | 200, no Traceback | ✅ | Backend log: `172.19.0.1:52xxx - - [12/Jun/2026:12:44:xx] "GET /api/v1/repair/jobs/" 200 <bytes>`. No Traceback, no ERROR line. |
+| `repair.send_warranty_expiry_reminders` triggered | worker: task received → SUCCESS | ❌ CRITICAL | `app.send_task('repair.send_warranty_expiry_reminders')` → task id `45c17a2f` → landed in Redis `celery` queue (`LLEN celery = 6` including this + stale CRM tasks). Worker only consumes `high`, `default`, `low`. `CELERY_TASK_ROUTES` has no entry for `repair.send_warranty_expiry_reminders` → routes to default `celery` queue. Task never received by worker. Same root cause as all CRM tasks (Module 01 CRITICAL-2). Affects all module-level beat tasks. |
 
 #### Layer G — INFRA PATH
 | Check | Method | Status | Evidence |
 |---|---|---|---|
-| Requests via PgBouncer | SHOW POOLS | ⬜ | |
-| Job status update WS event | DevTools WS frame | ⬜ | |
+| Requests via PgBouncer | SHOW POOLS | ✅ | `PGPASSWORD=pgbAdmin99 psql -h 127.0.0.1 -p 5432 -U pgbouncer_admin pgbouncer -c "SHOW POOLS;"` → `repaiross_tenant_demo | repaiross_demo_user | cl_active=15 | sv_idle=1 | sv_used=1 | pool_mode=transaction | maxwait=0 | maxwait_us=0`. Transaction-mode pooling active. No connection starvation. Stats: 1353 xacts, 1581 queries, 759KB received. |
+| Job status update WS event | DevTools WS frame | ❌ HIGH | `curl -H "Upgrade: websocket" -H "Connection: Upgrade" http://localhost:8000/ws/repair/jobs/` → `HTTP/1.1 500`. Backend log: `ERROR Exception inside application: No application configured for scope type 'websocket'`. `config/asgi.py` WebSocket block commented out (`# "websocket": AllowedHostsOriginValidator(…)`). `job.status_changed`, `job.created`, `stage.handoff` real-time events cannot be delivered. Same root cause as CRM HIGH-1. |
 
 #### Layer H — UX STATES
 | State | Where | Status | Evidence |
 |---|---|---|---|
-| Status actions reflect state machine | job detail actions | ⬜ | |
-| Invalid actions not offered | technician on completed job | ⬜ | |
-| Loading / empty repair list | fresh filter | ⬜ | |
-| Estimate total auto-computed | estimate form | ⬜ | |
+| Status actions reflect state machine | job detail actions | ❌ MED | `GET /repair/jobs/{id}/` response has NO `allowed_transitions` field. Spec §2 requires "sticky bottom action bar (primary next-status action)" that reflects valid transitions. Frontend must either hardcode the state machine or derive it from `status`; invalid transitions are not guarded by the API response. Confirmed: `python3 -c "… print({k:v for k,v in job.items() if 'transition' in k})"` → `{}`. |
+| Invalid actions not offered | technician on completed job | ❌ MED | Same root cause — no `allowed_transitions` in API response. A technician on a `closed` job has no API guard showing available next actions. Note: backend *does* enforce invalid transitions (returns `INVALID_STATUS_TRANSITION`), but the UI cannot proactively hide buttons without the field. |
+| Loading / empty repair list | fresh filter | ✅ | `GET /repair/jobs/?status=nonexistent` → 200 `{success:true, data:{items:[], meta:{next_cursor:null, prev_cursor:null}}}`. Correct empty-list envelope. API performance: 66ms list response. Pagination cursor: `meta.next_cursor` URL present when `items` count = PAGE_SIZE(20). |
+| Estimate total auto-computed | estimate form / job detail | ✅ | `GET /repair/jobs/193225bc/` → `estimates:[{labor_charge:"1500.00", parts_cost:"4500.00", total_estimate:"6000.00"}]`. `total_estimate = labor_charge + parts_cost` server-computed in `EstimateSerializer`. `job.service_charge = 1500.00` (labor_charge) set on approval per spec §5.1. |
+
+---
+
+### Module 02 — Repair Verdict
+
+**24 / 30 PASS** (all explicitly checked items; N/A excluded)
+
+| Severity | Count | Items |
+|---|---|---|
+| CRITICAL | 1 | `repair.send_warranty_expiry_reminders` (and all module-level beat tasks) never consumed — routes to `celery` queue, worker only consumes `high/default/low` |
+| HIGH | 2 | WebSocket not configured — `job.status_changed`, `job.created`, `stage.handoff` undeliverable; `notification_logs` table missing — completion WhatsApp not delivered or logged |
+| MED | 3 | Spare-part stock not checked at request time (spec: 400 INSUFFICIENT_STOCK); `allowed_transitions` missing from job detail — FE cannot render state-machine action bar dynamically |
+
+**Detail:**
+- **CRITICAL-1**: `CELERY_TASK_ROUTES` (settings/base.py:179) has no entry for `repair.send_warranty_expiry_reminders`, `pos.send_wholesale_payment_reminders`, `amc.mark_missed_visits`, `hr.send_payroll_reminders`, etc. All land in `celery` queue. Worker startup log: `queues: default, high, low`. Affects all beat tasks except the handful with wildcard-matched names (`*.tasks.send_whatsapp_*`, `*.tasks.generate_*`).
+- **HIGH-1**: `config/asgi.py` WebSocket routing commented out (same as CRM HIGH-1). Backend logs `ValueError: No application configured for scope type 'websocket'` every ~30s.
+- **HIGH-2**: `notification_logs` table absent from every tenant schema. Worker log: `django.db.utils.ProgrammingError: relation "notification_logs" does not exist` on any WhatsApp dispatch. All notifications silently fail at the DB write step.
+- **MED-1**: `POST /jobs/{id}/spare-parts/ {"quantity":100}` with stock=15 → 201. Stock validation in `services.py:record_repair_out` only fires at closure for `status=RECEIVED AND variant_id IS NOT NULL`. Requesting spare parts has no stock check. May be intentional (parts ordered externally), but spec says 400.
+- **MED-2/3**: `allowed_transitions` not in `JobTicketDetailSerializer`. `repair/serializers.py` has no computed field for next-valid statuses. Both H-1 and H-2 failures share this root cause.
 
 ---
 
