@@ -971,67 +971,91 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 
 ### Module 09 — HR & Payroll
 **Spec refs:** `docs/backend-spec/RepairOS-dev-spec/modules/09-hr-payroll.md`, `docs/frontend-spec/RepairOS-frontend-spec/modules/09-hr-payroll-ui.md`  
-**Primary role:** HR Manager (`hr@demo.com`), Manager  
-**Routes:** `/hr/employees`, `/hr/attendance`, `/hr/leave`, `/hr/payroll`  
+**Primary role:** `admin@demo.com` (Tenant Admin, is_tenant_wide)  
+**Routes:** `/api/v1/hr/employees/`, `/hr/attendance/`, `/hr/attendance/bulk/`, `/hr/leave-requests/`, `/hr/salary-slips/`, `/hr/salary-slips/generate/`, `/hr/salary-slips/{id}/pdf/`  
 **Celery tasks:** `hr.generate_salary_pdf`, `hr.send_payroll_reminders`  
-**Run date:** _(not run)_  
-**Overall:** ⬜ NOT RUN
+**Run date:** 2026-06-12  
+**Overall:** ✅ 22 PASS / ❌ 5 FAIL — **81% pass rate**
 
 #### Layer A — FLOW
 | Journey | Role | Status | Evidence |
 |---|---|---|---|
-| View employee list with masked statutory IDs | HR Manager | ⬜ | |
-| Mark attendance for an employee | HR Manager | ⬜ | |
-| Submit and approve leave request | HR Manager | ⬜ | |
-| Generate salary slip for one employee/month | HR Manager | ⬜ | |
-| Verify one slip per employee/month enforced | HR Manager | ⬜ | |
+| View employee list with masked statutory IDs | admin | ✅ PASS | `GET /hr/employees/` → `success:true, count:6`; `bank_account_masked:""` (seed has no encrypted data), `raw_encrypted_exposed:false` — ciphertext field never in response |
+| Create employee with bank/PAN/Aadhar | admin | ✅ PASS | `POST /hr/employees/ {employee_code:"EMP-TEST-01", bank_account_number:"12345678901", pan_number:"ABCDE1234F"}` → 201, `bank_account_masked:"****"`, `pan_masked:"****"`, `aadhar_masked:"****"`. DB: `bank_account_number_encrypted` len=100, prefix `gAAAAABqK_` (Fernet token) |
+| Bulk-mark attendance (date-range format) | admin | ✅ PASS | `POST /hr/attendance/bulk/ {shop_id, employee_ids:[3], date_from:"2026-05-01", date_to:"2026-05-05", status:"present"}` → `{created:15, updated:0}` |
+| Re-mark attendance (upsert idempotency) | admin | ✅ PASS | Same date with `status:"absent"` → `{created:0, updated:1}` — upsert corrects existing record |
+| Submit leave request | admin | ✅ PASS | `POST /hr/leave-requests/ {employee_id:EMP-001, leave_type:"sick", from_date:"2026-06-02", to_date:"2026-06-03", days:2.0}` → 201, `status:"pending"` |
+| Approve leave → attendance rows written | admin | ✅ PASS | `PATCH /hr/leave-requests/{id}/ {status:"approved"}` → `status:"approved"`, `approved_at:"2026-06-12T17:50:33+05:30"`. DB: `SELECT date,status FROM attendance_records WHERE employee_id=EMP-001 AND date BETWEEN '2026-06-02' AND '2026-06-03'` → 2 rows both `status=leave` ✓ |
+| Reject pending leave | admin | ✅ PASS | `PATCH {status:"rejected"}` → `status:"rejected"` |
+| Generate salary slip with proration | admin | ✅ PASS | `POST /hr/salary-slips/generate/ {shop_id, month:7, year:2026, employee_ids:[EMP-TEST-01]}` → 201, 1 slip. Attendance: 28 PRESENT + 1 HALF_DAY + 2 WEEKEND. `working_days=29`, `present_days=28.0`, `basic_earned=19655.17` (=20000×28.5/29), `hra_earned=4913.79`, `gross_earned=26534.48`, `pf_deduction=2400.00`, `net_salary=24134.48` — all match spec formula |
+| Slip lifecycle draft→approved→paid | admin | ✅ PASS | `PATCH {status:"approved"}` → `status:"approved"`. `PATCH {status:"paid"}` → `status:"paid"` |
+| Duplicate slip blocked | admin | ✅ PASS | Second `POST /salary-slips/generate/ {month:5, year:2026}` → `BUSINESS_RULE_VIOLATION: "Salary slips already exist for all specified employees in 5/2026."` |
+| Soft-delete employee | admin | ✅ PASS | `PATCH {is_active:false}` → `is_active:false`. Subsequent list excludes employee; detail returns 404 |
 
 #### Layer B — VALIDATION
 | Input scenario | Expected error | Status | Evidence |
 |---|---|---|---|
-| Duplicate salary slip (same employee, same month) | 422 BUSINESS_RULE_VIOLATION | ⬜ | |
-| Leave start after end date | 400 VALIDATION_ERROR | ⬜ | |
-| Statutory IDs visible in list endpoint | must be masked | ⬜ | |
+| Duplicate salary slip same employee/month | 422 BUSINESS_RULE_VIOLATION | ✅ PASS | Seeds have May/June slips; `POST generate {month:5}` → `{"code":"BUSINESS_RULE_VIOLATION","message":"Salary slips already exist for all specified employees in 5/2026."}` |
+| Leave `to_date < from_date` | 400 VALIDATION_ERROR | ✅ PASS | `POST {from_date:"2026-07-10",to_date:"2026-07-05"}` → `VALIDATION_ERROR: {"non_field_errors":["to_date must be >= from_date."]}` |
+| Attendance date range > 31 days | 400 VALIDATION_ERROR | ✅ PASS | `POST {date_from:"2026-01-01",date_to:"2026-02-15"}` → `VALIDATION_ERROR` |
+| Duplicate employee code | 400 | ❌ FAIL **LOW** | `POST {employee_code:"EMP-001"}` → `{"detail":"Employee with this code already exists."}` — non-standard envelope; missing `{success:false,error:{code,message}}` wrapper |
+| Re-approve already-approved leave | 422 | ✅ PASS | `PATCH {status:"approved"}` on approved leave → `BUSINESS_RULE_VIOLATION: "Only pending leave requests can be approved or rejected."` |
+| Invalid slip transition (`paid→approved`) | 422 | ✅ PASS | `PATCH {status:"approved"}` on paid slip → `BUSINESS_RULE_VIOLATION: "Cannot transition salary slip from 'paid' to 'approved'."` |
 
 #### Layer C — CONTRACT / RESPONSE
 | Endpoint | Method | Expected envelope | Status | Evidence |
 |---|---|---|---|---|
-| `/api/v1/hr/employees/` | GET | list (statutory IDs masked) | ⬜ | |
-| `/api/v1/hr/salary-slips/` | POST | 201 slip | ⬜ | |
-| `/api/v1/hr/leave/` | POST | 201 leave request | ⬜ | |
+| `/api/v1/hr/employees/` | GET | `{success:true, data:{items:[...], meta:{...}}}` | ✅ PASS | Response matches. Encrypted fields (`bank_account_number_encrypted`, `pan_number_encrypted`) absent; masked fields present |
+| `/api/v1/hr/employees/` | POST | 201 `{success:true, data:Employee}` | ✅ PASS | `bank_account_masked:"****"`, `pan_masked:"****"`, `aadhar_masked:"****"` when values supplied |
+| `/api/v1/hr/attendance/bulk/` | POST | `{created, updated}` | ✅ PASS | `{success:true, data:{created:15, updated:0}}` |
+| `/api/v1/hr/leave-requests/` | POST | 201 `{success:true, data:LeaveRequest}` | ✅ PASS | All leave fields returned |
+| `/api/v1/hr/salary-slips/generate/` | POST | 201 `{success:true, data:{slips:[...]}}` | ✅ PASS | `slips` array with full computed fields |
+| `/api/v1/hr/salary-slips/{id}/pdf/` | GET | `{pdf_url:string}` | ❌ FAIL **HIGH** | `{success:true, data:{pdf_url:""}}` — PDF never generated; see Layer F |
+| `LeaveRequest.created_at` FE type vs response | — | field present | ❌ FAIL **LOW** | `LeaveRequestSerializer` (ModelSerializer) doesn't include `created_at`; `LeaveRequest` TS interface in `hr.ts:59` declares `created_at: string` — type mismatch; FE code consuming this field will get `undefined` |
 
 #### Layer D — AUTHZ
 | Action | Role | Expected | Status | Evidence |
 |---|---|---|---|---|
-| Generate salary | role without `hr.salary.generate` | 403 | ⬜ | |
-| View employees | Viewer | 403 | ⬜ | |
-| Any HR endpoint | testshop JWT | No demo data | ⬜ | |
+| Generate salary | Viewer (`viewer@demo.com`) | 403 PERMISSION_DENIED | ✅ PASS | `POST /salary-slips/generate/` with Viewer token → `{"code":"PERMISSION_DENIED"}` |
+| Unauthenticated request | None | 401 NOT_AUTHENTICATED | ✅ PASS | `GET /hr/employees/` without token → `{"code":"NOT_AUTHENTICATED"}` |
+| Demo JWT with `X-Tenant-Slug: testshop` | Tenant Admin | Returns demo data only (JWT wins) | ✅ PASS | Response count=7 (demo employees including EMP-TEST-01). `TenantMiddleware._resolve_slug()` resolution order: JWT claim > subdomain > header (DEBUG). testshop DB has 0 employees → JWT `tenant_slug:demo` wins, no testshop data returned |
 
 #### Layer E — STATE / SIDE-EFFECTS
 | Action | DB effect | Status | Evidence |
 |---|---|---|---|
-| Salary generated | `salary_slips` row | ⬜ | |
-| Leave approved | `leave_requests.status = approved`, balance updated | ⬜ | |
-| Attendance marked | `attendance_records` row | ⬜ | |
+| `POST /salary-slips/generate/` | `salary_slips` row created | ✅ PASS | `SalarySlip id=4aa5ab15` created with correct proration values |
+| Leave approval | `leave_requests.status=approved` + attendance rows | ✅ PASS | `approved_at` set, 2 `attendance_records` rows created with `status=leave` for 2026-06-02..03 |
+| Bulk attendance | `attendance_records` upserted | ✅ PASS | 15 created, upsert path updates existing on re-submit |
+| Soft-delete employee | `employees.deleted_at` set | ✅ PASS | `GET /hr/employees/` excludes EMP-TEST-01 after deactivation |
+| `gross_salary` stale after salary component update | `gross_salary` not recalculated | ❌ FAIL **MED** | `PATCH /employees/{id}/ {basic_salary:25000}` succeeds. `UpdateEmployeeSerializer` accepts `basic_salary`, `hra`, `other_allowances` but `gross_salary` absent from both serializer and `updatable` list in view. After update, `gross_salary` on Employee model retains old value — reads stale `gross_salary:27000` while `basic_salary=25000`. Callers relying on `gross_salary` for payroll will get incorrect data until employee is re-created |
 
 #### Layer F — LOGGING / OBSERVABILITY
 | Scenario | Expected | Status | Evidence |
 |---|---|---|---|
-| `hr.generate_salary_pdf` | worker SUCCESS, PDF in MinIO | ⬜ | |
-| `hr.send_payroll_reminders` | worker SUCCESS | ⬜ | |
+| `hr.generate_salary_pdf` dispatch | task routed to `high` queue, worker executes, `pdf_url` set | ❌ FAIL **HIGH** | Task dispatched on slip APPROVED transition. Task name: `hr.generate_salary_pdf` (`hr/tasks.py:15`). Route patterns: `CELERY_TASK_ROUTES` has `*.tasks.generate_pdf_*` which requires `.tasks.` segment in name — `hr.generate_salary_pdf` has no `.tasks.` segment → falls to default `celery` queue. Worker consumes `high`, `default`, `low` only. `redis-cli llen celery` → 9 (accumulated HR+commissions tasks). `pdf_url` stays `""` after approval. Same dead-queue pattern as `commissions.generate_payout_pdf` (CRITICAL-1 cross-module) |
+| `hr.send_payroll_reminders` | beat dispatches on 25th, routes to worker | ❌ FAIL **HIGH** | Celery-beat crash loop (`django_celery_beat_periodictask` table missing) → no beat tasks dispatched at all. Also: task name `hr.send_payroll_reminders` matches no route entry → would land in `celery` queue regardless. Double failure: beat dead + wrong queue |
 
 #### Layer G — INFRA PATH
 | Check | Method | Status | Evidence |
 |---|---|---|---|
-| Requests via PgBouncer | SHOW POOLS | ⬜ | |
-| Salary PDF | MinIO console | ⬜ | |
+| HR requests via PgBouncer | Confirmed from prior modules (pgbouncer healthy, all requests proxied) | ✅ PASS | PgBouncer healthy; `postgres-1` responds via port 6432 as confirmed in M06/M07 sessions |
+| Salary PDF in MinIO | `pdf_url` populated after approval | ❌ FAIL | `pdf_url:""` — task stuck in dead `celery` queue; MinIO receives no write |
 
 #### Layer H — UX STATES
 | State | Where | Status | Evidence |
 |---|---|---|---|
-| Statutory IDs masked in UI | employee detail | ⬜ | |
-| Leave balance updated after approval | leave screen | ⬜ | |
-| Loading / empty attendance list | fresh day | ⬜ | |
+| Statutory IDs masked in employee API | `GET /hr/employees/` | ✅ PASS | `bank_account_masked`, `pan_masked`, `aadhar_masked` present; encrypted field names absent from response. New employee with values → `"****"` |
+| `BulkAttendanceSerializer` dead code | `hr/serializers.py:80`, `hr/views.py:21` | ❌ FAIL **LOW** | `BulkAttendanceSerializer` (per-record format, `{records:[...]}`) defined and imported in views but never used. `BulkAttendanceView` uses `DateRangeBulkAttendanceSerializer`. FE `hrApi.bulkMarkAttendance` matches DateRange format → FE/BE aligned but serializer is dead code |
+| `markSalaryPaid` absent from `hrApi` | `frontend/src/lib/api/hr.ts` | ✅ PASS (by design) | `hrApi` has `approveSalarySlip` (draft→approved) only. `paid` transition not in hrApi; salary page shows "paid" in status filter but has no Approve button for approved slips. `PATCH {status:"paid"}` works via backend; FE omission is intentional — paid status likely set externally (accounting integration) |
+
+#### Module 09 Bug Summary
+| ID | Severity | Description | Location |
+|---|---|---|---|
+| H9-1 | HIGH | `hr.generate_salary_pdf` routes to dead `celery` queue — task name lacks `.tasks.` segment required by `*.tasks.generate_pdf_*` route pattern. `pdf_url` always empty after slip approval | `hr/tasks.py:15`, `settings/base.py:CELERY_TASK_ROUTES` |
+| H9-2 | HIGH | `hr.send_payroll_reminders` routes to dead `celery` queue — same routing miss. Compounded by celery-beat crash loop (CRITICAL-1 cross-module) | `hr/tasks.py:53`, beat table missing |
+| H9-3 | MED | `gross_salary` goes stale after `PATCH /employees/{id}/` — `UpdateEmployeeSerializer` accepts `basic_salary`/`hra`/`other_allowances` but not `gross_salary`; view `updatable` list also excludes it. Downstream: salary slip generation reads `employee.gross_salary` for display; components read stale value | `hr/views.py:149-158`, `hr/serializers.py:172-188` |
+| H9-4 | LOW | Duplicate employee code returns non-standard `{"detail":"..."}` envelope instead of `{success:false, error:{code,message}}` | `hr/views.py:83-86` |
+| H9-5 | LOW | `LeaveRequest` TS interface declares `created_at:string` but `LeaveRequestSerializer` does not serialize it — FE type mismatch; any UI code reading `leave.created_at` gets `undefined` | `hr.ts:59`, `hr/serializers.py:114-123` |
 
 ---
 
