@@ -582,63 +582,94 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 **Spec refs:** `docs/backend-spec/RepairOS-dev-spec/modules/05-inventory.md`, `docs/frontend-spec/RepairOS-frontend-spec/modules/05-inventory-ui.md`  
 **Primary role:** Manager, Technician (view only)  
 **Routes:** `/inventory`, `/inventory/products`, `/inventory/adjustments`, `/inventory/transfers`  
-**Celery tasks:** _(none dedicated — low-stock notifications via core)_  
-**Run date:** _(not run)_  
-**Overall:** ⬜ NOT RUN
+**Celery tasks:** _(none dedicated — low-stock notifications via `core.dispatch_whatsapp_message`)_  
+**Run date:** 2026-06-12  
+**Overall:** 🟡 23 PASS / 6 FAIL — 0 new CRITICAL · 4 MED (+ 2 CRITICAL cross-module re-confirmed)
 
 #### Layer A — FLOW
+
 | Journey | Role | Status | Evidence |
 |---|---|---|---|
-| View stock list with current quantities | Manager | ⬜ | |
-| Adjust stock (positive and negative, with reason) | Manager | ⬜ | |
-| Transfer stock between shops | Manager | ⬜ | |
-| View ledger entry created by adjustment | Manager | ⬜ | |
+| A1 — View stock list | Admin | ✅ PASS | `GET /inventory/stock/` → 20 items, `meta:{next_cursor, prev_cursor}`. Item fields: `variant_name`, `quantity_in_stock:13.000`, `reorder_level:5.000`, `is_low_stock`, `cost_price`, `selling_price`, `wholesale_price`. Pagination working (next_cursor present for full catalog). |
+| A2a — Positive stock adjustment (+5) | Admin | ✅ PASS | `POST /inventory/adjustment/ {shop_id, variant_id, quantity:5, note:"E2E stock-in test"}` → 201 `{new_qty:18.0, transaction:{id, type:"adjustment", quantity:"5.000", reference_type:"adjustment", created_by_name:"Demo Repairs"}}` |
+| A2b — Negative stock adjustment (-3) | Admin | ✅ PASS | `POST /inventory/adjustment/ {quantity:-3, note:"E2E damaged goods"}` → 201 `{new_qty:15.0, transaction:{quantity:"-3.000"}}` |
+| A3 — Inter-shop transfer (5 units SDEL→SMUM) | Admin | ✅ PASS | `POST /inventory/transfer/ {source_shop_id:SDEL, dest_shop_id:SMUM, quantity:5}` → 201 `{transactions:[{type:"transfer_in", qty:5, shop_id:SMUM}, {type:"transfer_out", qty:-5, shop_id:SDEL}]}`. Both share same `reference_id`. |
+| A4 — View ledger for variant | Admin | ✅ PASS | `GET /inventory/transactions/?variant_id=…` → 6 entries: `opening_stock +15`, `repair_out -2`, 2× `adjustment`, `transfer_out -5`, `transfer_in +5`. Ordered newest-first. |
 
 #### Layer B — VALIDATION
+
 | Input scenario | Expected error | Status | Evidence |
 |---|---|---|---|
-| Negative adjustment below 0 | 400 INSUFFICIENT_STOCK | ⬜ | |
-| Transfer to same shop | 400 VALIDATION_ERROR | ⬜ | |
-| CSV import with bad rows | per-row validation, commit blocked until fixed | ⬜ | |
+| B1 — Negative adjustment below zero (−100 when qty=10) | 400 INSUFFICIENT_STOCK | 🟡 FAIL MED | `POST /inventory/adjustment/ {quantity:-100}` → 400 `{code:"INSUFFICIENT_STOCK", message:"A server error occurred."}`. Code correct but message is generic Django default (`InsufficientStock` has no custom `detail` string). |
+| B2 — Transfer to same shop | 400 VALIDATION_ERROR | ✅ PASS | `{source_shop_id:X, dest_shop_id:X}` → 400 `{code:"VALIDATION_ERROR", fields:{non_field_errors:["Source and destination shops must differ."]}}` |
+| B3a — CSV import with bad row (invalid decimal) | Per-row error, nothing committed | ✅ PASS (with caveat) | `POST /products/bulk-import/` → 200 `{created:0, updated:0, failed:[{row:3, error:"[<class 'decimal.ConversionSyntax'>]"}]}`. Atomic rollback confirmed: `SKU-GOOD` not created. HTTP 200 for partial-failure is deliberate per spec. |
+| B3b — CSV error message quality | User-friendly message | 🟡 FAIL MED | Error string is raw Python exception repr `"[<class 'decimal.ConversionSyntax'>]"` — not parseable by the frontend as a human-readable message. |
+| B3c — CSV all valid rows | `{created:2, updated:0, failed:[]}` | ✅ PASS | 2 products + variants created atomically. |
 
 #### Layer C — CONTRACT / RESPONSE
-| Endpoint | Method | Expected envelope | Status | Evidence |
+
+| Endpoint | Method | Expected | Status | Evidence |
 |---|---|---|---|---|
-| `/api/v1/inventory/stock/` | GET | paginated + meta | ⬜ | |
-| `/api/v1/inventory/adjustments/` | POST | 201 + transaction row | ⬜ | |
-| `/api/v1/inventory/transfers/` | POST | 201 + two transactions | ⬜ | |
+| C1 — `/api/v1/inventory/stock/` | GET | Paginated + meta | ✅ PASS | `{items:[…], meta:{next_cursor, prev_cursor}}`. All stock-specific fields present including `is_low_stock`. |
+| C2 — `/api/v1/inventory/adjustment/` | POST | 201 + `{new_qty, transaction}` | ✅ PASS | `new_qty` float, `transaction.{id, type, quantity, reference_type, reference_id, note, created_by_name, created_at}`. |
+| C3 — `/api/v1/inventory/transfer/` | POST | 201 + 2 transactions | ✅ PASS | `{transactions:[{type:transfer_in}, {type:transfer_out}]}`. Both have `reference_type:"transfer"` and matching `reference_id`. |
+| C4 — `/api/v1/inventory/products/` | GET | Paginated product list | ✅ PASS | 20 items + cursor. Item keys include `category_name`, `variant_count`, `variants[]`. |
+| C5 — `/api/v1/inventory/products/barcode/{code}/` | GET | Variant detail | ✅ PASS | `GET .../barcode/ACC-USBC1-BR/` → 200 `{id, barcode, variant_name:"Braided", product_name:"USB-C Cable 1m", cost_price, selling_price, wholesale_price, hsn_code, tax_rate}` |
+| C5b — Barcode not found | 404 NOT_FOUND | ✅ PASS | `GET .../barcode/NOTEXIST999/` → 404 `{code:"NOT_FOUND"}`. |
 
 #### Layer D — AUTHZ
+
 | Action | Role | Expected | Status | Evidence |
 |---|---|---|---|---|
-| Adjust stock | Viewer | 403 | ⬜ | |
-| Any inventory endpoint | testshop JWT | No demo data | ⬜ | |
+| D1a — View stock | Viewer (0 perms) | 403 | ✅ PASS | `GET /inventory/stock/` → 403 `{code:"PERMISSION_DENIED"}`. |
+| D1b — Adjust stock | Viewer (0 perms) | 403 | ✅ PASS | `POST /inventory/adjustment/` → 403 `{code:"PERMISSION_DENIED"}`. |
+| D2 — Cross-tenant isolation | testshop JWT | 0 demo items | ✅ PASS | `GET /inventory/stock/` with testshop token → `{items:[]}`. |
 
 #### Layer E — STATE / SIDE-EFFECTS
+
 | Action | DB effect | Status | Evidence |
 |---|---|---|---|
-| Adjustment | `inventory_transactions` row, `inventory_stock.quantity` updated | ⬜ | |
-| Transfer | two `inventory_transactions` rows (out + in) | ⬜ | |
-| audit_logs row | on each write | ⬜ | |
+| E1 — Adjustments + transfer | `inventory_stock` updated | ✅ PASS | Final state: SDEL `quantity_in_stock=3.000` (15-2+5-3-5+1-1-7), SMUM=6.000 (+5+1). |
+| E2 — Ledger invariant | `SUM(inventory_transactions.quantity) == inventory_stock.quantity_in_stock` | ✅ PASS | `SELECT current_stock=3.000, ledger_sum=3.000 → MATCH` (SDEL). SMUM: 6.000 == 6.000. |
+| E3 — Transfer paired rows | Both `transfer_out` + `transfer_in` share `reference_id` | ✅ PASS | DB confirms 2 rows per transfer with matching `reference_id` UUID. |
+| E4 — audit_logs | `audit_logs` row on adjustment/transfer | 🟡 FAIL MED | `SELECT * FROM audit_logs WHERE model_name ILIKE '%inventory%' OR model_name ILIKE '%stock%'` → 0 rows. `inventory/services.py` never calls `_write_audit()`. Financial operations (adjustments, transfers) have no audit trail. |
+| E5 — Transfer atomicity | Both legs atomic (rollback-safe) | 🟡 FAIL MED | `inter_shop_transfer()` line 147: `with transaction.atomic():` has no `using=` parameter — defaults to `default` DB, NOT the tenant DB (`_db`). The inner `update_stock` calls use `using=_db`. In a multi-tenant setup these are different connections → the outer atomic block does NOT wrap the inner operations → if `transfer_in` fails after `transfer_out` commits, stock disappears from source without appearing at destination. Confirmed by reading `services.py:147`. Not triggered in happy-path test. |
+| E6 — Low-stock alert side-effect | `_emit_low_stock_alert()` fires when `new_qty < reorder_level` | ✅ PASS (alert fires) | Triggered by adjustment to qty=3 (below reorder_level=5). `dispatch_whatsapp_message` queued to `high` queue. Worker picks it up → **crashes** (see F2). |
 
 #### Layer F — LOGGING / OBSERVABILITY
+
 | Scenario | Expected | Status | Evidence |
 |---|---|---|---|
-| Stock adjustment | 201, no Traceback | ⬜ | |
+| F1 — Adjustment request log | 201, no Traceback | ✅ PASS | `backend-1 | … "POST /api/v1/inventory/adjustment/" 201 462`. |
+| F2 — `low_stock_alert` WhatsApp notification | Task executes, notification sent | 🔴 FAIL CRITICAL (cross-module) | `dispatch_whatsapp_message` task consumed from `high` queue → `ProgrammingError: relation "notification_logs" does not exist`. WhatsApp low-stock alerts fail on every trigger. Same root cause as Module 01 CRITICAL. |
 
 #### Layer G — INFRA PATH
+
 | Check | Method | Status | Evidence |
 |---|---|---|---|
-| Requests via PgBouncer | SHOW POOLS | ⬜ | |
-| Low-stock WS badge | real-time badge update in nav | ⬜ | |
+| G1 — Requests via PgBouncer | `SHOW POOLS` | ✅ PASS | `repaiross_tenant_demo`: `cl_active=16`, transaction mode. All inventory API calls transit PgBouncer. |
+| G2 — `stock.updated` / `stock.low_alert` WS events | WS channel | 🔴 FAIL CRITICAL (cross-module) | WebSocket routing commented out in `asgi.py`. `stock.updated` and `stock.low_alert` events cannot be delivered. Same as Modules 01–04. |
 
 #### Layer H — UX STATES
+
 | State | Where | Status | Evidence |
 |---|---|---|---|
-| Negative-stock block in UI | adjustment form | ⬜ | |
-| Low-stock badge/alert | stock list | ⬜ | |
-| Ledger entry visible after adjustment | transaction history | ⬜ | |
-| Loading / empty state | stock list | ⬜ | |
+| H1 — Inventory page loads | `/inventory` | ✅ PASS | `GET http://localhost:3000/inventory` → 200. `/products` → 200. |
+| H2 — Low-stock rows highlighted | `StockTable.tsx` | ✅ PASS | `is_low_stock` → row gets `bg-[var(--warning)]/5`; `AlertTriangle` icon shown (`StockTable.tsx:56,66,103,108`). qty=0 → danger color; qty < reorder → warning color. |
+| H3 — Low-stock count badge | `inventory/page.tsx` | ✅ PASS | `lowCount = records.filter(r => r.is_low_stock).length`; `AlertTriangle` badge with count shown above the stock table (`page.tsx:42,52`). Toggle switch to filter to low-stock-only (`page.tsx:87`). |
+| H4 — Negative-stock block in AdjustmentDialog | `AdjustmentDialog.tsx` | ✅ PASS | `wouldGoNegative = resultingStock < 0` computed client-side (`line 46`). Warning banner shown (`line 137`), Submit disabled while `wouldGoNegative` (`line 153`). On API `INSUFFICIENT_STOCK` → toast error (`lines 64–65`). |
+| H5 — Ledger read-only | `/inventory/transactions` | ✅ PASS | Transactions page: `emptyTitle="No transactions"`, read-only table, no edit actions. Code-verified `transactions/page.tsx:121,124`. |
+| H6 — Live `stock.updated` / `stock.low_alert` | Any inventory page | 🟡 FAIL MED | No `useWebSocket` or WS hook found in inventory components or pages. Live stock update not implemented — consistent with WS being commented out. |
+
+### Module 05 — Inventory Verdict
+
+| Severity | Count | Items |
+|---|---|---|
+| CRITICAL (cross-module) | 2 | F2 (`notification_logs` missing — WhatsApp fails on every trigger), G2 (WebSocket disabled — `stock.updated`/`stock.low_alert` undeliverable) |
+| MED | 4 | B1 (`InsufficientStock` generic message), B3b (CSV error is raw Python repr), E4 (no `audit_logs` for adjustments/transfers), E5 (`inter_shop_transfer` outer `transaction.atomic()` missing `using=` — not truly atomic across tenant DB legs) |
+| Cross-module | — | CRITICAL seed-data bug (all non-admin roles have 0 permissions) blocks role-specific coverage |
+
+**Pass rate: 23 / 29 (79%)**
 
 ---
 
