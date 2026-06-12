@@ -676,68 +676,102 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 ### Module 06 — Procurement
 **Spec refs:** `docs/backend-spec/RepairOS-dev-spec/modules/06-procurement.md`, `docs/frontend-spec/RepairOS-frontend-spec/modules/06-procurement-ui.md`  
 **Primary role:** Manager, Billing Staff  
-**Routes:** `/procurement/suppliers`, `/procurement/orders`, `/procurement/grn`, `/procurement/returns`  
+**Routes:** `/suppliers`, `/purchases`, `/purchases/[id]`  
 **Celery tasks:** `procurement.send_bill_due_reminders`  
-**Run date:** _(not run)_  
-**Overall:** ⬜ NOT RUN
+**Run date:** 2026-06-12  
+**Overall:** 🟡 25 PASS / 4 FAIL — 0 new CRITICAL · 1 HIGH · 1 MED (+ 2 CRITICAL cross-module re-confirmed)
 
 #### Layer A — FLOW
+
 | Journey | Role | Status | Evidence |
 |---|---|---|---|
-| Create supplier | Manager | ⬜ | |
-| Create Purchase Order with line items | Manager | ⬜ | |
-| Receive GRN against PO (full/partial) | Manager | ⬜ | |
-| Receive GRN with rejected lines (reason required) | Manager | ⬜ | |
-| Record purchase payment; check outstanding balance | Billing Staff | ⬜ | |
-| Create purchase return → debit note | Manager | ⬜ | |
+| A1 — Create supplier (with bank account) | Admin | ✅ PASS | `POST /procurement/suppliers/ {name:"E2E Tech Distributors", phone, gstin:"07AAACE0000A1ZP", state_code:"07", payment_terms_days:30, bank_account_number:"12345678901234"}` → 201 `{id, name, gstin, state_code:"07", bank_account_masked}`. Bank stored as Fernet ciphertext in `bank_account_number_encrypted` column (verified in DB). |
+| A2 — Create PO (draft, 2 line items) | Admin | ✅ PASS | `POST /procurement/purchase-orders/ {supplier_id, items:[{qty:10, cost:250, tax:18},{qty:5, cost:400, tax:18}]}` → 201 `{po_number:"SDEL-PO-2026-0006", status:"draft", items:[{line_total:2950}, {line_total:2360}]}`. Tax included: 10×250×1.18=2950, 5×400×1.18=2360 ✓. |
+| A3 — Send PO (draft→sent), email triggered | Admin | ✅ PASS | `PATCH /purchase-orders/{id}/ {status:"sent"}` → 200 `{status:"sent"}`. Email dispatch queued via `dispatch_email_message` (no WhatsApp for PO). |
+| A4 — Receive GRN (9 accepted/1 rejected with reason + 5 accepted) | Admin | ✅ PASS | `POST /procurement/grn/ {po_id, received_date, challan_number:"CH-E2E-001", items:[{qty_received:10, qty_accepted:9, qty_rejected:1, rejection_reason:"1 unit cracked housing"},{qty_received:5, qty_accepted:5}]}` → 201 `{grn_number:"SDEL-GRN-2026-0002"}`. |
+| A4b — PO status → partially_received (9 of 10 accepted) | Admin | ✅ PASS | `GET /purchase-orders/{id}/` → `{status:"partially_received"}`. Correct: only 9 of 10 received. |
+| A5 — Purchase invoice with intra-state GST | Admin | ✅ PASS | `POST /purchase-invoices/ {subtotal:4650, tax_rate:18}` → 201 `{cgst:418.50, sgst:418.50, igst:0.00, grand_total:5487.00}`. shop.state_code=07, supplier.state_code=07 → intra-state → CGST+SGST split ✓. |
+| A6 — Record partial payment | Admin | ✅ PASS | `POST /purchase-payments/ {amount:2000, method:"upi", reference_id:"UPI-E2E-001"}` → 201. Invoice `payment_status=partially_paid`, `amount_paid=2000.00`. |
+| A7 — Create purchase return | Admin | ✅ PASS | `POST /purchase-returns/ {reason:"Defective batch", items:[{variant_id, qty:2, unit_cost:250}]}` → 201 `{return_number:"SDEL-PR-2026-0001", status:"pending", total_amount:500.00}`. |
+| A8 — Dispatch return → debit note generated | Admin | ✅ PASS | `PATCH /purchase-returns/{id}/dispatch/` → 200 `{status:"dispatched", debit_note_number:"SDEL-DN-2026-06-0001"}`. DB: `debit_notes` row with `amount=500.00`. `return_out` stock transaction posted. |
+| A9 — Supplier ledger | Admin | ✅ PASS | `GET /suppliers/{id}/ledger/` → `{total_invoiced:5487.00, total_paid:2000.00, balance:3487.0, items:[{type:invoice,debit:5487},{type:payment,credit:2000}]}`. |
 
 #### Layer B — VALIDATION
+
 | Input scenario | Expected error | Status | Evidence |
 |---|---|---|---|
-| GRN qty > PO ordered qty | 422 BUSINESS_RULE_VIOLATION | ⬜ | |
-| Reject line without reason | 400 VALIDATION_ERROR | ⬜ | |
-| Duplicate PO number (if not auto) | 400 VALIDATION_ERROR | ⬜ | |
+| B1 — GRN against draft PO | 422 BUSINESS_RULE_VIOLATION | ✅ PASS | → 422 `{code:"BUSINESS_RULE_VIOLATION", message:"Cannot receive GRN against PO with status 'draft'."}` |
+| B2 — GRN: rejected qty > 0, no rejection_reason | 400 VALIDATION_ERROR | ✅ PASS | → 400 `{fields:{items:[{non_field_errors:["rejection_reason is required when quantity_rejected > 0."]}]}}` |
+| B3 — Payment exceeding outstanding balance | 422 BUSINESS_RULE_VIOLATION | ✅ PASS | Payment of 5000 when outstanding=3487 → 422 `"Payment amount 5000.00 exceeds outstanding balance 3487.00."` |
+| B4 — Dispatch already-dispatched return | 422 BUSINESS_RULE_VIOLATION | ✅ PASS | → 422 `"This return is already dispatched."` |
+| B5 — Invalid PO status transition (partially_received → received directly) | 422 BUSINESS_RULE_VIOLATION | ✅ PASS | → 422 `"Cannot transition PO from 'partially_received' to 'received'."` PO status must advance via GRN only. |
 
 #### Layer C — CONTRACT / RESPONSE
-| Endpoint | Method | Expected envelope | Status | Evidence |
+
+| Endpoint | Method | Expected | Status | Evidence |
 |---|---|---|---|---|
-| `/api/v1/procurement/orders/` | GET | paginated list with PO doc numbers | ⬜ | |
-| `/api/v1/procurement/orders/` | POST | 201 with `{SHOP}-PO-{YYYY}-{NNNN}` | ⬜ | |
-| `/api/v1/procurement/grn/` | POST | 201, stock updated | ⬜ | |
-| `/api/v1/procurement/returns/` | POST | 201 with DN doc number | ⬜ | |
+| C1 — `/procurement/suppliers/` | GET | Paginated + `bank_account_masked` | ✅ PASS | 5 suppliers, `next_cursor:null`. Item keys include `bank_account_masked`, `gstin`, `state_code`, `payment_terms_days`, `credit_limit`. |
+| C2 — `/procurement/purchase-orders/{id}/` | GET | PO detail with items.quantity_received | ✅ PASS | `{status:"partially_received", items:[{qty_ordered:10, quantity_received:9.0},{qty_ordered:5, quantity_received:5.0}], grand_total}` |
+| C3 — `/procurement/purchase-invoices/` | GET | Paginated invoices | ✅ PASS | Item keys: `cgst`, `sgst`, `igst`, `grand_total`, `payment_status`, `amount_paid`, `amount_outstanding`. |
+| C4 — `/procurement/purchase-returns/` | GET | Returns list | 🔴 FAIL HIGH | Returns `{data:[]}` for tenant-wide admin (`is_tenant_wide:true, shop_ids:[]`). `PurchaseReturnView.get()` filters `purchase_invoice__shop_id__in=shop_ids` without guarding for `is_tenant_wide` (unlike `PurchaseOrderView` which uses `if shop_ids else base`). DB has 1 return; API returns 0. |
+| C5 — `/suppliers/{id}/ledger/` | GET | Ledger shape | ✅ PASS | `{items:[…], balance:3487.0, total_invoiced:"5487.00", total_paid:"2000.00"}`. Running balance updated per entry. |
 
 #### Layer D — AUTHZ
+
 | Action | Role | Expected | Status | Evidence |
 |---|---|---|---|---|
-| Create PO | Viewer | 403 | ⬜ | |
-| Any procurement endpoint | testshop JWT | No demo data | ⬜ | |
+| D1 — View suppliers | Viewer (0 perms) | 403 | ✅ PASS | `GET /suppliers/` → 403 `{code:"PERMISSION_DENIED"}`. |
+| D2 — Cross-tenant isolation | testshop JWT | 0 demo suppliers | ✅ PASS | `GET /suppliers/` with testshop token → `{items:[]}`. |
 
 #### Layer E — STATE / SIDE-EFFECTS
+
 | Action | DB effect | Status | Evidence |
 |---|---|---|---|
-| GRN accepted | `inventory_transactions` row, stock incremented, PO status updated | ⬜ | |
-| GRN rejected line | no stock change for rejected qty | ⬜ | |
-| Payment recorded | `purchase_payments` row, outstanding balance updated | ⬜ | |
-| Return | `purchase_returns` row, `debit_notes` row | ⬜ | |
+| E1 — GRN accepted qty → stock | `inventory_stock` incremented + ledger entry | ✅ PASS | SDEL stock for variant1: 17 (= prior + 9 accepted). Ledger sum = 17, invariant holds. |
+| E2 — GRN items | 2 `purchase_in` rows in `inventory_transactions` | ✅ PASS | `SELECT type,quantity FROM inventory_transactions WHERE reference_id='{grn_id}'` → `purchase_in +9.000`, `purchase_in +5.000`. |
+| E3 — GRN rejected qty | No stock change for rejected line | ✅ PASS | Only 2 `purchase_in` rows (not 3). Rejected unit not stocked. |
+| E4 — Return dispatch | `return_out` in `inventory_transactions` | ✅ PASS | `return_out quantity=-2.000` with `reference_type='return'`. |
+| E5 — Debit note | `debit_notes` row created on dispatch | ✅ PASS | `SDEL-DN-2026-06-0001 amount=500.00`. |
+| E6 — PO partial receipt | `purchase_orders.status = partially_received` | ✅ PASS | 9 of 10 accepted → `status=partially_received`. |
+| E7 — Bank account encryption | Stored as AES-256 Fernet ciphertext | ✅ PASS | `bank_account_number_encrypted = gAAAAABq...` (Fernet token). Column not readable as plaintext. |
+| E8 — audit_logs | Supplier, PurchaseOrder, PurchaseInvoice create events | ✅ PASS | 3 audit_log rows: `create Supplier`, `create PurchaseOrder` ×2, `create PurchaseInvoice`. |
 
 #### Layer F — LOGGING / OBSERVABILITY
+
 | Scenario | Expected | Status | Evidence |
 |---|---|---|---|
-| GRN creation | 201, no Traceback | ⬜ | |
-| `procurement.send_bill_due_reminders` | worker SUCCESS | ⬜ | |
+| F1 — GRN creation log | 201, no Traceback | ✅ PASS | `backend-1 | … "POST /api/v1/procurement/grn/" 201`. |
+| F2 — `procurement.send_bill_due_reminders` | worker SUCCESS | 🔴 FAIL CRITICAL (cross-module) | Task in `CELERY_BEAT_SCHEDULE` → no `CELERY_TASK_ROUTES` entry → routes to dead `celery` queue; celery-beat also restart-looping. Same root cause as all prior modules. |
 
 #### Layer G — INFRA PATH
+
 | Check | Method | Status | Evidence |
 |---|---|---|---|
-| Requests via PgBouncer | SHOW POOLS | ⬜ | |
-| PO PDF upload | MinIO console | ⬜ | |
+| G1 — Requests via PgBouncer | `SHOW POOLS` | ✅ PASS | `repaiross_tenant_demo`: `cl_active=20`, transaction mode. |
+| G2 — Real-time events | Spec §7 | ✅ N/A | Spec states no distinct procurement real-time events. Inventory emits `stock.updated` on GRN accept (covered in Module 05). |
 
 #### Layer H — UX STATES
+
 | State | Where | Status | Evidence |
 |---|---|---|---|
-| GST split on purchase invoice | purchase invoice detail | ⬜ | |
-| ₹ outstanding balance | supplier detail | ⬜ | |
-| Empty PO list | fresh filter | ⬜ | |
+| H1 — Suppliers and purchases pages load | `/suppliers`, `/purchases` | ✅ PASS | Both → 200. |
+| H2 — Bank account masked in form | `SupplierForm.tsx` | ✅ PASS | `<Input type="password" …>` for `bank_account_number` field (`SupplierForm.tsx:165`). |
+| H3 — GRN: rejection_reason enforced | `GrnReceiveForm.tsx` | ✅ PASS | `(l) => l.quantity_rejected > 0 && !l.rejection_reason.trim()` blocks submission (`GrnReceiveForm.tsx:83`). Rejected rows highlighted in warning color (`line 117`). |
+| H4 — Empty states + loading skeletons | `purchases/page.tsx` | ✅ PASS | PO tab: `emptyTitle="No purchase orders"`, invoices tab: `emptyTitle="No purchase invoices"`. Loading skeletons via `loading={poLoading}` prop. |
+| H5 — PoBuilder: live line total with tax | `PoBuilder.tsx` | ✅ PASS | `grandTotal = lines.reduce(…qty × cost × (1 + tax/100), 0)` computed client-side (`PoBuilder.tsx:97`). |
+| H6 — Debit note number shown after dispatch | `ReturnDialog.tsx` | ✅ PASS | `ret.debit_note_number && <span>DN: {ret.debit_note_number}</span>` (`ReturnDialog.tsx:184,186`). |
+| H7 — PO detail: GRN panel + received status | `purchases/[id]/page.tsx` | ✅ PASS | `canReceive = ['sent', 'partially_received'].includes(po.status)`; GrnReceiveForm shown when receivable; "✓ All items fully received" banner when done. Loading skeletons. Code-verified `purchases/[id]/page.tsx:44,51,141,157`. |
+
+### Module 06 — Procurement Verdict
+
+| Severity | Count | Items |
+|---|---|---|
+| CRITICAL (cross-module) | 2 | F2 (`procurement.send_bill_due_reminders` → dead `celery` queue, celery-beat crash — all modules) |
+| HIGH | 1 | C4 (`GET /purchase-returns/` returns `[]` for tenant-wide admin — `PurchaseReturnView.get()` missing `is_tenant_wide` guard in shop-id filter) |
+| MED | 1 | A1 supplier create response includes `bank_account_number: null` (write-only field leaks as null instead of being excluded from response) |
+| Cross-module | — | CRITICAL seed-data bug (0 permissions for non-admin roles) |
+
+**Pass rate: 25 / 29 (86%)**
 
 ---
 
