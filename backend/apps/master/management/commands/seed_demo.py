@@ -140,7 +140,38 @@ class Command(BaseCommand):
             )
             self.stdout.write(f"  ✓ Demo tenant '{DEMO_SLUG}' provisioned.")
 
+        # Ensure a subscription plan exists and the demo tenant is linked to it
+        self._seed_subscription(alias)
+
         return alias
+
+    def _seed_subscription(self, alias):
+        from master.models import SubscriptionPlan, Tenant, TenantSubscription
+
+        plan, _ = SubscriptionPlan.objects.using("default").get_or_create(
+            name="Professional",
+            defaults={
+                "max_shops": 10,
+                "max_users": 50,
+                "price_monthly_inr": Decimal("2999.00"),
+                "features": {
+                    "crm": True, "repair": True, "pos": True, "erp": True,
+                    "amc": True, "billing": True, "hr": True, "reports": True,
+                },
+            },
+        )
+        tenant = Tenant.objects.using("default").get(slug=DEMO_SLUG)
+        today = date.today()
+        TenantSubscription.objects.using("default").update_or_create(
+            tenant=tenant,
+            defaults={
+                "plan": plan,
+                "status": TenantSubscription.Status.ACTIVE,
+                "current_period_start": today.replace(day=1),
+                "current_period_end": today.replace(month=today.month % 12 + 1, day=1) if today.month < 12
+                    else today.replace(year=today.year + 1, month=1, day=1),
+            },
+        )
 
     # ── commission rules (created early — accrual fires on job close) ─────────
 
@@ -263,6 +294,18 @@ class Command(BaseCommand):
                 tech_idx += 1
                 key = f"technician_{tech_idx}"
             users[key] = user
+
+        # Seed platform admin user (stored in tenant DB, is_platform_admin=True)
+        platform_admin, created = User.objects.get_or_create(
+            email="platform@repaiross.app",
+            defaults={"phone": "+919999999999", "full_name": "Platform Admin", "is_active": True,
+                      "is_platform_admin": True},
+        )
+        platform_admin.is_platform_admin = True
+        platform_admin.set_password(DEMO_PASSWORD)
+        platform_admin.failed_login_attempts = 0
+        platform_admin.locked_until = None
+        platform_admin.save(update_fields=["is_platform_admin", "password", "failed_login_attempts", "locked_until"])
 
         # Ensure role-permission defaults are always up-to-date on every seed run
         from master.services import _seed_roles_and_permissions

@@ -15,7 +15,7 @@ import string
 from django.conf import settings
 from django.utils import timezone
 
-from .models import AuditLogMaster, Tenant, TenantSubscription
+from .models import AuditLogMaster, Tenant, TenantDatabase, TenantSubscription
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +242,10 @@ def suspend_tenant(tenant: Tenant, actor_email: str = "") -> Tenant:
     tenant.status = Tenant.Status.SUSPENDED
     tenant.save(update_fields=["status", "updated_at"])
 
+    # Mark the DB record inactive so ?db_status=suspended filter (database__is_active=False)
+    # returns correct results and get_db_status() reports "suspended".
+    TenantDatabase.objects.using("default").filter(tenant=tenant).update(is_active=False)
+
     AuditLogMaster.objects.create(
         event_type="tenant.suspended",
         tenant=tenant,
@@ -254,6 +258,9 @@ def suspend_tenant(tenant: Tenant, actor_email: str = "") -> Tenant:
 def reactivate_tenant(tenant: Tenant, actor_email: str = "") -> Tenant:
     tenant.status = Tenant.Status.ACTIVE
     tenant.save(update_fields=["status", "updated_at"])
+
+    # Restore TenantDatabase.is_active so db_status filter is truthful again.
+    TenantDatabase.objects.using("default").filter(tenant=tenant).update(is_active=True)
 
     AuditLogMaster.objects.create(
         event_type="tenant.reactivated",
