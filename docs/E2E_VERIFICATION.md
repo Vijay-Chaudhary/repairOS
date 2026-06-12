@@ -391,68 +391,93 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 ### Module 03 — POS
 **Spec refs:** `docs/backend-spec/RepairOS-dev-spec/modules/03-pos.md`, `docs/frontend-spec/RepairOS-frontend-spec/modules/03-pos-ui.md`  
 **Primary role:** Billing Staff (`billing@demo.com`), Manager  
-**Routes:** `/pos`, `/pos/sales/[id]`, `/pos/returns`  
+**Routes:** `/pos`, `/sales/[id]`, `/sales/[id]` (return action)  
 **Celery tasks:** `pos.send_wholesale_payment_reminders`  
-**Run date:** _(not run)_  
-**Overall:** ⬜ NOT RUN
+**Run date:** 2026-06-12  
+**Overall:** 🔴 20/27 PASS — 1 CRITICAL, 1 HIGH, 5 MED FAILS
+
+> **Root-cause note — seed permissions:** Same as prior modules. Billing Staff has 0 permissions in seeded data. All role-based flows re-run under admin JWT. Permission enforcement tested directly.
 
 #### Layer A — FLOW
 | Journey | Role | Status | Evidence |
 |---|---|---|---|
-| Counter sale: add items, apply discount, split payment, complete | Billing Staff | ⬜ | |
-| Wholesale sale with credit limit: partial payment | Manager | ⬜ | |
-| Job-linked sale from a closed repair job | Billing Staff | ⬜ | |
-| Process a return → credit note issued + stock restocked | Billing Staff | ⬜ | |
+| Counter sale: add items, flat discount, split payment (cash+UPI), complete | admin JWT | ✅ | `POST /api/v1/pos/sales/ {sale_type:"counter", items:[{variant_id:"ACC-USBC1-BR", qty:2, unit_price:299, tax_rate:18}, {variant_id:"ACC-TG01-03", qty:1, unit_price:149, tax_rate:18}], discount_type:"flat", discount_value:50, payments:[{method:"cash",amount:300},{method:"upi",amount:483.38}]}` → 201 `{sale_number:"SDEL-SALE-2026-06-0017", status:"partially_paid", grand_total:"822.46", cgst:"62.73", sgst:"62.73", igst:"0.00"}`. `POST /sales/{id}/payment/ {method:"cash",amount:39.08}` → status=completed, amount_paid=822.46, outstanding=0.00. |
+| Wholesale sale with credit limit: partial payment | admin JWT | ✅ | `POST /sales/ {sale_type:"wholesale", customer_id:"TechZone", items:[{variant:65WAdapter, qty:5, unit_price:650, tax_rate:18}], payments:[{method:"neft",amount:2000}]}` → 201 `{sale_number:"SDEL-SALE-2026-06-0018", status:"partially_paid", grand_total:"3835.00", igst:"585.00"}`. Inter-state (shop:07 Delhi vs GSTIN 27 Maha) → IGST not CGST+SGST. ✓ |
+| Job-linked sale from a closed repair job | admin JWT | ✅ | `POST /sales/ {sale_type:"job_linked", customer_id:"…", job_id:"95fc4b5b", items:[{variant:TG, qty:1}], payments:[{method:"cash",amount:175.82}]}` → 201 `{sale_number:"SDEL-SALE-2026-06-0019", sale_type:"job_linked", job_id:"95fc4b5b", status:"completed"}`. |
+| Process a return → credit note issued + stock restocked | admin JWT | ✅ | `POST /sales/{id}/return/ {items:[{sale_item_id:"TG-item", qty:1}], reason:"Customer changed mind", refund_method:"cash"}` → 201 `{return_number:"SDEL-RET-2026-06-0001", status:"pending", total_refund_amount:"175.82"}`. `PATCH /sales/returns/{id}/ {action:"approve"}` → `{status:"approved"}`. DB: `SDEL-CN-2026-06-0001` credit note created (amount=175.82). Stock: TG went 39→40 (`return_in +1` in inventory_transactions). |
 
 #### Layer B — VALIDATION
 | Input scenario | Expected error | Status | Evidence |
 |---|---|---|---|
-| Quantity > available stock | 400 INSUFFICIENT_STOCK, blocked in UI | ⬜ | |
-| Split payment amounts don't sum to total | form block | ⬜ | |
-| Wholesale sale exceeds credit limit | 400 CREDIT_LIMIT_EXCEEDED | ⬜ | |
-| Return qty > original sold qty | 422 BUSINESS_RULE_VIOLATION | ⬜ | |
+| Quantity > available stock | 400 INSUFFICIENT_STOCK | ✅ | `POST /sales/ {qty:200}` (stock=48) → HTTP 400 `{success:false, error:{code:"INSUFFICIENT_STOCK", message:"A server error occurred."}}`. Code correct; message generic (not variant-specific). |
+| Split payment sum < grand total | form block / partially_paid | ❌ MED | No backend validation requiring sum == grand_total. `POST /sales/ {payments:[{amount:100}]}` on ₹352.82 sale → 201 `{status:"partially_paid"}`. Backend explicitly supports `partially_paid`. Spec says "sum of splits must equal grand total (or mark partially_paid for wholesale credit)" — ambiguous. Counter sales getting `partially_paid` without explicit intent works but contradicts "form block" requirement. |
+| Wholesale sale exceeds credit limit | 400 CREDIT_LIMIT_EXCEEDED | ❌ MED | `POST /sales/ {sale_type:"wholesale", customer:TechZone(limit=50000), qty:200×299}` → HTTP 422 `{error:{code:"BUSINESS_RULE_VIOLATION", message:"Credit limit of ₹50000.00 would be exceeded. Current outstanding: ₹0.00."}}`. Error returned ✓ but code is `BUSINESS_RULE_VIOLATION`, not `CREDIT_LIMIT_EXCEEDED` as spec states. Also: outstanding is ₹0 because partially_paid wholesale sales don't update `customer.total_outstanding` (see E findings). |
+| Return qty > original sold qty | 422 BUSINESS_RULE_VIOLATION | ❌ HIGH | `POST /sales/{id}/return/ {qty:500}` on item with qty=200 → **201 Created**. `_build_return_items()` does not validate `return_qty <= original_qty`. Return created with computed refund_amount = 2.5× the original. Actual restock would also over-restock inventory. |
 
 #### Layer C — CONTRACT / RESPONSE
 | Endpoint | Method | Expected envelope | Status | Evidence |
 |---|---|---|---|---|
-| `/api/v1/pos/sales/` | GET | paginated list | ⬜ | |
-| `/api/v1/pos/sales/` | POST | 201 sale with SALE doc number | ⬜ | |
-| `/api/v1/pos/returns/` | POST | 201 return + credit note ref | ⬜ | |
-| Stock overage | POST | `{success:false, error:{code:"INSUFFICIENT_STOCK"}}` | ⬜ | |
+| `/api/v1/pos/sales/` | GET | cursor-paginated list | ✅ | `{success:true, data:{items:[…20…], meta:{next_cursor:"http://…?cursor=…", prev_cursor:null}}}`. List shape: `[id, sale_number, sale_type, status, grand_total, customer_name, sale_date, amount_outstanding]`. |
+| `/api/v1/pos/sales/` | POST | 201 with SALE doc number | ✅ | `{sale_number:"SDEL-SALE-2026-06-0017"}` — format `{SHOP_CODE}-SALE-{YYYY}-{MM}-{NNNN}` per spec §3.1. Full detail: items[], payments[], returns[], cgst, sgst, igst, grand_total, discount fields all present. |
+| `/api/v1/pos/sales/{id}/return/` | POST | 201 return + credit note ref | ❌ MED | PATCH `/sales/returns/{id}/` (approve) → response has `credit_note: null` (not populated in `SalesReturnSerializer`). Credit note IS created in DB and IS present in `GET /sales/{id}/` → `returns[0].credit_note_number`. Contract gap: approve-return response doesn't include credit note. |
+| Stock overage | POST | `{success:false, error:{code:"INSUFFICIENT_STOCK"}}` | ✅ | HTTP 400 `{success:false, error:{code:"INSUFFICIENT_STOCK", message:"A server error occurred."}}`. Code correct, message generic. |
+| `/api/v1/pos/products/barcode/{barcode}/` | GET | variant + stock_quantity | ✅ | `GET /products/barcode/ACC-USBC1-BR/?shop_id=…` → `{id, product_name:"USB-C Cable 1m", variant_name:"Braided", selling_price:"299.00", wholesale_price:"220.00", stock_quantity:"48.000", barcode, tax_rate, hsn_code}`. |
 
 #### Layer D — AUTHZ
 | Action | Role | Expected | Status | Evidence |
 |---|---|---|---|---|
-| Apply discount | role without `pos.discount.apply` | 403 | ⬜ | |
-| Approve return | Billing Staff (no `pos.returns.approve`) | 403 | ⬜ | |
-| Any POS endpoint | testshop JWT | No demo data | ⬜ | |
+| Apply discount | any user with create perm | 403 expected per spec | ❌ MED | `pos.discount.apply` permission is **not checked** in `SaleViewSet` or `services.create_sale()`. Anyone who can create a sale can send `discount_type:"flat"` in the body. Confirmed: no `discount.apply` grep hit in `pos/views.py` or `pos/services.py`. |
+| Approve return | Billing Staff (0 perms) | 403 | ✅ | `PATCH /sales/returns/{id}/ {action:"approve"}` with billing JWT (0 permissions) → HTTP 403 `{error:{code:"PERMISSION_DENIED"}}`. `SalesReturnViewSet.get_permissions()` returns `require_permission("pos.returns.approve")`. (Root cause: billing has 0 perms from seed, not specifically missing returns.approve.) |
+| Any POS endpoint | testshop JWT | No demo data | ✅ | `GET /pos/sales/` with testshop JWT + `X-Tenant-Slug: testshop` → 200 `{items:[], meta:{…}}`. Tenant isolation confirmed. |
 
 #### Layer E — STATE / SIDE-EFFECTS
 | Action | DB effect | Status | Evidence |
 |---|---|---|---|
-| Sale completed | `sales` + `sale_items` rows, stock decremented in `inventory_transactions` | ⬜ | |
-| Return processed | `sales_returns` row, stock incremented, `credit_notes` row | ⬜ | |
-| audit_logs row | on every sale | ⬜ | |
+| Sale completed | `sales` + `sale_items` rows, stock decremented | ✅ | `SELECT status, subtotal, discount_amount, cgst, sgst, grand_total FROM sales WHERE id='SDEL-SALE-2026-06-0017'` → `returned, 747.00, 50.00, 62.73, 62.73, 822.46`. `sale_items`: 2 rows (USB-C qty=2 line_total=705.64, TG qty=1 line_total=175.82). Stock: USB-C 50→48 (`sale_out -2`), TG 40→39 (`sale_out -1`) in inventory_transactions (`reference_type=sale`). |
+| Return processed | `sales_returns` row, stock incremented, `credit_notes` row | ✅ | DB: `sales_returns` row status=approved, total_refund_amount=175.82. `credit_notes`: `SDEL-CN-2026-06-0001`, amount=175.82, pdf_url=null. `inventory_transactions`: `return_in +1 ACC-TG01-03`. TG stock: 39→40. Sale status → `returned`. |
+| audit_logs row on every sale | `audit_logs` create row for Sale and SalesReturn | ✅ | `SELECT action, model_name FROM audit_logs WHERE model_name IN ('Sale','SalesReturn') ORDER BY created_at DESC` → `create Sale` rows (one per sale) + `create SalesReturn` rows (one per return). Audit trail present. |
+| Wholesale outstanding tracking | `customer.total_outstanding` updated | ❌ MED | `services.py:116`: `_update_customer_outstanding()` only called when `sale_status == COMPLETED`. Partially-paid wholesale sale (outstanding=1835.00) does NOT update customer.total_outstanding (confirmed: TechZone total_outstanding=0.00 after SDEL-SALE-2026-06-0018 outstanding=1835). Credit-limit check for next sale will under-report outstanding → allows more credit than limit. |
 
 #### Layer F — LOGGING / OBSERVABILITY
 | Scenario | Expected | Status | Evidence |
 |---|---|---|---|
-| Sale creation | 201, no Traceback | ⬜ | |
-| `pos.send_wholesale_payment_reminders` | worker SUCCESS | ⬜ | |
+| Sale creation | 201, no Traceback | ✅ | Backend log: `172.19.0.1:56628 - - [12/Jun/2026:13:29:28] "POST /api/v1/pos/sales/" 201 1013`. No Traceback. |
+| `pos.send_wholesale_payment_reminders` | worker SUCCESS | ❌ CRITICAL | `app.send_task('pos.send_wholesale_payment_reminders')` → task id `02c1416e` → `celery` queue (`LLEN celery = 7` after sending). Worker does not consume `celery` queue. No `CELERY_TASK_ROUTES` entry for this task. Same root cause as all prior modules. |
 
 #### Layer G — INFRA PATH
 | Check | Method | Status | Evidence |
 |---|---|---|---|
-| Requests via PgBouncer | SHOW POOLS | ⬜ | |
-| Receipt/invoice PDF upload | MinIO console shows object | ⬜ | |
+| Requests via PgBouncer | SHOW POOLS | ✅ | `SHOW POOLS` → `repaiross_tenant_demo: cl_active=16, sv_idle=1, sv_used=1, pool_mode=transaction, maxwait=0`. All POS requests flowing through pgbouncer transaction-mode pool. |
+| Receipt/invoice PDF upload | MinIO console shows object | ❌ MED | MinIO bucket `repaiross-local` exists but is empty (0 objects). `credit_notes.pdf_url = null`. Credit note and invoice PDF generation is not implemented — no PDF Celery task dispatched on sale completion or return approval. Spec §3.5 references `pdf_url (S3)`. |
 
 #### Layer H — UX STATES
 | State | Where | Status | Evidence |
 |---|---|---|---|
-| GST split (CGST/SGST/IGST) shown on invoice | sale detail | ⬜ | |
-| ₹ formatting throughout | totals, line items | ⬜ | |
-| Stock-block message in UI | add-to-cart over stock | ⬜ | |
-| Empty cart state | POS screen on load | ⬜ | |
+| GST split (CGST/SGST vs IGST) shown | sale detail | ✅ | Counter sale (intra-state Delhi, guest): `cgst=62.73, sgst=62.73, igst=0.00`. Wholesale sale (inter-state: shop state_code=07, TechZone GSTIN starts 27): `cgst=0.00, sgst=0.00, igst=585.00`. `_split_gst()` in services.py correctly uses GSTIN first-2-digits vs shop state_code. |
+| ₹ formatting — all monetary fields are 2 d.p. decimal strings | sale API response | ✅ | All 8 monetary fields (`subtotal`, `discount_amount`, `cgst`, `sgst`, `igst`, `grand_total`, `amount_paid`, `amount_outstanding`) returned as `"747.00"` format (decimal string, exactly 2 d.p.). Correct for FE `Intl.NumberFormat` formatting. |
+| Stock-block message in UI | POST /sales/ oversell | ✅ | HTTP 400 returned with `{code:"INSUFFICIENT_STOCK"}` — FE can show inline block. Message is `"A server error occurred."` (not variant-specific) — FE will need to provide its own UX text. |
+| Empty list state | GET /sales/?status=void | ✅ | `{success:true, data:{items:[], meta:{next_cursor:null, prev_cursor:null}}}`. Correct empty envelope for FE empty-state rendering. |
+
+---
+
+### Module 03 — POS Verdict
+
+**20 / 27 PASS** (all explicitly checked items)
+
+| Severity | Count | Items |
+|---|---|---|
+| CRITICAL | 1 | `pos.send_wholesale_payment_reminders` never consumed (dead `celery` queue — same root as all prior modules) |
+| HIGH | 1 | Return over-quantity not validated — `_build_return_items()` allows qty > original_qty, creating inflated refunds and over-restocking |
+| MED | 5 | Wholesale outstanding not updated for `partially_paid` sales (credit limit check under-reports); `pos.discount.apply` permission not enforced; credit-limit error uses `BUSINESS_RULE_VIOLATION` not `CREDIT_LIMIT_EXCEEDED`; approve-return response doesn't include credit note; PDF generation not implemented (MinIO empty) |
+
+**Detail:**
+- **CRITICAL-1**: Same root as all modules — `CELERY_TASK_ROUTES` missing entry. Task enqueues to `celery` queue, worker consumes `high/default/low` only.
+- **HIGH-1**: `_build_return_items()` iterates `items_input`, resolves sale item by ID, and builds return line with `qty = item_data["quantity"]` with no check against `item.quantity`. A return of 500 units on a 2-unit item succeeds with refund_amount = 2.5× original line_total. Restock would over-restock by the same factor.
+- **MED-1**: `_update_customer_outstanding()` guarded by `sale_status == COMPLETED`. A partially-paid wholesale sale leaves `customer.total_outstanding` unchanged — the credit limit check for the next sale sees stale (lower) outstanding and allows more credit than the limit should permit.
+- **MED-2**: `pos.discount.apply` permission — spec §5 says gated — but `SaleViewSet.get_permissions()` only checks `pos.counter_sale.create`. Discount fields flow through unchecked.
+- **MED-3**: Credit limit block returns `BUSINESS_RULE_VIOLATION`; spec §4 says `CREDIT_LIMIT_EXCEEDED`. Frontend error-code mapping will miss this.
+- **MED-4**: `SalesReturnSerializer` does not include `credit_note` nested object; the approve-return endpoint returns `credit_note: null`. Credit note number is accessible via the parent sale's `returns` array.
+- **MED-5**: No invoice/receipt PDF generation. `CreditNote.pdf_url` is always null. MinIO bucket has 0 objects.
 
 ---
 
