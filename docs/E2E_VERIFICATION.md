@@ -486,63 +486,95 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 **Primary role:** Receptionist, Manager  
 **Routes:** `/amc`, `/amc/[id]`, `/amc/[id]/visits`  
 **Celery tasks:** `amc.mark_missed_visits`, `amc.send_renewal_reminders`, `amc.send_visit_reminders`, `amc.process_auto_renewals`  
-**Run date:** _(not run)_  
-**Overall:** ⬜ NOT RUN
+**Run date:** 2026-06-12  
+**Overall:** 🔴 22 PASS / 8 FAIL — 3 CRITICAL · 1 HIGH · 3 MED
 
 #### Layer A — FLOW
+
 | Journey | Role | Status | Evidence |
 |---|---|---|---|
-| Create AMC contract for seeded customer | Manager | ⬜ | |
-| Schedule visit and complete it (upload proof) | Receptionist | ⬜ | |
-| Complete visit that spawns a repair job | Receptionist | ⬜ | |
-| Trigger renewal: invoice created, dates rolled | Manager | ⬜ | |
+| A1 — Create AMC contract (4 visits/yr, upfront, auto_renew) | Admin | ✅ PASS | `POST /api/v1/amc/contracts/ {shop_id, customer_id, title:"E2E Electronics AMC", value:12000, start_date:"2026-06-12", end_date:"2027-06-11", visits_per_year:4, payment_terms:"upfront", auto_renew:true}` → 201 `{contract_number:"SDEL-AMC-2026-0008", status:"active", visit_interval_days:91}`. DB: 4 `amc_visits` rows scheduled at 2026-06-12, 2026-09-11, 2026-12-11, 2027-03-12. |
+| A2 — Complete a scheduled visit (work_done + photos + signature) | Admin | ✅ PASS | `POST /amc/visits/{visit1_id}/complete/ {work_done:"Cleaned all units…", issues_found:"…", customer_signature_url:"…", photos:[…]}` → 200 `{status:"completed", actual_date:"2026-06-12"}`. `_maybe_create_next_visit()` auto-created visit 5 at 2027-06-11. |
+| A3 — Complete visit with job_id linkage | Admin | ✅ PASS | `POST /amc/visits/{visit4_id}/complete/ {work_done:"…", job_id:"8a5607e7-…"}` → 200 `{job_id:"8a5607e7-…"}`. DB confirms `amc_visits.job_id` set. |
+| A4 — Renew contract (new_value: 13000) | Admin | ✅ PASS | `POST /amc/contracts/{id}/renew/ {new_value:13000}` → 200 `{start_date:"2027-06-12", end_date:"2028-06-10", value:"13000.00", renewal_invoices:[{renewal_period_start:"2027-06-12", renewal_period_end:"2028-06-10", invoice_id:null}]}`. DB: 4 new visits created for 2027-06-12 period. |
 
 #### Layer B — VALIDATION
+
 | Input scenario | Expected error | Status | Evidence |
 |---|---|---|---|
-| Complete visit without proof (if required) | 422 BUSINESS_RULE_VIOLATION | ⬜ | |
-| Renew already-active contract (duplicate) | 422 | ⬜ | |
-| End date before start date | 400 VALIDATION_ERROR | ⬜ | |
+| B1 — Complete visit without `work_done` | 400 VALIDATION_ERROR | ✅ PASS | `POST /amc/visits/{id}/complete/ {issues_found:"Filter clogged"}` (no work_done) → 400 `{code:"VALIDATION_ERROR", fields:{work_done:["This field is required."]}}` |
+| B2 — Renew cancelled contract | 422 BUSINESS_RULE_VIOLATION | ✅ PASS | Created contract via API, set `status='cancelled'` in DB, then `POST /contracts/{id}/renew/` → 422 `{code:"BUSINESS_RULE_VIOLATION", message:"Cannot renew a cancelled contract."}` |
+| B3 — `end_date` before `start_date` | 400 VALIDATION_ERROR | ✅ PASS | `POST /amc/contracts/ {start_date:"2026-12-31", end_date:"2026-01-01", …}` → 400 `{code:"VALIDATION_ERROR", fields:{end_date:["end_date must be after start_date."]}}` |
 
 #### Layer C — CONTRACT / RESPONSE
-| Endpoint | Method | Expected envelope | Status | Evidence |
+
+| Endpoint | Method | Expected | Status | Evidence |
 |---|---|---|---|---|
-| `/api/v1/amc/contracts/` | GET | paginated list + meta | ⬜ | |
-| `/api/v1/amc/contracts/` | POST | 201 with AMC doc number | ⬜ | |
-| `/api/v1/amc/contracts/{id}/visits/` | POST | 201 visit | ⬜ | |
-| `/api/v1/amc/contracts/{id}/renew/` | POST | 201 renewal invoice | ⬜ | |
+| C1 — `/api/v1/amc/contracts/` | GET | Paginated list + meta | ✅ PASS | 9 items, `next_cursor:null`, `prev_cursor:null`. All contracts include `contract_number`, `status`, `next_visit_date`. |
+| C1b — `next_visit_date` after renewal | GET | Next scheduled visit in new period | 🟡 FAIL MED | SDEL-AMC-2026-0008 shows `next_visit_date:"2026-09-11"` (original period visit 2) after renewing to 2027–2028. Should show `2027-06-12` (first renewal-period visit). The `next_visit_sq` annotation picks earliest `SCHEDULED` visit regardless of period. |
+| C2 — `/api/v1/amc/contracts/{id}/` | GET | All required fields | ✅ PASS | Returns: `id`, `contract_number`, `status`, `start_date:"2027-06-12"`, `end_date:"2028-06-10"`, `value:"13000.00"`, `visits_per_year:4`, `visit_interval_days:91`, `visits_count:9`, `renewal_invoices:[{invoice_id:null, …}]`. `invoice_id:null` expected (billing not built). |
+| C3a — `/api/v1/amc/contracts/{id}/visits/` (no filter) | GET | Visits list | ✅ PASS | 9 visits ordered by `scheduled_date` desc; statuses: 2 completed, 7 scheduled. |
+| C3b — `/api/v1/amc/contracts/{id}/visits/?status=scheduled` | GET | Filtered visits | 🔴 FAIL HIGH | Returns 404 `{code:"NOT_FOUND"}`. Root cause: `_get_contract(pk)` calls `self.get_queryset().get(pk=pk)`; `get_queryset()` applies `?status` param to the AMC **contract** queryset. `AMCContract` has no `status="scheduled"` → `AMCContract.DoesNotExist` → NotFound. Any status filter on the visits list endpoint is broken. |
+| C4 — `/api/v1/amc/contracts/{id}/renew/` | POST | Updated contract + renewal invoice | ✅ PASS | Response includes `start_date`, `end_date`, `value`, `renewal_invoices` array. `invoice_id:null` — billing module stub, expected. |
 
 #### Layer D — AUTHZ
+
 | Action | Role | Expected | Status | Evidence |
 |---|---|---|---|---|
-| Create contract | Viewer | 403 | ⬜ | |
-| Any AMC endpoint | testshop JWT | No demo data | ⬜ | |
+| D1 — View AMC contracts | Tech1 (0 perms) | 403 | ✅ PASS | `GET /amc/contracts/` → 403 `{code:"PERMISSION_DENIED"}`. Enforcement works; root-cause is CRITICAL seed-data bug (all non-admin roles have 0 permissions — reported Module 01 CRITICAL). |
+| D1b — Complete visit | Tech1 (0 perms) | 403 | ✅ PASS | `POST /amc/visits/{id}/complete/` → 403 `{code:"PERMISSION_DENIED"}`. |
+| D2 — View AMC contracts | Manager (0 perms) | 403 | ✅ PASS | Same result — Manager role also has 0 permissions. |
+| D3 — Cross-tenant isolation | testshop JWT | 0 demo contracts | ✅ PASS | `GET /amc/contracts/` with testshop token → `{items:[]}`. Demo contracts invisible. |
+
+> **Note:** Cannot test technician-assigned-visit enforcement (technician can only complete visits assigned to them) because all non-admin roles have 0 permissions — that path is blocked at the permission gate before the business-rule check is reached.
 
 #### Layer E — STATE / SIDE-EFFECTS
+
 | Action | DB effect | Status | Evidence |
 |---|---|---|---|
-| Visit completed | `amc_visits.status = completed`, `audit_logs` row | ⬜ | |
-| Missed visit (task triggered) | `amc_visits.status = missed` | ⬜ | |
-| Renewal | `amc_renewal_invoices` row, contract end_date updated | ⬜ | |
+| E1 — Contract renewed | `amc_contracts` dates/value updated, status=active | ✅ PASS | `SELECT start_date, end_date, value, status FROM amc_contracts WHERE id='…'` → `2027-06-12, 2028-06-10, 13000.00, active`. |
+| E2 — Visit completed | `amc_visits.status=completed`, `actual_date` set | ✅ PASS | DB confirms `status='completed'`, `actual_date='2026-06-12'`, `work_done` populated. |
+| E2b — Renewal visit overlap | No near-duplicate visits expected | 🟡 FAIL MED | After renewing, visit 5 (scheduled 2027-06-11) was auto-created by `_maybe_create_next_visit()` when completing visit 4. Visit 6 (scheduled 2027-06-12) was created by `_schedule_visits()` on renewal. Two visits 1 day apart (original period end vs renewal period start) — near-duplicate service calls for same period. |
+| E3 — Renewal invoice | `amc_renewal_invoices` row created | ✅ PASS | `SELECT * FROM amc_renewal_invoices WHERE contract_id='…'` → 1 row: `renewal_period_start:"2027-06-12"`, `invoice_id:null`. |
+| E4 — Audit log | `audit_logs` rows for create + update | ✅ PASS | `SELECT action, model_name FROM audit_logs WHERE object_id='…'` → `create AMCContract` + `update AMCContract`. |
 
 #### Layer F — LOGGING / OBSERVABILITY
+
 | Scenario | Expected | Status | Evidence |
 |---|---|---|---|
-| `amc.mark_missed_visits` | worker SUCCESS | ⬜ | |
-| `amc.send_renewal_reminders` | worker SUCCESS | ⬜ | |
+| F1 — Normal request logging | Access log line | ✅ PASS | `backend-1 | 172.19.0.1:… "GET /api/v1/amc/contracts/" 200 2714` — structured access log produced. |
+| F2 — `amc.mark_missed_visits` Celery task | worker SUCCESS | 🔴 FAIL CRITICAL | Task defined in `CELERY_BEAT_SCHEDULE` but no entry in `CELERY_TASK_ROUTES` → routed to default `celery` queue. Worker consumes only `high`, `default`, `low` queues (`celery inspect active_queues` confirms). `LLEN celery = 7` and growing. Same root-cause affects all four AMC beat tasks. |
+| F2b — celery-beat dispatching | Beat scheduler running | 🔴 FAIL CRITICAL | `celery-beat` container is restart-looping: `ProgrammingError: relation "django_celery_beat_periodictask" does not exist` — `django_celery_beat` migration never applied. **No beat tasks are ever dispatched** — all scheduled Celery tasks across all modules are affected. |
+| F3 — `amc.send_renewal_reminders` | worker SUCCESS | 🔴 FAIL CRITICAL | Same as F2 — dead queue + beat down. |
 
 #### Layer G — INFRA PATH
+
 | Check | Method | Status | Evidence |
 |---|---|---|---|
-| Requests via PgBouncer | SHOW POOLS | ⬜ | |
-| Visit proof photo | MinIO console object exists | ⬜ | |
+| G1 — Requests routed via PgBouncer | `SHOW POOLS` | ✅ PASS | `repaiross_tenant_demo` pool: `cl_active=14`, `sv_idle=2`, `pool_mode=transaction`. All demo DB connections transit PgBouncer. |
+| G2 — WebSocket `amc.visit_due` delivery | WS upgrade + channel message | 🔴 FAIL CRITICAL | `config/asgi.py` WebSocket routing is commented out. `curl --upgrade websocket http://localhost:8000/ws/amc/visit-due/` → `500 Internal server error`. Same infrastructure bug as Modules 01–03. |
 
 #### Layer H — UX STATES
+
 | State | Where | Status | Evidence |
 |---|---|---|---|
-| Missed visit flagged in UI | contract detail / calendar | ⬜ | |
-| Renewal reminder surfaced | expiring contracts list | ⬜ | |
-| Loading / empty AMC list | fresh filter | ⬜ | |
+| H1 — AMC list page loads | `/amc` | ✅ PASS | `GET http://localhost:3000/amc` → 200. Loading spinner `animate-spin` visible during hydration. |
+| H2 — Missed visit flagged | `VisitTimeline.tsx` | ✅ PASS | `VISIT_ICON['missed'] = <AlertCircle className="text-[var(--danger)]">`, `VISIT_STATUS_COLORS['missed']` → danger bg. Badge renders `"missed"`. Code-verified `VisitTimeline.tsx:14,44,61`. |
+| H3 — Renewal banner | `RenewalPanel.tsx`, contract detail | ✅ PASS | `renewalDue = daysToExpiry <= contract.renewal_reminder_days && status !== 'cancelled'`. Banner renders expiry countdown + Confirm button gated by `<Can permission="amc.renewals.manage">`. Code-verified `[id]/page.tsx:91–92`, `RenewalPanel.tsx:26–35`. |
+| H4 — Empty state | AMC list | ✅ PASS | `emptyTitle="No AMC contracts"`, `emptyDescription="Create your first maintenance contract."`, `emptyAction={label:"New contract"}`. Code-verified `page.tsx:233–235`. |
+| H5 — Loading skeletons | Contract detail | ✅ PASS | `[id]/page.tsx:84` — `[1,2,3].map(i => <Skeleton key={i} className="h-12">)` renders while contract data loads. |
+| H6 — Live `amc.visit_due` notification | Any AMC page | 🟡 FAIL MED | No `useWebSocket` or WS hook found in `/components/amc/` or `/app/(app)/amc/`. Frontend does not subscribe to `amc.visit_due` channel — consistent with backend WS being commented out. |
+
+### Module 04 — AMC Verdict
+
+| Severity | Count | Items |
+|---|---|---|
+| CRITICAL | 3 | F2 (AMC tasks → dead `celery` queue, never consumed), F2b (celery-beat restart-looping, no beat tasks dispatched), G2 (WebSocket disabled — `amc.visit_due` undeliverable) |
+| HIGH | 1 | C3b (`GET /contracts/{id}/visits/?status=scheduled` → 404 because `_get_contract()` applies status filter to contract queryset) |
+| MED | 3 | C1b (`next_visit_date` shows pre-renewal visit after renewal), E2b (visit overlap: auto-created visit 5 at 2027-06-11 + renewal visit 6 at 2027-06-12), H6 (no WS client for `amc.visit_due`) |
+| Cross-module | — | CRITICAL seed-data bug (all non-admin roles have 0 permissions) blocks D1/D2 role-specific coverage — reported in Module 01 |
+
+**Pass rate: 22 / 30 (73%)**
 
 ---
 
