@@ -11,9 +11,23 @@ from decimal import ROUND_HALF_UP, Decimal
 from django.db import transaction
 from django.utils import timezone
 
+from authentication.models import AuditLog
+
 from .models import CommissionPayout, CommissionRule, TechnicianCommission
 
 logger = logging.getLogger(__name__)
+
+
+def _write_audit(user, action, model_name, object_id) -> None:
+    try:
+        AuditLog.objects.create(
+            user_id=user.id if user else None,
+            action=action,
+            model_name=model_name,
+            object_id=object_id,
+        )
+    except Exception:
+        logger.exception("Audit log write failed")
 
 _TWO = Decimal("0.01")
 
@@ -201,6 +215,8 @@ def create_payout(technician, period_start, period_end, created_by) -> Commissio
         TechnicianCommission.objects.filter(pk__in=[r.pk for r in rows]).update(
             is_paid=True, payout=payout
         )
+
+    _write_audit(created_by, AuditLog.Action.CREATE, "CommissionPayout", payout.id)
 
     from commissions.tasks import generate_payout_pdf
     from core.context import get_tenant_db_alias

@@ -15,6 +15,7 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from authentication.models import AuditLog
 from core.models import DocumentCounter
 
 from .models import Payment, RepairInvoice, RepairInvoiceItem
@@ -57,6 +58,8 @@ def create_repair_invoice(job, data: dict, user) -> RepairInvoice:
     due_date = data.get("due_date")
 
     items_data = _build_line_items(job)
+    if not items_data:
+        raise BusinessRuleViolation("Cannot create an invoice with no billable items.")
     subtotal = sum((i["line_subtotal"] for i in items_data), Decimal("0")).quantize(_TWO_PLACES)
 
     # Discount scale (applied proportionally to each line's tax)
@@ -107,6 +110,7 @@ def create_repair_invoice(job, data: dict, user) -> RepairInvoice:
         _update_crm_on_invoice(customer, grand_total)
 
     logger.info("Invoice %s created for job %s", invoice_number, job.job_number)
+    _write_audit(user, AuditLog.Action.CREATE, "RepairInvoice", invoice.id)
 
     # Queue PDF generation asynchronously
     try:
@@ -260,7 +264,20 @@ def record_payment(invoice: RepairInvoice, data: dict, user) -> Payment:
 
         _update_crm_on_payment(invoice.customer, amount)
 
+    _write_audit(user, AuditLog.Action.CREATE, "Payment", payment.id)
     return payment
+
+
+def _write_audit(user, action, model_name, object_id) -> None:
+    try:
+        AuditLog.objects.create(
+            user_id=user.id if user else None,
+            action=action,
+            model_name=model_name,
+            object_id=object_id,
+        )
+    except Exception:
+        logger.exception("Audit log write failed")
 
 
 def _update_crm_on_payment(customer, amount: Decimal) -> None:

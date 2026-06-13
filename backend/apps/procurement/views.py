@@ -309,10 +309,11 @@ class PurchaseReturnView(APIView):
 
     def get(self, request):
         token = getattr(request, "auth", None)
+        is_wide = bool(token and (token.get("is_tenant_wide") or token.get("is_platform_admin")))
         shop_ids = token.get("shop_ids", []) if token else []
-        qs = PurchaseReturn.objects.filter(
-            purchase_invoice__shop_id__in=shop_ids
-        ).order_by("-created_at").select_related("debit_note")
+        qs = PurchaseReturn.objects.all().order_by("-created_at").select_related("debit_note")
+        if not is_wide:
+            qs = qs.filter(purchase_invoice__shop_id__in=shop_ids)
         invoice_id = request.query_params.get("invoice_id")
         if invoice_id:
             qs = qs.filter(purchase_invoice_id=invoice_id)

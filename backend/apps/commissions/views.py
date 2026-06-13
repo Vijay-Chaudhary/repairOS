@@ -170,4 +170,17 @@ class CommissionPayoutDetailView(APIView):
             payout.paid_at = tz.now()
             payout.paid_by = request.user
         payout.save()
+
+        from authentication.models import AuditLog
+        try:
+            AuditLog.objects.create(
+                user_id=request.user.id,
+                action=AuditLog.Action.UPDATE,
+                model_name="CommissionPayout",
+                object_id=payout.id,
+                new_value={"status": next_status},
+            )
+        except Exception:
+            pass
+
         return Response(CommissionPayoutSerializer(payout).data)
