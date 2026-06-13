@@ -185,6 +185,7 @@ CELERY_TASK_ROUTES = {
     "core.dispatch_sms_fallback": {"queue": "high"},
     "core.dispatch_email_message": {"queue": "high"},
     # ── PDF generation (high priority, users waiting) ──
+    "billing.generate_invoice_pdf": {"queue": "high"},
     "hr.generate_salary_pdf": {"queue": "high"},
     "commissions.generate_payout_pdf": {"queue": "high"},
     # ── tenant provisioning (low priority, one-shot) ──

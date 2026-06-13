@@ -47,6 +47,12 @@ def record_petty_cash_txn(account: PettyCashAccount, data: dict, user) -> PettyC
             new_balance = account_locked.current_balance + amount
         else:
             new_balance = account_locked.current_balance - amount
+            if new_balance < Decimal("0"):
+                from core.exceptions import BusinessRuleViolation
+                raise BusinessRuleViolation(
+                    f"Insufficient petty cash balance. Available: {account_locked.current_balance:.2f}, "
+                    f"requested debit: {amount:.2f}."
+                )
 
         new_balance = new_balance.quantize(_TWO)
 

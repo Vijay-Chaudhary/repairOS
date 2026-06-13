@@ -107,6 +107,17 @@ def create_repair_invoice(job, data: dict, user) -> RepairInvoice:
         _update_crm_on_invoice(customer, grand_total)
 
     logger.info("Invoice %s created for job %s", invoice_number, job.job_number)
+
+    # Queue PDF generation asynchronously
+    try:
+        from core.context import get_tenant_db_alias
+        from billing.tasks import generate_invoice_pdf
+        alias = get_tenant_db_alias() or ""
+        tenant_slug = alias.removeprefix("tenant_") if alias.startswith("tenant_") else ""
+        generate_invoice_pdf.delay(str(invoice.id), tenant_slug)
+    except Exception as exc:
+        logger.warning("Could not queue PDF generation for invoice %s: %s", invoice.id, exc)
+
     return invoice
 
 

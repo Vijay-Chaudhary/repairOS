@@ -158,6 +158,10 @@ class EmployeeDetailView(APIView):
             from django.utils import timezone
             emp.deleted_at = None if data["is_active"] else timezone.now()
 
+        # Recalculate gross_salary whenever any salary component changes
+        if any(f in data for f in ("basic_salary", "hra", "other_allowances")):
+            emp.gross_salary = emp.basic_salary + emp.hra + emp.other_allowances
+
         emp.save()
         return Response(EmployeeSerializer(emp).data)
 

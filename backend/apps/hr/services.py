@@ -248,6 +248,9 @@ def update_slip_status(slip: SalarySlip, new_status: str) -> SalarySlip:
 
     if new_status == SalarySlip.SlipStatus.APPROVED:
         from .tasks import generate_salary_pdf
-        generate_salary_pdf.delay(str(slip.id))
+        from core.context import get_tenant_db_alias
+        alias = get_tenant_db_alias() or ""
+        tenant_slug = alias.removeprefix("tenant_") if alias.startswith("tenant_") else ""
+        generate_salary_pdf.delay(str(slip.id), tenant_slug)
 
     return slip

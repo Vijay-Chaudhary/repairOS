@@ -203,6 +203,9 @@ def create_payout(technician, period_start, period_end, created_by) -> Commissio
         )
 
     from commissions.tasks import generate_payout_pdf
-    generate_payout_pdf.delay(str(payout.id))
+    from core.context import get_tenant_db_alias
+    alias = get_tenant_db_alias() or ""
+    tenant_slug = alias.removeprefix("tenant_") if alias.startswith("tenant_") else ""
+    generate_payout_pdf.delay(str(payout.id), tenant_slug)
 
     return payout
