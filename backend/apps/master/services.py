@@ -528,6 +528,28 @@ def _create_admin_user(name: str, email: str, phone: str, password: str) -> None
     UserRole.objects.create(user=user, role=admin_role, shop=None)
 
 
+def _create_default_shop(tenant_name: str, tenant_slug: str, phone: str, email: str) -> None:
+    """Create a default shop so new tenants can use CRM/Repair immediately."""
+    import re as _re
+    from core.models import Shop
+
+    # Derive a short unique code from the slug (e.g. "vijay_test" → "VT")
+    words = [w for w in tenant_slug.split("_") if w]
+    code = "".join(w[0].upper() for w in words)[:4] or tenant_slug[:4].upper()
+
+    Shop.objects.create(
+        name=tenant_name,
+        code=code,
+        address="TBD",       # owner updates via Settings → Shop
+        city="TBD",
+        state="Karnataka",
+        state_code="29",
+        phone=phone,
+        email=email or None,
+        is_active=True,
+    )
+
+
 def do_provision_tenant(tenant_id: str) -> None:
     """
     Full provisioning sequence for a new tenant.  Idempotent — safe to retry.
@@ -622,6 +644,12 @@ def do_provision_tenant(tenant_id: str) -> None:
             email=tenant.owner_email,
             phone=tenant.owner_phone,
             password=password,
+        )
+        _create_default_shop(
+            tenant_name=tenant.name,
+            tenant_slug=tenant.slug,
+            phone=tenant.owner_phone,
+            email=tenant.owner_email,
         )
     finally:
         clear_tenant_context()
