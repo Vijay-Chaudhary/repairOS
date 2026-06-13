@@ -50,7 +50,7 @@ def create_repair_invoice(job, data: dict, user) -> RepairInvoice:
     from core.exceptions import BusinessRuleViolation
 
     if RepairInvoice.objects.filter(job=job).exists():
-        raise ValueError("An invoice already exists for this job.")
+        raise BusinessRuleViolation("An invoice already exists for this job.")
 
     customer = job.customer
     shop = job.shop

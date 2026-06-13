@@ -100,11 +100,7 @@ class RepairInvoiceView(APIView):
         except JobTicket.DoesNotExist:
             return Response({"detail": "Job not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        try:
-            invoice = services.create_repair_invoice(job, dict(data), request.user)
-        except ValueError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
+        invoice = services.create_repair_invoice(job, dict(data), request.user)
         return Response(
             RepairInvoiceDetailSerializer(invoice).data,
             status=status.HTTP_201_CREATED,

@@ -161,9 +161,9 @@ class CommissionPayoutDetailView(APIView):
 
         next_status = _PAYOUT_STATUS_TRANSITIONS.get(payout.status)
         if not next_status:
-            return Response(
-                {"detail": f"Payout is already '{payout.status}'; no further transitions."},
-                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            from core.exceptions import BusinessRuleViolation
+            raise BusinessRuleViolation(
+                f"Payout is already '{payout.status}'; no further transitions."
             )
         payout.status = next_status
         if next_status == CommissionPayout.Status.PAID:

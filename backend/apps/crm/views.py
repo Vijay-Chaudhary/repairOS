@@ -237,6 +237,8 @@ class CustomerViewSet(ShopScopedMixin, ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         self.perform_create(serializer)
+        from authentication.models import AuditLog
+        services._write_audit(request.user.id, AuditLog.Action.CREATE, "Customer", serializer.instance.id)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def partial_update(self, request, *args, **kwargs):
@@ -309,6 +311,11 @@ class CommunicationLogViewSet(CreateModelMixin, ListModelMixin, GenericViewSet):
     def get_permissions(self):
         return [require_permission("crm.communications.log")()]
 
+    def perform_create(self, serializer):
+        super().perform_create(serializer)
+        from authentication.models import AuditLog
+        services._write_audit(self.request.user.id, AuditLog.Action.CREATE, "CommunicationLog", serializer.instance.id)
+
     def get_queryset(self):
         qs = CommunicationLog.objects.select_related("logged_by", "customer", "lead")
         customer_id = self.request.query_params.get("customer_id")
@@ -366,10 +373,17 @@ class FollowUpTaskViewSet(ShopScopedMixin, ModelViewSet):
             return TaskCompleteSerializer
         return FollowUpTaskSerializer
 
+    def perform_create(self, serializer):
+        super().perform_create(serializer)
+        from authentication.models import AuditLog
+        services._write_audit(self.request.user.id, AuditLog.Action.CREATE, "FollowUpTask", serializer.instance.id)
+
     @action(detail=True, methods=["post"], url_path="complete")
     def complete(self, request, pk=None):
         task = self.get_object()
         task = services.complete_task(task, request.user)
+        from authentication.models import AuditLog
+        services._write_audit(request.user.id, AuditLog.Action.UPDATE, "FollowUpTask", task.id, new_value={"status": "completed"})
         return Response(FollowUpTaskSerializer(task).data)
 
 
