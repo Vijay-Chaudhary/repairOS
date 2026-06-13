@@ -18,7 +18,6 @@ from . import services
 from .models import AttendanceRecord, Employee, LeaveRequest, SalarySlip
 from .serializers import (
     AttendanceRecordOutputSerializer,
-    BulkAttendanceSerializer,
     CreateEmployeeSerializer,
     CreateLeaveRequestSerializer,
     DateRangeBulkAttendanceSerializer,

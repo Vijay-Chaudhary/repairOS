@@ -93,6 +93,16 @@ class SaleViewSet(ShopScopedMixin, GenericViewSet):
         serializer.is_valid(raise_exception=True)
         vd = serializer.validated_data
 
+        from core.exceptions import BusinessRuleViolation
+        from decimal import Decimal as _D
+        discount_value = _D(str(vd.get("discount_value", 0) or 0))
+        if discount_value > 0:
+            perm = require_permission("pos.discount.apply")()
+            perm.request = request
+            if not perm.has_permission(request, self):
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("You do not have permission to apply discounts.")
+
         shop = vd.pop("shop")
         sale = services.create_sale(shop, vd, request.user)
         sale = (
@@ -168,6 +178,7 @@ class SalesReturnViewSet(GenericViewSet):
         action_val = serializer.validated_data["action"]
         if action_val == "approve":
             ret = services.approve_return(ret, request.user)
+            ret = SalesReturn.objects.select_related("credit_note").get(pk=ret.pk)
         else:
             ret = services.reject_return(ret, request.user)
 

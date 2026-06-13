@@ -19,6 +19,7 @@ from .serializers import (
     BudgetHeadSerializer,
     CreateAssetSerializer,
     CreateBudgetAllocationSerializer,
+    CreateBudgetHeadSerializer,
     CreateExpenseSerializer,
     CreatePettyCashTxnSerializer,
     ExpenseSerializer,
@@ -40,7 +41,7 @@ def _shop_ids_from_token(request):
 
 
 class PettyCashAccountView(APIView):
-    permission_classes = [IsAuthenticated, require_permission("hr.petty_cash.manage")]
+    permission_classes = [IsAuthenticated, require_permission("finance.petty_cash.manage")]
 
     def get(self, request: Request, shop_id) -> Response:
         shop_ids, is_wide = _shop_ids_from_token(request)
@@ -54,7 +55,7 @@ class PettyCashAccountView(APIView):
 
 
 class PettyCashTransactionView(APIView):
-    permission_classes = [IsAuthenticated, require_permission("hr.petty_cash.manage")]
+    permission_classes = [IsAuthenticated, require_permission("finance.petty_cash.manage")]
 
     def get(self, request: Request) -> Response:
         """List transactions scoped to the user's shops, with optional filters."""
@@ -109,21 +110,22 @@ class BudgetHeadListView(APIView):
         return paginator.get_paginated_response(BudgetHeadSerializer(page, many=True).data)
 
     def post(self, request: Request) -> Response:
+        serializer = CreateBudgetHeadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
         from core.models import Shop
-        shop_id = request.data.get("shop_id")
-        if not shop_id:
-            return Response({"detail": "shop_id required."}, status=status.HTTP_400_BAD_REQUEST)
         shop_ids, is_wide = _shop_ids_from_token(request)
-        if not is_wide and str(shop_id) not in [str(s) for s in shop_ids]:
+        if not is_wide and str(data["shop_id"]) not in [str(s) for s in shop_ids]:
             return Response({"detail": "Shop not found."}, status=status.HTTP_404_NOT_FOUND)
         try:
-            shop = Shop.objects.get(id=shop_id)
+            shop = Shop.objects.get(id=data["shop_id"])
         except Shop.DoesNotExist:
             return Response({"detail": "Shop not found."}, status=status.HTTP_404_NOT_FOUND)
         head = BudgetHead.objects.create(
             shop=shop,
-            name=request.data.get("name", ""),
-            category=request.data.get("category", ""),
+            name=data["name"],
+            category=data.get("category", ""),
         )
         return Response(BudgetHeadSerializer(head).data, status=status.HTTP_201_CREATED)
 
@@ -267,6 +269,7 @@ class AssetListCreateView(APIView):
 
         asset = ShopAsset.objects.create(
             shop=shop,
+            supplier_id=data.get("supplier_id"),
             name=data["name"],
             category=data["category"],
             asset_code=data["asset_code"],

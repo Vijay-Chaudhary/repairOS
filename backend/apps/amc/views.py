@@ -64,6 +64,7 @@ class AMCContractViewSet(ShopScopedMixin, GenericViewSet):
         next_visit_sq = AMCVisit.objects.filter(
             contract_id=OuterRef("pk"),
             status=AMCVisit.Status.SCHEDULED,
+            scheduled_date__gte=OuterRef("start_date"),
         ).order_by("scheduled_date").values("scheduled_date")[:1]
 
         qs = AMCContract.objects.filter(self._shop_filter()).select_related(
@@ -148,8 +149,22 @@ class AMCContractViewSet(ShopScopedMixin, GenericViewSet):
         return Response(AMCContractSerializer(contract).data)
 
     def _get_contract(self, pk):
+        """
+        Fetch a single contract by PK without applying list-level filters
+        (status, customer_id, etc.) that belong to the list endpoint only.
+        """
+        next_visit_sq = AMCVisit.objects.filter(
+            contract_id=OuterRef("pk"),
+            status=AMCVisit.Status.SCHEDULED,
+            scheduled_date__gte=OuterRef("start_date"),
+        ).order_by("scheduled_date").values("scheduled_date")[:1]
+
+        qs = AMCContract.objects.filter(self._shop_filter()).select_related(
+            "customer", "shop", "assigned_technician"
+        ).annotate(next_visit_date=Subquery(next_visit_sq, output_field=DateField()))
+
         try:
-            return self.get_queryset().get(pk=pk)
+            return qs.get(pk=pk)
         except AMCContract.DoesNotExist:
             from rest_framework.exceptions import NotFound
             raise NotFound("AMC contract not found.")

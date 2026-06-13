@@ -120,7 +120,7 @@ def create_sale(shop, data: dict, user) -> Sale:
         if sale_status == Sale.Status.COMPLETED and sale_type != Sale.SaleType.JOB_LINKED:
             _deduct_stock(shop, items_built, sale.id, user)
 
-        if sale_status == Sale.Status.COMPLETED and sale_type == Sale.SaleType.WHOLESALE:
+        if sale_type == Sale.SaleType.WHOLESALE and customer and amount_outstanding > 0:
             _update_customer_outstanding(customer, amount_outstanding)
 
     _write_audit(user, AuditLog.Action.CREATE, "Sale", sale.id)
@@ -351,6 +351,8 @@ def _build_return_items(sale: Sale, items_input: list) -> tuple[list[dict], Deci
     Resolve {sale_item_id, quantity} entries into persistable SalesReturnItem
     field dicts plus their summed refund total.
     """
+    from core.exceptions import BusinessRuleViolation
+
     built = []
     total = Decimal("0")
     for item_data in items_input:
@@ -359,6 +361,11 @@ def _build_return_items(sale: Sale, items_input: list) -> tuple[list[dict], Deci
         except SaleItem.DoesNotExist:
             continue
         qty = Decimal(str(item_data["quantity"]))
+        if qty > item.quantity:
+            raise BusinessRuleViolation(
+                f"Return quantity {qty} exceeds original sold quantity {item.quantity} "
+                f"for item '{item.product_name}'."
+            )
         line_unit_total = (item.line_total / item.quantity) if item.quantity else Decimal("0")
         refund_amount = (line_unit_total * qty).quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
         total += refund_amount
@@ -380,13 +387,13 @@ def _issue_credit_note(ret: SalesReturn, user) -> CreditNote:
 
 
 def _check_credit_limit(customer, estimated_total: Decimal) -> None:
-    from core.exceptions import BusinessRuleViolation
+    from core.exceptions import CreditLimitExceeded
 
     if customer.credit_limit <= 0:
         return  # No limit set
 
     if customer.total_outstanding + estimated_total > customer.credit_limit:
-        raise BusinessRuleViolation(
+        raise CreditLimitExceeded(
             f"Credit limit of ₹{customer.credit_limit} would be exceeded. "
             f"Current outstanding: ₹{customer.total_outstanding}."
         )

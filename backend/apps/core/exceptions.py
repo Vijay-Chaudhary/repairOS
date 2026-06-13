@@ -49,6 +49,14 @@ class InvalidStatusTransition(APIException):
         super().__init__(detail=msg, code=self.default_code)
 
 
+class CreditLimitExceeded(APIException):
+    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+    default_code = "CREDIT_LIMIT_EXCEEDED"
+
+    def __init__(self, message: str):
+        super().__init__(detail=message, code=self.default_code)
+
+
 class InsufficientStock(APIException):
     status_code = status.HTTP_400_BAD_REQUEST
     default_code = "INSUFFICIENT_STOCK"

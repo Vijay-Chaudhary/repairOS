@@ -58,7 +58,7 @@ class LeadSerializer(serializers.ModelSerializer):
 
 class LeadStatusSerializer(serializers.Serializer):
     to_status = serializers.ChoiceField(choices=Lead.Status.choices)
-    reason = serializers.CharField(required=False, allow_blank=True, default="")
+    lost_reason = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 # ──────────────────────────────────────────────────────────────────────────────

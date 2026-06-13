@@ -508,6 +508,20 @@ def start_stage(stage: JobStage, user) -> JobStage:
 
 
 def request_spare_part(job: JobTicket, data: dict, user) -> JobSparePartRequest:
+    variant_id = data.get("variant_id")
+    if variant_id:
+        from inventory.models import InventoryStock
+        from core.exceptions import InsufficientStock
+        requested_qty = data.get("quantity", 1)
+        stock = InventoryStock.objects.filter(
+            shop_id=job.shop_id, variant_id=variant_id
+        ).first()
+        available = stock.quantity_in_stock if stock else 0
+        if available < requested_qty:
+            raise InsufficientStock(
+                detail=f"Insufficient stock: {available} available, {requested_qty} requested."
+            )
+
     req = JobSparePartRequest.objects.create(
         job=job,
         requested_by=user,

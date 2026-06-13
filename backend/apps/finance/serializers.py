@@ -41,7 +41,7 @@ class PettyCashTransactionSerializer(serializers.ModelSerializer):
         model = PettyCashTransaction
         fields = [
             "id", "account_id", "type", "amount", "category",
-            "description", "date", "balance_after", "recorded_by_name",
+            "description", "receipt_url", "date", "balance_after", "recorded_by_name",
         ]
 
 
@@ -118,8 +118,15 @@ class ShopAssetSerializer(serializers.ModelSerializer):
         ]
 
 
+class CreateBudgetHeadSerializer(serializers.Serializer):
+    shop_id = serializers.UUIDField()
+    name = serializers.CharField(max_length=200)
+    category = serializers.CharField(max_length=100, required=False, default="", allow_blank=True)
+
+
 class CreateAssetSerializer(serializers.Serializer):
     shop_id = serializers.UUIDField()
+    supplier_id = serializers.UUIDField(required=False, allow_null=True)
     name = serializers.CharField(max_length=200)
     category = serializers.CharField(max_length=100)
     asset_code = serializers.CharField(max_length=50)

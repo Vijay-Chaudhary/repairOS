@@ -77,10 +77,6 @@ class AttendanceRecordSerializer(serializers.Serializer):
     notes = serializers.CharField(required=False, default="", allow_blank=True)
 
 
-class BulkAttendanceSerializer(serializers.Serializer):
-    records = AttendanceRecordSerializer(many=True, min_length=1)
-
-
 class DateRangeBulkAttendanceSerializer(serializers.Serializer):
     """Accepts a date range + employee list and expands to per-day records server-side."""
     shop_id = serializers.UUIDField()
@@ -119,7 +115,7 @@ class LeaveRequestSerializer(serializers.ModelSerializer):
         model = LeaveRequest
         fields = [
             "id", "employee_id", "employee_name", "leave_type", "from_date", "to_date",
-            "days", "reason", "status", "approved_by", "approved_at",
+            "days", "reason", "status", "approved_by", "approved_at", "created_at",
         ]
 
 

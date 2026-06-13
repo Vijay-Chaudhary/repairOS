@@ -129,10 +129,11 @@ class JobTicketDetailSerializer(JobTicketSerializer):
     estimates = serializers.SerializerMethodField()
     stages = serializers.SerializerMethodField()
     spare_part_requests = serializers.SerializerMethodField()
+    allowed_transitions = serializers.SerializerMethodField()
 
     class Meta(JobTicketSerializer.Meta):
         fields = JobTicketSerializer.Meta.fields + [
-            "checkin", "estimates", "stages", "spare_part_requests"
+            "checkin", "estimates", "stages", "spare_part_requests", "allowed_transitions"
         ]
 
     def get_checkin(self, obj):
@@ -149,6 +150,10 @@ class JobTicketDetailSerializer(JobTicketSerializer):
 
     def get_spare_part_requests(self, obj):
         return JobSparePartRequestSerializer(obj.spare_part_requests.all(), many=True).data
+
+    def get_allowed_transitions(self, obj):
+        from repair.services import VALID_TRANSITIONS
+        return sorted(VALID_TRANSITIONS.get(obj.status, set()))
 
 
 # ──────────────────────────────────────────────────────────────────────────────

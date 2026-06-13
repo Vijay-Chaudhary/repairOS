@@ -153,7 +153,9 @@ def inter_shop_transfer(
     """
     transfer_ref = uuid.uuid4()
 
-    with transaction.atomic():
+    from core.context import get_tenant_db_alias
+    _db = get_tenant_db_alias() or "default"
+    with transaction.atomic(using=_db):
         src_stock, _ = update_stock(
             shop=source_shop, variant=variant, quantity_delta=-qty,
             txn_type=InventoryTransaction.TxnType.TRANSFER_OUT,
