@@ -626,15 +626,18 @@ def do_provision_tenant(tenant_id: str) -> None:
     finally:
         clear_tenant_context()
 
-    # Step 6: activate (write back to master DB — context already cleared above)
-    tenant.status = Tenant.Status.ACTIVE
-    tenant.save(using="default", update_fields=["status", "updated_at"])
-
-    AuditLogMaster.objects.create(
-        event_type="tenant.provisioned",
-        tenant=tenant,
-        payload={"slug": tenant.slug},
-    )
+    # Step 6: activate — explicit atomic block ensures the status update and
+    # audit log are committed immediately; without this Celery worker connections
+    # can leave an idle-in-transaction session that blocks subsequent queries.
+    from django.db import transaction as db_transaction
+    with db_transaction.atomic(using="default"):
+        tenant.status = Tenant.Status.ACTIVE
+        tenant.save(using="default", update_fields=["status", "updated_at"])
+        AuditLogMaster.objects.create(
+            event_type="tenant.provisioned",
+            tenant=tenant,
+            payload={"slug": tenant.slug},
+        )
     logger.info("Tenant '%s' provisioned successfully.", tenant.slug)
 
 

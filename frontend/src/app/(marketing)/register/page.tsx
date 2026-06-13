@@ -186,6 +186,7 @@ const PROVISION_STEPS = [
 
 function ProvisioningView({ done }: { done: boolean }) {
   const [reached, setReached] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     if (done) { setReached(PROVISION_STEPS.length); return; }
@@ -195,15 +196,41 @@ function ProvisioningView({ done }: { done: boolean }) {
     return () => timers.forEach(clearTimeout);
   }, [done]);
 
+  useEffect(() => {
+    if (done) return;
+    const tick = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(tick);
+  }, [done]);
+
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  const elapsedLabel = mins > 0
+    ? `${mins}m ${secs.toString().padStart(2, '0')}s`
+    : `${secs}s`;
+
   return (
     <div className="w-full max-w-sm mx-auto space-y-8">
-      <div className="space-y-1">
+      <div className="space-y-2">
         <h1 className="text-2xl font-bold text-[var(--text)]">
           {done ? 'Workspace ready!' : 'Setting up your workspace…'}
         </h1>
-        <p className="text-sm text-[var(--text-muted)]">
-          {done ? 'Redirecting you to sign in…' : 'This usually takes under a minute.'}
-        </p>
+        {done ? (
+          <p className="text-sm text-[var(--text-muted)]">Redirecting you to sign in…</p>
+        ) : (
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-[var(--text-muted)]">This usually takes under a minute.</p>
+            <span
+              className="text-xs font-semibold tabular-nums px-2 py-0.5 rounded-full"
+              style={{
+                background: 'var(--surface-2)',
+                color: elapsed > 60 ? 'var(--warning)' : 'var(--text-muted)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              {elapsedLabel}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="space-y-3">
@@ -349,7 +376,8 @@ export default function RegisterPage() {
   }
 
   async function pollStatus(slug: string) {
-    for (let i = 0; i < 30; i++) {
+    // Poll for up to 3 minutes (60 × 3 s) — Celery startup latency can exceed 90 s
+    for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 3000));
       try {
         const res = await apiFetch<{ status: string }>(`/register/status/?slug=${slug}`, {
