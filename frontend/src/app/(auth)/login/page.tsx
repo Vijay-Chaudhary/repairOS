@@ -17,7 +17,10 @@ import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { ApiError } from '@/lib/api/client';
 
+const LAST_TENANT_KEY = 'repaiross_last_tenant';
+
 const schema = z.object({
+  workspace: z.string().min(1, 'Workspace ID is required'),
   email: z.string().email('Invalid email address'),
   password: z.string().min(1, 'Password is required'),
 });
@@ -27,29 +30,41 @@ type FormValues = z.infer<typeof schema>;
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tenantSlug = searchParams.get('tenant') ?? '';
   const { setAccessToken, setUser } = useAuthStore();
   const { setShops } = useActiveShopStore();
   const [apiError, setApiError] = useState<string | null>(null);
   const [lockedUntil, setLockedUntil] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Resolve workspace: URL param wins, then localStorage, then ''
+  const urlTenant = searchParams.get('tenant') ?? '';
+  const savedTenant = typeof window !== 'undefined'
+    ? (localStorage.getItem(LAST_TENANT_KEY) ?? '')
+    : '';
+  const defaultWorkspace = urlTenant || savedTenant;
+
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { email: '', password: '' },
+    defaultValues: { workspace: defaultWorkspace, email: '', password: '' },
   });
 
   async function onSubmit(values: FormValues) {
     setApiError(null);
     setLockedUntil(null);
+    const slug = values.workspace.trim().toLowerCase();
     try {
-      const res = await authApi.login(values, tenantSlug || undefined);
+      const res = await authApi.login({ email: values.email, password: values.password }, slug);
+      localStorage.setItem(LAST_TENANT_KEY, slug);
       setAccessToken(res.access);
       setUser(res.user);
-      const shops = await settingsApi.listShops();
-      setShops(shops);
-      const shopId = useActiveShopStore.getState().activeShopId;
-      wsClient.connect(shopId, res.user.id);
+      try {
+        const shops = await settingsApi.listShops();
+        setShops(shops);
+        const shopId = useActiveShopStore.getState().activeShopId;
+        wsClient.connect(shopId, res.user.id);
+      } catch {
+        // non-fatal — new tenant may have no shops yet
+      }
       if (res.user.is_platform_admin) {
         router.replace('/platform');
       } else {
@@ -60,7 +75,7 @@ function LoginForm() {
         if (e.code === 'ACCOUNT_LOCKED') {
           setLockedUntil('Your account is temporarily locked. Please try again later.');
         } else if (e.code === 'NOT_FOUND' || e.code === 'TENANT_DB_UNAVAILABLE') {
-          setApiError('Workspace not found. Please check your workspace URL or contact support.');
+          setApiError('Workspace not found. Check your workspace ID and try again.');
         } else {
           setApiError('Email or password is incorrect.');
         }
@@ -99,6 +114,30 @@ function LoginForm() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <FormField
+            control={form.control}
+            name="workspace"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-sm font-medium text-[var(--text)]">
+                  Workspace ID
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    autoComplete="organization"
+                    placeholder="your_shop_name"
+                    className="h-11"
+                    {...field}
+                  />
+                </FormControl>
+                <p className="text-xs text-[var(--text-muted)]">
+                  The ID you chose when registering (e.g. vijay_repairs)
+                </p>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
           <FormField
             control={form.control}
             name="email"
