@@ -1,12 +1,11 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus, Search, LayoutGrid, List } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -20,7 +19,7 @@ import { Can } from '@/components/shared/Can';
 import { LeadBoard, type LeadColumnData } from '@/components/crm/LeadBoard';
 import {
   crmApi, LEAD_PIPELINE_COLS, SOURCE_LABELS,
-  type Lead, type LeadSource,
+  type Lead, type LeadSource, type LeadStatus,
 } from '@/lib/api/crm';
 import { qk } from '@/lib/query/keys';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
@@ -78,10 +77,10 @@ export default function LeadsPage() {
   const debouncedSearch = useDebounce(search, 350);
   React.useEffect(() => { setListPage(1); }, [debouncedSearch]);
 
-  const baseFilters = {
+  const baseFilters = useMemo(() => ({
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
     search: debouncedSearch || undefined,
-  };
+  }), [isAllShops, activeShopId, debouncedSearch]);
 
   // Kanban: per-column queries
   const columnQueries = useQueries({
@@ -111,6 +110,25 @@ export default function LeadsPage() {
   const handleRowClick = useCallback((lead: Lead) => {
     router.push(`/leads/${lead.id}`);
   }, [router]);
+
+  const handleCardMove = useCallback(async (
+    leadId: string,
+    fromStatus: LeadStatus,
+    toStatus: LeadStatus,
+    fields?: Record<string, string>,
+  ) => {
+    if (toStatus === 'converted') {
+      const customer = await crmApi.convertLead(leadId);
+      queryClient.invalidateQueries({ queryKey: qk.leads() });
+      queryClient.invalidateQueries({ queryKey: qk.customers() });
+      toast.success('Lead converted to customer');
+      router.push(`/customers/${customer.id}`);
+      return;
+    }
+    await crmApi.changeLeadStatus(leadId, toStatus, fields?.reason);
+    queryClient.invalidateQueries({ queryKey: qk.leads({ ...baseFilters, status: fromStatus }) });
+    queryClient.invalidateQueries({ queryKey: qk.leads({ ...baseFilters, status: toStatus }) });
+  }, [queryClient, router, baseFilters]);
 
   return (
     <div className="flex flex-col h-full">
@@ -159,7 +177,7 @@ export default function LeadsPage() {
       <div className="flex-1 overflow-hidden p-4 md:p-6 flex flex-col min-h-0">
         {view === 'kanban' ? (
           <div className="overflow-auto flex-1">
-            <LeadBoard columns={kanbanColumns} />
+            <LeadBoard columns={kanbanColumns} onCardMove={handleCardMove} />
           </div>
         ) : (
           <DataTable

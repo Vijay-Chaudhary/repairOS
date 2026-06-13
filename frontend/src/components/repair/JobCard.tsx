@@ -1,12 +1,22 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { Clock, User, Wrench, AlertTriangle, Star } from 'lucide-react';
+import { Clock, User, Wrench, AlertTriangle, Star, MoreVertical, ArrowRight, RotateCcw, Eye } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Money } from '@/components/shared/Money';
+import { Can } from '@/components/shared/Can';
 import { formatDate } from '@/lib/format/date';
 import { cn } from '@/lib/utils';
-import type { JobListItem, JobPriority } from '@/lib/api/repair';
+import type { JobListItem, JobPriority, JobStatus } from '@/lib/api/repair';
+import { STATUS_TRANSITIONS } from '@/lib/api/repair';
 
 const PRIORITY_STYLE: Record<JobPriority, string> = {
   normal: '',
@@ -20,20 +30,41 @@ const PRIORITY_ICON = {
   vip:    <Star className="h-3 w-3 text-[var(--accent)]" />,
 };
 
+export interface JobCardKanbanProps {
+  validTargets: string[];
+  onMoveTo: (toStatus: JobStatus, fields?: Record<string, string>) => void;
+  isAdmin?: boolean;
+}
+
 interface JobCardProps {
   job: JobListItem;
   compact?: boolean;
+  kanban?: JobCardKanbanProps;
 }
 
-export function JobCard({ job, compact }: JobCardProps) {
+export function JobCard({ job, compact, kanban }: JobCardProps) {
   const router = useRouter();
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't navigate if clicking inside the dropdown menu trigger area
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-kanban-menu]')) return;
+    router.push(`/jobs/${job.id}`);
+  };
+
+  // Derive menu items from STATUS_TRANSITIONS filtered to kanban.validTargets
+  const menuTransitions = kanban
+    ? STATUS_TRANSITIONS[job.status]?.filter((t) => kanban.validTargets.includes(t.to)) ?? []
+    : [];
+
+  const isCancelled = job.status === 'cancelled';
 
   return (
     <div
-      onClick={() => router.push(`/jobs/${job.id}`)}
+      onClick={handleCardClick}
       className={cn(
-        'bg-[var(--surface)] rounded-md border border-[var(--border)] p-3 cursor-pointer hover:shadow-md transition-shadow select-none',
-        PRIORITY_STYLE[job.priority]
+        'bg-[var(--surface)] rounded-md border border-[var(--border)] p-3 cursor-pointer hover:shadow-md transition-shadow select-none relative',
+        PRIORITY_STYLE[job.priority],
       )}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
@@ -43,7 +74,84 @@ export function JobCard({ job, compact }: JobCardProps) {
             {job.job_number}
           </span>
         </div>
-        <StatusBadge status={job.status} className="shrink-0 text-[10px]" />
+        <div className="flex items-center gap-1 shrink-0">
+          <StatusBadge status={job.status} className="text-[10px]" />
+
+          {kanban && (
+            <Can permission="repair.jobs.change_status">
+              <div data-kanban-menu>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 p-0 text-[var(--text-muted)] hover:text-[var(--text)]"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreVertical className="h-3.5 w-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-[180px]">
+                    {menuTransitions
+                      .filter((t) => t.to !== 'cancelled')
+                      .map((t) => (
+                        <DropdownMenuItem
+                          key={t.to}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            kanban.onMoveTo(t.to);
+                          }}
+                        >
+                          <ArrowRight className="h-3.5 w-3.5 mr-2 text-[var(--text-muted)]" />
+                          {t.label}
+                        </DropdownMenuItem>
+                      ))}
+
+                    {menuTransitions.some((t) => t.to !== 'cancelled') &&
+                      menuTransitions.some((t) => t.to === 'cancelled') && (
+                        <DropdownMenuSeparator />
+                      )}
+
+                    {menuTransitions.some((t) => t.to === 'cancelled') && (
+                      <DropdownMenuItem
+                        className="text-[var(--danger)]"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          kanban.onMoveTo('cancelled');
+                        }}
+                      >
+                        Cancel job
+                      </DropdownMenuItem>
+                    )}
+
+                    {isCancelled && kanban.isAdmin && (
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          kanban.onMoveTo('open');
+                        }}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5 mr-2" />
+                        Re-open
+                      </DropdownMenuItem>
+                    )}
+
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        router.push(`/jobs/${job.id}`);
+                      }}
+                    >
+                      <Eye className="h-3.5 w-3.5 mr-2 text-[var(--text-muted)]" />
+                      View details
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </Can>
+          )}
+        </div>
       </div>
 
       <p className="text-body-sm font-medium text-[var(--text)] truncate">{job.customer_name}</p>

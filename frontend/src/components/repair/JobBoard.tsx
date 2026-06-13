@@ -1,10 +1,12 @@
 'use client';
 
-import { Skeleton } from '@/components/ui/skeleton';
+import { useCallback } from 'react';
+import { useAuthStore } from '@/lib/stores/authStore';
+import { KanbanBoard, type KanbanColumnDef, type KanbanCardBase } from '@/components/shared/KanbanBoard';
 import { JobCard } from './JobCard';
-import { KANBAN_COLUMNS } from '@/lib/api/repair';
 import type { JobListItem, JobStatus } from '@/lib/api/repair';
-import { cn } from '@/lib/utils';
+
+// ── Re-export for jobs/page.tsx ───────────────────────────────────────────────
 
 export interface KanbanColumnData {
   status: JobStatus;
@@ -13,56 +15,106 @@ export interface KanbanColumnData {
   count: number;
 }
 
-interface JobBoardProps {
-  columns: KanbanColumnData[];
+// ── Column definitions ────────────────────────────────────────────────────────
+
+const JOB_KANBAN_COLS: KanbanColumnDef[] = [
+  { id: 'open',             label: 'Open' },
+  { id: 'in_progress',      label: 'In Progress' },
+  { id: 'on_hold',          label: 'On Hold',  colorToken: 'var(--warning)' },
+  { id: 'ready_for_qc',     label: 'QC' },
+  { id: 'ready_for_pickup', label: 'Ready' },
+  { id: 'delivered',        label: 'Delivered' },
+  { id: 'cancelled',        label: 'Cancelled', colorToken: 'var(--danger)',      collapsible: true, defaultCollapsed: true },
+  { id: 'closed',           label: 'Closed',    colorToken: 'var(--text-muted)',  collapsible: true, defaultCollapsed: true },
+];
+
+// ── Valid transitions from backend spec §4.1 (Kanban columns only) ────────────
+
+const JOB_VALID_TRANSITIONS: Record<string, string[]> = {
+  open:             ['in_progress', 'cancelled'],
+  in_progress:      ['on_hold', 'ready_for_qc', 'ready_for_pickup', 'cancelled'],
+  on_hold:          ['in_progress', 'cancelled'],
+  ready_for_qc:     ['ready_for_pickup'],
+  ready_for_pickup: ['delivered', 'in_progress'],
+  delivered:        ['closed'],
+  closed:           [],
+  cancelled:        ['open'],
+};
+
+// ── Transition dialogs ────────────────────────────────────────────────────────
+
+const JOB_TRANSITION_DIALOGS = {
+  on_hold:   { required: ['reason'], label: 'Reason for hold' },
+  cancelled: { required: ['reason'], label: 'Reason for cancellation' },
+  delivered: { required: [], label: 'Mark job as delivered?' },
+  closed:    { required: [], label: 'Close this job?' },
+};
+
+// ── Shape cards for the generic board ────────────────────────────────────────
+
+interface JobCard extends KanbanCardBase {
+  job: JobListItem;
 }
 
-function ColumnSkeleton() {
-  return (
-    <div className="space-y-2">
-      {[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 w-full rounded-md" />)}
-    </div>
+function toKanbanCards(columns: KanbanColumnData[]): JobCard[] {
+  return columns.flatMap(({ status, jobs }) =>
+    jobs.map((job) => ({ id: job.id, columnId: status, job })),
   );
 }
 
-export function JobBoard({ columns }: JobBoardProps) {
-  const colMap = new Map(columns.map((c) => [c.status, c]));
+// ── JobBoard ──────────────────────────────────────────────────────────────────
+
+interface JobBoardProps {
+  columns: KanbanColumnData[];
+  onCardMove: (
+    jobId: string,
+    fromStatus: JobStatus,
+    toStatus: JobStatus,
+    fields?: Record<string, string>,
+  ) => Promise<void>;
+}
+
+export function JobBoard({ columns, onCardMove }: JobBoardProps) {
+  const { hasPermission, user } = useAuthStore();
+  const isAdmin = user?.is_platform_admin || hasPermission('tenant.admin');
+
+  const cards = toKanbanCards(columns);
+
+  const handleCardMove = useCallback(
+    async (cardId: string, fromCol: string, toCol: string, fields?: Record<string, string>) => {
+      await onCardMove(cardId, fromCol as JobStatus, toCol as JobStatus, fields);
+    },
+    [onCardMove],
+  );
+
+  const renderCard = useCallback(
+    (card: JobCard, isDragging: boolean) => {
+      const validTargets = JOB_VALID_TRANSITIONS[card.job.status] ?? [];
+      return (
+        <JobCard
+          job={card.job}
+          kanban={{
+            validTargets,
+            onMoveTo: (toStatus, fields) =>
+              onCardMove(card.job.id, card.job.status, toStatus, fields),
+            isAdmin,
+          }}
+        />
+      );
+    },
+    [onCardMove, isAdmin],
+  );
 
   return (
-    <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-4 -mx-4 px-4 md:mx-0 md:px-0">
-      {KANBAN_COLUMNS.map(({ status, label }) => {
-        const col = colMap.get(status) ?? { status, jobs: [], isLoading: false, count: 0 };
-
-        return (
-          <div key={status} className="flex-none w-[272px] snap-center">
-            {/* Column header */}
-            <div className="flex items-center justify-between mb-2 px-0.5">
-              <h3 className="text-body-sm font-semibold text-[var(--text)]">{label}</h3>
-              <span className={cn(
-                'min-w-[20px] h-5 rounded-full text-[10px] font-semibold px-1.5 flex items-center justify-center',
-                col.count > 0
-                  ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
-                  : 'bg-[var(--surface-2)] text-[var(--text-muted)]',
-              )}>
-                {col.isLoading ? '…' : col.count}
-              </span>
-            </div>
-
-            {/* Column body */}
-            <div className="bg-[var(--surface-2)] rounded-lg p-2 min-h-[120px] space-y-2">
-              {col.isLoading ? (
-                <ColumnSkeleton />
-              ) : col.jobs.length === 0 ? (
-                <div className="flex items-center justify-center h-20">
-                  <p className="text-xs text-[var(--text-muted)]">No jobs</p>
-                </div>
-              ) : (
-                col.jobs.map((job) => <JobCard key={job.id} job={job} />)
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
+    <KanbanBoard
+      columns={JOB_KANBAN_COLS}
+      cards={cards}
+      validTransitions={JOB_VALID_TRANSITIONS}
+      onCardMove={handleCardMove}
+      onColumnReorder={() => {}}
+      renderCard={renderCard}
+      columnOrderStorageKey="repaiross-kanban-jobs-column-order"
+      transitionDialogs={JOB_TRANSITION_DIALOGS}
+    />
   );
 }

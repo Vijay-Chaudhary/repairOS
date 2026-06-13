@@ -1,10 +1,11 @@
 'use client';
 
-import { Skeleton } from '@/components/ui/skeleton';
+import { useCallback } from 'react';
+import { KanbanBoard, type KanbanColumnDef, type KanbanCardBase } from '@/components/shared/KanbanBoard';
 import { LeadCard } from './LeadCard';
-import { LEAD_PIPELINE_COLS } from '@/lib/api/crm';
 import type { Lead, LeadStatus } from '@/lib/api/crm';
-import { cn } from '@/lib/utils';
+
+// ── Re-export for leads/page.tsx ──────────────────────────────────────────────
 
 export interface LeadColumnData {
   status: LeadStatus;
@@ -13,54 +14,88 @@ export interface LeadColumnData {
   count: number;
 }
 
-interface LeadBoardProps {
-  columns: LeadColumnData[];
+// ── Column definitions ────────────────────────────────────────────────────────
+
+const LEAD_KANBAN_COLS: KanbanColumnDef[] = [
+  { id: 'new',        label: 'New' },
+  { id: 'contacted',  label: 'Contacted' },
+  { id: 'interested', label: 'Interested' },
+  { id: 'quoted',     label: 'Quoted' },
+  { id: 'converted',  label: 'Converted', colorToken: 'var(--success, #16a34a)', collapsible: true, defaultCollapsed: true },
+  { id: 'lost',       label: 'Lost',      colorToken: 'var(--danger)',           collapsible: true, defaultCollapsed: true },
+];
+
+// ── Valid transitions from backend spec §4.1 ─────────────────────────────────
+
+const LEAD_VALID_TRANSITIONS: Record<string, string[]> = {
+  new:       ['contacted', 'lost'],
+  contacted: ['interested', 'lost'],
+  interested:['quoted', 'lost'],
+  quoted:    ['converted', 'lost'],
+  converted: [],
+  // lost → [] because the re-open target (status_before_lost) is per-card dynamic;
+  // handled exclusively via the card's "Re-open" menu action, not drag.
+  lost:      [],
+};
+
+// ── Transition dialogs ────────────────────────────────────────────────────────
+
+const LEAD_TRANSITION_DIALOGS = {
+  lost:      { required: ['reason'], label: 'Why was this lead lost?' },
+  converted: { required: [], label: 'Convert lead to customer?' },
+};
+
+// ── Shape cards for the generic board ────────────────────────────────────────
+
+interface LeadKanbanCard extends KanbanCardBase {
+  lead: Lead;
 }
 
-function ColumnSkeleton() {
-  return (
-    <div className="space-y-2">
-      {[1, 2].map((i) => <Skeleton key={i} className="h-20 w-full rounded-md" />)}
-    </div>
+function toKanbanCards(columns: LeadColumnData[]): LeadKanbanCard[] {
+  return columns.flatMap(({ status, leads }) =>
+    leads.map((lead) => ({ id: lead.id, columnId: status, lead })),
   );
 }
 
-export function LeadBoard({ columns }: LeadBoardProps) {
-  const colMap = new Map(columns.map((c) => [c.status, c]));
+// ── LeadBoard ─────────────────────────────────────────────────────────────────
+
+interface LeadBoardProps {
+  columns: LeadColumnData[];
+  onCardMove: (
+    leadId: string,
+    fromStatus: LeadStatus,
+    toStatus: LeadStatus,
+    fields?: Record<string, string>,
+  ) => Promise<void>;
+}
+
+export function LeadBoard({ columns, onCardMove }: LeadBoardProps) {
+  const cards = toKanbanCards(columns);
+
+  const handleCardMove = useCallback(
+    async (cardId: string, fromCol: string, toCol: string, fields?: Record<string, string>) => {
+      await onCardMove(cardId, fromCol as LeadStatus, toCol as LeadStatus, fields);
+    },
+    [onCardMove],
+  );
+
+  const renderCard = useCallback(
+    (card: LeadKanbanCard, _isDragging: boolean) => (
+      <LeadCard lead={card.lead} />
+    ),
+    [],
+  );
 
   return (
-    <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-4 -mx-4 px-4 md:mx-0 md:px-0 [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-track]:bg-[var(--surface-2)] [&::-webkit-scrollbar-thumb]:bg-[var(--border)] [&::-webkit-scrollbar-thumb]:rounded-full scrollbar-thin">
-      {LEAD_PIPELINE_COLS.map(({ status, label }) => {
-        const col = colMap.get(status) ?? { status, leads: [], isLoading: false, count: 0 };
-
-        return (
-          <div key={status} className="flex-none w-[256px] snap-center">
-            <div className="flex items-center justify-between mb-2 px-0.5">
-              <h3 className="text-body-sm font-semibold text-[var(--text)]">{label}</h3>
-              <span className={cn(
-                'min-w-[20px] h-5 rounded-full text-[10px] font-semibold px-1.5 flex items-center justify-center',
-                col.count > 0
-                  ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
-                  : 'bg-[var(--surface-2)] text-[var(--text-muted)]',
-              )}>
-                {col.isLoading ? '…' : col.count}
-              </span>
-            </div>
-
-            <div className="bg-[var(--surface-2)] rounded-lg p-2 min-h-[120px] space-y-2">
-              {col.isLoading ? (
-                <ColumnSkeleton />
-              ) : col.leads.length === 0 ? (
-                <div className="flex items-center justify-center h-16">
-                  <p className="text-xs text-[var(--text-muted)]">No leads</p>
-                </div>
-              ) : (
-                col.leads.map((lead) => <LeadCard key={lead.id} lead={lead} />)
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
+    <KanbanBoard
+      columns={LEAD_KANBAN_COLS}
+      cards={cards}
+      validTransitions={LEAD_VALID_TRANSITIONS}
+      onCardMove={handleCardMove}
+      onColumnReorder={() => {}}
+      renderCard={renderCard}
+      columnOrderStorageKey="repaiross-kanban-leads-column-order"
+      transitionDialogs={LEAD_TRANSITION_DIALOGS}
+    />
   );
 }

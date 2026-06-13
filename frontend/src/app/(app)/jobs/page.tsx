@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { Plus, Search, LayoutGrid, List, WifiOff, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +19,7 @@ import { useActiveShopStore } from '@/lib/stores/activeShopStore';
 import { useOfflineQueueStore } from '@/lib/stores/offlineQueueStore';
 import { useDebounce } from '@/lib/hooks/useDebounce';
 import { formatDate } from '@/lib/format/date';
+import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 
 type ViewMode = 'kanban' | 'list';
@@ -54,6 +56,7 @@ const LIST_COLUMNS: Column<JobListItem>[] = [
 
 export default function JobsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { activeShopId, isAllShops } = useActiveShopStore();
   const { isOnline } = useOfflineQueueStore();
 
@@ -64,11 +67,11 @@ export default function JobsPage() {
 
   const debouncedSearch = useDebounce(search, 350);
 
-  const baseFilters = {
+  const baseFilters = useMemo(() => ({
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
     search: debouncedSearch || undefined,
     priority: priority === 'all' ? undefined : priority,
-  };
+  }), [isAllShops, activeShopId, debouncedSearch, priority]);
 
   // Kanban: one query per column
   const columnQueries = useQueries({
@@ -98,6 +101,21 @@ export default function JobsPage() {
   const handleRowClick = useCallback((job: JobListItem) => {
     router.push(`/jobs/${job.id}`);
   }, [router]);
+
+  const handleCardMove = useCallback(async (
+    jobId: string,
+    fromStatus: JobStatus,
+    toStatus: JobStatus,
+    fields?: Record<string, string>,
+  ) => {
+    await repairApi.changeStatus(jobId, {
+      to_status: toStatus,
+      reason: fields?.reason,
+    });
+    // Invalidate both columns so counts stay accurate
+    queryClient.invalidateQueries({ queryKey: qk.jobs({ ...baseFilters, status: fromStatus }) });
+    queryClient.invalidateQueries({ queryKey: qk.jobs({ ...baseFilters, status: toStatus }) });
+  }, [queryClient, baseFilters]);
 
   return (
     <div className="flex flex-col h-full">
@@ -187,7 +205,7 @@ export default function JobsPage() {
       {/* Board / List */}
       <div className="flex-1 overflow-auto p-4 md:p-6">
         {view === 'kanban' ? (
-          <JobBoard columns={kanbanColumns} />
+          <JobBoard columns={kanbanColumns} onCardMove={handleCardMove} />
         ) : (
           <DataTable
             columns={LIST_COLUMNS}
