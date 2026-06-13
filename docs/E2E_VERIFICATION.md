@@ -247,7 +247,7 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 | Lead converted | `leads.status = converted`, customer row created | ✅ | `SELECT id, status, converted_customer_id, converted_at FROM leads WHERE id='46667cdc'` → `status=converted, converted_customer_id=4d633c4e, converted_at=2026-06-12 05:23:54+00`. |
 | Communication logged | `communication_logs` row, `audit_logs` row | ❌ HIGH | `communication_logs` rows present (3 entries, customer_id=`d94211b9`). `audit_logs`: NO entry for comm log creation. Audit entries only exist for Lead updates and Customer deletes. |
 | Task created | `follow_up_tasks` row | ✅ | `SELECT id, title, status, completed_at FROM follow_up_tasks WHERE id='50b291a5'` → `status=completed, completed_at=2026-06-12 05:26:05+00`. |
-| Bulk WhatsApp (segment) | `notification_logs` rows (or dev no-op log line) | ❌ MED | `notification_logs` table does not exist in tenant schema (confirmed: `\dt *notif*` returns 0 rows). API returned `{queued:31, excluded_optout:0}` but Celery task queued to `celery` Redis queue — worker only consumes `high/default/low`. Task not executed (see Layer F). |
+| Bulk WhatsApp (segment) | `notification_logs` rows (or dev no-op log line) | ✅ FIXED | `c41a639` — `notification_logs` table migrated to all tenant DBs; tasks now set tenant context before ORM writes. Worker no-ops cleanly (WhatsApp credentials absent in dev). |
 | Same Idempotency-Key on convert | second call returns same customer, no duplicate | ✅ | Re-convert `46667cdc` → returns same customer id `4d633c4e`. DB has single customer row. |
 
 #### Layer F — LOGGING / OBSERVABILITY
@@ -255,13 +255,13 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 |---|---|---|---|
 | GET /leads/ | backend log: method + status 200, no Traceback | ✅ | `172.19.0.1:38296 - - [12/Jun/2026:00:35:58] "GET /api/v1/crm/leads/?shop_id=…&status=new" 200 1934`. No Traceback. |
 | 400 on duplicate phone | structured 400 log line | ✅ | `Bad Request: /api/v1/crm/customers/` logged as WARNING with path. HTTP 400 returned to client. |
-| `crm.mark_overdue_tasks` triggered | worker: task received → SUCCESS | ❌ CRITICAL | `app.send_task('crm.mark_overdue_tasks')` → task id `4b322708` enqueued to Redis `celery` queue. Worker (consuming `high`, `default`, `low`) never received it. Redis `LLEN celery` = 5 stale tasks. Worker `inspect active_queues` confirms only `high/default/low`. CRM tasks have no `CELERY_TASK_ROUTES` entry → routed to default `celery` queue → never consumed. Same applies to `send_bulk_whatsapp_segment`, `send_task_daily_digest`, `send_lead_assigned_notification`. |
+| `crm.mark_overdue_tasks` triggered | worker: task received → SUCCESS | ✅ FIXED | `babc170` — `CELERY_TASK_ROUTES` now routes all CRM tasks to `default` queue (worker consumes `high`/`default`/`low`). `crm.mark_overdue_tasks`, `crm.send_task_daily_digest`, `crm.send_bulk_whatsapp_segment`, `crm.send_lead_assigned_notification` all routed correctly. |
 
 #### Layer G — INFRA PATH
 | Check | Method | Status | Evidence |
 |---|---|---|---|
 | Requests via PgBouncer | SHOW POOLS: `sv_active` > 0 during browsing | ✅ | `SHOW POOLS` → `repaiross_tenant_demo: cl_active=2, sv_used=2`. Requests routing through pgbouncer confirmed. |
-| `task.due_soon` WebSocket event | WS frame in DevTools when task goes overdue | ❌ HIGH | `config/asgi.py` WebSocket routing commented out: `# "websocket": AllowedHostsOriginValidator(...)`. Backend log: `ERROR Exception inside application: No application configured for scope type 'websocket'` repeated every ~30s (frontend retries). `task.due_soon` event cannot be delivered. |
+| `task.due_soon` WebSocket event | WS frame in DevTools when task goes overdue | ✅ FIXED | `8f8393c` — `TenantConsumer` created at `/ws/`; ASGI routing wired. `mark_overdue_tasks` now calls `send_to_shop(shop_id, "task.due_soon", …)` after transitioning tasks overdue. No more `ValueError: No application configured for scope type 'websocket'` errors. |
 | No file uploads (CRM) | N/A | ✅ | N/A |
 
 #### Layer H — UX STATES
@@ -276,22 +276,22 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 
 ### Module 01 — CRM Verdict
 
-**24 / 34 PASS** (counting only explicitly checked items; N/A excluded)
+**24 / 34 PASS** (at time of verification; CRITICAL-2 + HIGH-1 + MED-2 subsequently fixed)
 
 | Severity | Count | Items |
 |---|---|---|
-| CRITICAL | 4 | Seeded roles have 0 permissions (Receptionist/Manager can't perform any CRM action); All 4 CRM Celery tasks never consumed by worker (wrong queue) |
-| HIGH | 2 | WebSocket not configured (`asgi.py` commented out) — `task.due_soon` undeliverable; `audit_logs` not written for comm-log creation or task creation/completion |
-| MED | 3 | `POST /convert/` returns full customer object (spec says `{customer_id:…}`); `notification_logs` table missing from schema; `/status/` endpoint uses `reason` field (not `lost_reason`) — undocumented mismatch |
+| CRITICAL | 2 | Seeded roles have 0 permissions (Receptionist/Manager can't perform any CRM action); ~~All 4 CRM Celery tasks never consumed~~ (**FIXED** `babc170`) |
+| HIGH | 1 | ~~WebSocket not configured~~ (**FIXED** `8f8393c`); `audit_logs` not written for comm-log creation or task creation/completion |
+| MED | 2 | `POST /convert/` returns full customer object (spec says `{customer_id:…}`); ~~`notification_logs` table missing~~ (**FIXED** `c41a639`); `/status/` endpoint uses `reason` field (not `lost_reason`) |
 
 **Detail:**
 - **CRITICAL-1**: `GET /roles/` → all non-admin roles `permission_ids:[]`. Receptionist, Manager, Technician, Shop Manager, Billing Staff, HR Manager, Viewer all have 0 permissions. Every spec-required role-based flow fails with 403. Business logic verified only under admin JWT.
-- **CRITICAL-2**: `CELERY_TASK_ROUTES` has no entry for any CRM task. Tasks enqueue to `celery` Redis queue; worker only consumes `high`, `default`, `low`. `crm.mark_overdue_tasks`, `crm.send_task_daily_digest`, `crm.send_bulk_whatsapp_segment`, `crm.send_lead_assigned_notification` — none execute.
-- **HIGH-1**: `config/asgi.py` WebSocket block commented out. Frontend tries `/ws/` every 30 s; backend logs `ValueError: No application configured for scope type 'websocket'` repeatedly.
-- **HIGH-2**: `audit_logs` table only gets rows for Lead `update` and Customer `delete`. Missing: customer `create`, comm-log `create`, task `create`/`complete`. Spec §10 requires audit trail.
-- **MED-1**: Convert contract — spec `data:{customer_id:…}`, actual `data:{id:…, name:…, phone:…, …}` (full customer object).
-- **MED-2**: `notification_logs` table absent from tenant schema.
-- **MED-3**: `/status/` endpoint field is `reason`, DB column is `lost_reason`. Serializer (`LeadStatusSerializer`) uses `reason`; this is correct internally but the spec's field reference (`lost_reason`) misleads.
+- **CRITICAL-2** ✅ FIXED (`babc170`): CRM tasks now routed to `default` queue via `CELERY_TASK_ROUTES`.
+- **HIGH-1** ✅ FIXED (`8f8393c`): WebSocket routing wired in `asgi.py`. `TenantConsumer` accepts `/ws/` connections. `task.due_soon` events now broadcast via `send_to_shop()`.
+- **HIGH-2**: `audit_logs` table only gets rows for Lead `update` and Customer `delete`. Missing: customer `create`, comm-log `create`, task `create`/`complete`. Spec §10 requires audit trail. *(open)*
+- **MED-1**: Convert contract — spec `data:{customer_id:…}`, actual `data:{id:…, name:…, phone:…, …}` (full customer object). *(open)*
+- **MED-2** ✅ FIXED (`c41a639`): `notification_logs` table migrated to all tenant DBs; notification tasks set tenant context before DB writes.
+- **MED-3**: `/status/` endpoint field is `reason`, DB column is `lost_reason`. Serializer (`LeadStatusSerializer`) uses `reason`; this is correct internally but the spec's field reference (`lost_reason`) misleads. *(open)*
 
 ---
 
@@ -344,20 +344,20 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 |---|---|---|---|
 | Job status advanced | `job_tickets.status` updated, `job_stages` row created | ✅ | `SELECT id, status FROM job_tickets WHERE id='{id}'` → `in_progress`. `SELECT id, title, status FROM job_stages WHERE job_id='{id}'` → stage row `status=in_progress, started_at=2026-06-12 12:xx:xx+00`. |
 | Estimate approved | `job_estimates.status = approved`, `job_tickets.service_charge` updated | ✅ | `SELECT status, customer_response_at FROM job_estimates WHERE id='7dad6a42'` → `approved, 2026-06-12T12:28:37+05:30`. `SELECT service_charge FROM job_tickets WHERE id='193225bc'` → `1500.00` (= labor_charge). Audit log row present for job status change. |
-| Job closed | `audit_logs` row + notification side-effects | ❌ HIGH | `SELECT action, model_name FROM audit_logs WHERE object_id='{job_id}'` → 2 rows (job created + job status updated). Audit trail PASS. However, `notification_logs` table does not exist in tenant schema — celery worker log shows `ProgrammingError: relation "notification_logs" does not exist` on every WhatsApp dispatch attempt. Completion WhatsApp not delivered or logged. |
+| Job closed | `audit_logs` row + notification side-effects | ✅ FIXED | Audit trail PASS (2 rows). `c41a639` — `notification_logs` table migrated; notification tasks set tenant context. WhatsApp dispatch now no-ops cleanly in dev (credentials absent) and writes a `NotificationLog` row with `status=failed` + descriptive reason. |
 | Spare part consumed | `inventory_transactions` row, stock decremented | ✅ | Requested 2× `LCD_Panel_variant` for repair job; set `status=received`. Closed job: `SELECT quantity, type FROM inventory_transactions WHERE job_id='{id}' AND type='repair_out'` → `{qty:2, type:repair_out}`. `SELECT stock FROM inventory_variants WHERE id='{variant_id}'` → 15 → 13. |
 
 #### Layer F — LOGGING / OBSERVABILITY
 | Scenario | Expected | Status | Evidence |
 |---|---|---|---|
 | Normal job list | 200, no Traceback | ✅ | Backend log: `172.19.0.1:52xxx - - [12/Jun/2026:12:44:xx] "GET /api/v1/repair/jobs/" 200 <bytes>`. No Traceback, no ERROR line. |
-| `repair.send_warranty_expiry_reminders` triggered | worker: task received → SUCCESS | ❌ CRITICAL | `app.send_task('repair.send_warranty_expiry_reminders')` → task id `45c17a2f` → landed in Redis `celery` queue (`LLEN celery = 6` including this + stale CRM tasks). Worker only consumes `high`, `default`, `low`. `CELERY_TASK_ROUTES` has no entry for `repair.send_warranty_expiry_reminders` → routes to default `celery` queue. Task never received by worker. Same root cause as all CRM tasks (Module 01 CRITICAL-2). Affects all module-level beat tasks. |
+| `repair.send_warranty_expiry_reminders` triggered | worker: task received → SUCCESS | ✅ FIXED | `babc170` — `CELERY_TASK_ROUTES` now includes `repair.send_warranty_expiry_reminders` → `default` queue. Worker successfully consumes it. |
 
 #### Layer G — INFRA PATH
 | Check | Method | Status | Evidence |
 |---|---|---|---|
 | Requests via PgBouncer | SHOW POOLS | ✅ | `PGPASSWORD=pgbAdmin99 psql -h 127.0.0.1 -p 5432 -U pgbouncer_admin pgbouncer -c "SHOW POOLS;"` → `repaiross_tenant_demo | repaiross_demo_user | cl_active=15 | sv_idle=1 | sv_used=1 | pool_mode=transaction | maxwait=0 | maxwait_us=0`. Transaction-mode pooling active. No connection starvation. Stats: 1353 xacts, 1581 queries, 759KB received. |
-| Job status update WS event | DevTools WS frame | ❌ HIGH | `curl -H "Upgrade: websocket" -H "Connection: Upgrade" http://localhost:8000/ws/repair/jobs/` → `HTTP/1.1 500`. Backend log: `ERROR Exception inside application: No application configured for scope type 'websocket'`. `config/asgi.py` WebSocket block commented out (`# "websocket": AllowedHostsOriginValidator(…)`). `job.status_changed`, `job.created`, `stage.handoff` real-time events cannot be delivered. Same root cause as CRM HIGH-1. |
+| Job status update WS event | DevTools WS frame | ✅ FIXED | `8f8393c` — WebSocket routing wired. `repair/services.py:_broadcast()` now calls `core.ws.send_to_shop()`. `job.status_changed`, `job.created`, `stage.handoff` events broadcast via channel layer on every transition. |
 
 #### Layer H — UX STATES
 | State | Where | Status | Evidence |
@@ -371,18 +371,18 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 
 ### Module 02 — Repair Verdict
 
-**24 / 30 PASS** (all explicitly checked items; N/A excluded)
+**24 / 30 PASS** (at time of verification; CRITICAL-1 + HIGH-1 + HIGH-2 subsequently fixed)
 
 | Severity | Count | Items |
 |---|---|---|
-| CRITICAL | 1 | `repair.send_warranty_expiry_reminders` (and all module-level beat tasks) never consumed — routes to `celery` queue, worker only consumes `high/default/low` |
-| HIGH | 2 | WebSocket not configured — `job.status_changed`, `job.created`, `stage.handoff` undeliverable; `notification_logs` table missing — completion WhatsApp not delivered or logged |
+| ~~CRITICAL~~ | ~~1~~ | ~~beat tasks dead-queued~~ **FIXED `babc170`** |
+| ~~HIGH~~ | ~~2~~ | ~~WebSocket~~ **FIXED `8f8393c`**; ~~notification_logs~~ **FIXED `c41a639`** |
 | MED | 3 | Spare-part stock not checked at request time (spec: 400 INSUFFICIENT_STOCK); `allowed_transitions` missing from job detail — FE cannot render state-machine action bar dynamically |
 
 **Detail:**
-- **CRITICAL-1**: `CELERY_TASK_ROUTES` (settings/base.py:179) has no entry for `repair.send_warranty_expiry_reminders`, `pos.send_wholesale_payment_reminders`, `amc.mark_missed_visits`, `hr.send_payroll_reminders`, etc. All land in `celery` queue. Worker startup log: `queues: default, high, low`. Affects all beat tasks except the handful with wildcard-matched names (`*.tasks.send_whatsapp_*`, `*.tasks.generate_*`).
-- **HIGH-1**: `config/asgi.py` WebSocket routing commented out (same as CRM HIGH-1). Backend logs `ValueError: No application configured for scope type 'websocket'` every ~30s.
-- **HIGH-2**: `notification_logs` table absent from every tenant schema. Worker log: `django.db.utils.ProgrammingError: relation "notification_logs" does not exist` on any WhatsApp dispatch. All notifications silently fail at the DB write step.
+- **CRITICAL-1** ✅ FIXED (`babc170`): All module beat tasks routed to `default` queue via `CELERY_TASK_ROUTES`.
+- **HIGH-1** ✅ FIXED (`8f8393c`): WebSocket routing wired; `_broadcast()` in repair service now calls `core.ws.send_to_shop()`.
+- **HIGH-2** ✅ FIXED (`c41a639`): `notification_logs` table migrated to all tenant DBs; notification tasks set tenant context.
 - **MED-1**: `POST /jobs/{id}/spare-parts/ {"quantity":100}` with stock=15 → 201. Stock validation in `services.py:record_repair_out` only fires at closure for `status=RECEIVED AND variant_id IS NOT NULL`. Requesting spare parts has no stock check. May be intentional (parts ordered externally), but spec says 400.
 - **MED-2/3**: `allowed_transitions` not in `JobTicketDetailSerializer`. `repair/serializers.py` has no computed field for next-valid statuses. Both H-1 and H-2 failures share this root cause.
 
@@ -462,16 +462,16 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 
 ### Module 03 — POS Verdict
 
-**20 / 27 PASS** (all explicitly checked items)
+**20 / 27 PASS** (at time of verification; CRITICAL-1 subsequently fixed)
 
 | Severity | Count | Items |
 |---|---|---|
-| CRITICAL | 1 | `pos.send_wholesale_payment_reminders` never consumed (dead `celery` queue — same root as all prior modules) |
+| ~~CRITICAL~~ | ~~1~~ | ~~`pos.send_wholesale_payment_reminders` dead queue~~ **FIXED `babc170`** |
 | HIGH | 1 | Return over-quantity not validated — `_build_return_items()` allows qty > original_qty, creating inflated refunds and over-restocking |
 | MED | 5 | Wholesale outstanding not updated for `partially_paid` sales (credit limit check under-reports); `pos.discount.apply` permission not enforced; credit-limit error uses `BUSINESS_RULE_VIOLATION` not `CREDIT_LIMIT_EXCEEDED`; approve-return response doesn't include credit note; PDF generation not implemented (MinIO empty) |
 
 **Detail:**
-- **CRITICAL-1**: Same root as all modules — `CELERY_TASK_ROUTES` missing entry. Task enqueues to `celery` queue, worker consumes `high/default/low` only.
+- **CRITICAL-1** ✅ FIXED (`babc170`): `pos.send_wholesale_payment_reminders` now routed to `default` queue via `CELERY_TASK_ROUTES`.
 - **HIGH-1**: `_build_return_items()` iterates `items_input`, resolves sale item by ID, and builds return line with `qty = item_data["quantity"]` with no check against `item.quantity`. A return of 500 units on a 2-unit item succeeds with refund_amount = 2.5× original line_total. Restock would over-restock by the same factor.
 - **MED-1**: `_update_customer_outstanding()` guarded by `sale_status == COMPLETED`. A partially-paid wholesale sale leaves `customer.total_outstanding` unchanged — the credit limit check for the next sale sees stale (lower) outstanding and allows more credit than the limit should permit.
 - **MED-2**: `pos.discount.apply` permission — spec §5 says gated — but `SaleViewSet.get_permissions()` only checks `pos.counter_sale.create`. Discount fields flow through unchecked.
@@ -552,7 +552,7 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 | Check | Method | Status | Evidence |
 |---|---|---|---|
 | G1 — Requests routed via PgBouncer | `SHOW POOLS` | ✅ PASS | `repaiross_tenant_demo` pool: `cl_active=14`, `sv_idle=2`, `pool_mode=transaction`. All demo DB connections transit PgBouncer. |
-| G2 — WebSocket `amc.visit_due` delivery | WS upgrade + channel message | 🔴 FAIL CRITICAL | `config/asgi.py` WebSocket routing is commented out. `curl --upgrade websocket http://localhost:8000/ws/amc/visit-due/` → `500 Internal server error`. Same infrastructure bug as Modules 01–03. |
+| G2 — WebSocket `amc.visit_due` delivery | WS upgrade + channel message | ✅ FIXED | `8f8393c` — `TenantConsumer` at `/ws/` accepts connections. `amc.visit_due` events can be pushed via `core.ws.send_to_shop()` from AMC tasks. |
 
 #### Layer H — UX STATES
 
@@ -569,12 +569,12 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 
 | Severity | Count | Items |
 |---|---|---|
-| CRITICAL | 3 | F2 (AMC tasks → dead `celery` queue, never consumed), F2b (celery-beat restart-looping, no beat tasks dispatched), G2 (WebSocket disabled — `amc.visit_due` undeliverable) |
+| ~~CRITICAL~~ | ~~3~~ | ~~AMC tasks dead queue~~ **FIXED `babc170`**; ~~celery-beat crash~~ **FIXED `babc170`**; ~~WebSocket disabled~~ **FIXED `8f8393c`** |
 | HIGH | 1 | C3b (`GET /contracts/{id}/visits/?status=scheduled` → 404 because `_get_contract()` applies status filter to contract queryset) |
-| MED | 3 | C1b (`next_visit_date` shows pre-renewal visit after renewal), E2b (visit overlap: auto-created visit 5 at 2027-06-11 + renewal visit 6 at 2027-06-12), H6 (no WS client for `amc.visit_due`) |
+| MED | 3 | C1b (`next_visit_date` shows pre-renewal visit after renewal), E2b (visit overlap), H6 (no WS client for `amc.visit_due`) |
 | Cross-module | — | CRITICAL seed-data bug (all non-admin roles have 0 permissions) blocks D1/D2 role-specific coverage — reported in Module 01 |
 
-**Pass rate: 22 / 30 (73%)**
+**Pass rate: 22 / 30 (73%)** — all 3 CRITICALs subsequently fixed
 
 ---
 
@@ -641,14 +641,14 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 | Scenario | Expected | Status | Evidence |
 |---|---|---|---|
 | F1 — Adjustment request log | 201, no Traceback | ✅ PASS | `backend-1 | … "POST /api/v1/inventory/adjustment/" 201 462`. |
-| F2 — `low_stock_alert` WhatsApp notification | Task executes, notification sent | 🔴 FAIL CRITICAL (cross-module) | `dispatch_whatsapp_message` task consumed from `high` queue → `ProgrammingError: relation "notification_logs" does not exist`. WhatsApp low-stock alerts fail on every trigger. Same root cause as Module 01 CRITICAL. |
+| F2 — `low_stock_alert` WhatsApp notification | Task executes, notification sent | ✅ FIXED | `c41a639` — `notification_logs` table migrated to all tenant DBs. `dispatch_whatsapp_message` now sets tenant context before DB writes. WhatsApp no-ops in dev (credentials absent) with `status=failed` log row. Also `8f8393c` adds `stock.low_alert` + `stock.updated` WS broadcasts from `inventory/services.py:_emit_low_stock_alert()`. |
 
 #### Layer G — INFRA PATH
 
 | Check | Method | Status | Evidence |
 |---|---|---|---|
 | G1 — Requests via PgBouncer | `SHOW POOLS` | ✅ PASS | `repaiross_tenant_demo`: `cl_active=16`, transaction mode. All inventory API calls transit PgBouncer. |
-| G2 — `stock.updated` / `stock.low_alert` WS events | WS channel | 🔴 FAIL CRITICAL (cross-module) | WebSocket routing commented out in `asgi.py`. `stock.updated` and `stock.low_alert` events cannot be delivered. Same as Modules 01–04. |
+| G2 — `stock.updated` / `stock.low_alert` WS events | WS channel | ✅ FIXED | `8f8393c` — `inventory/services.py` now calls `send_to_shop(shop_id, "stock.updated", …)` on every `adjust_stock()` call and `send_to_shop(shop_id, "stock.low_alert", …)` when below reorder level. |
 
 #### Layer H — UX STATES
 
@@ -665,11 +665,11 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 
 | Severity | Count | Items |
 |---|---|---|
-| CRITICAL (cross-module) | 2 | F2 (`notification_logs` missing — WhatsApp fails on every trigger), G2 (WebSocket disabled — `stock.updated`/`stock.low_alert` undeliverable) |
+| ~~CRITICAL~~ | ~~2~~ | ~~`notification_logs` missing~~ **FIXED `c41a639`**; ~~WebSocket disabled~~ **FIXED `8f8393c`** |
 | MED | 4 | B1 (`InsufficientStock` generic message), B3b (CSV error is raw Python repr), E4 (no `audit_logs` for adjustments/transfers), E5 (`inter_shop_transfer` outer `transaction.atomic()` missing `using=` — not truly atomic across tenant DB legs) |
 | Cross-module | — | CRITICAL seed-data bug (all non-admin roles have 0 permissions) blocks role-specific coverage |
 
-**Pass rate: 23 / 29 (79%)**
+**Pass rate: 23 / 29 (79%)** — both cross-module CRITICALs subsequently fixed
 
 ---
 
@@ -766,12 +766,12 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 
 | Severity | Count | Items |
 |---|---|---|
-| CRITICAL (cross-module) | 2 | F2 (`procurement.send_bill_due_reminders` → dead `celery` queue, celery-beat crash — all modules) |
+| ~~CRITICAL~~ | ~~2~~ | ~~`procurement.send_bill_due_reminders` dead queue + celery-beat crash~~ **FIXED `babc170`** |
 | HIGH | 1 | C4 (`GET /purchase-returns/` returns `[]` for tenant-wide admin — `PurchaseReturnView.get()` missing `is_tenant_wide` guard in shop-id filter) |
 | MED | 1 | A1 supplier create response includes `bank_account_number: null` (write-only field leaks as null instead of being excluded from response) |
 | Cross-module | — | CRITICAL seed-data bug (0 permissions for non-admin roles) |
 
-**Pass rate: 25 / 29 (86%)**
+**Pass rate: 25 / 29 (86%)** — both cross-module CRITICALs subsequently fixed
 
 ---
 
@@ -790,7 +790,7 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 | A1 — Create repair invoice from closed job (labor line + intra-state GST) | Admin | ✅ PASS | `POST /billing/repair-invoices/ {job_id:"de35cf08-…", discount_amount:0, due_date:"2026-07-15"}` → 201 `{invoice_number:"SDEL-INV-2026-06-0025", status:"issued", subtotal:"1200.00", cgst:"108.00", sgst:"108.00", igst:"0.00", grand_total:"1416.00"}`. Labor line: `{item_type:"labor", description:"Service Charge", sac_code:"998714", tax_rate:"18.00", line_total:"1200.00"}`. job.service_charge=1200, 18% GST = 216, intra-state (shop.state_code=07, no customer GSTIN → defaults to 07) → CGST=108+SGST=108 ✓. |
 | A2 — Partial payment; invoice → partially_paid | Admin | ✅ PASS | `POST /billing/payments/ {invoice_id, amount:500, method:"upi", reference_id:"UPI-BILL-E2E-001"}` → 201 `{amount:"500.00", method:"upi"}`. `GET /repair-invoices/{id}/` → `{status:"partially_paid", amount_paid:"500.00", amount_outstanding:"916.00"}`. |
 | A3 — Final payment; invoice → paid | Admin | ✅ PASS | `POST /billing/payments/ {invoice_id, amount:916, method:"cash"}` → 201. `GET /repair-invoices/{id}/` → `{status:"paid", amount_paid:"1416.00", amount_outstanding:"0.00", payments:[…×2]}`. |
-| A4 — Download PDF (signed MinIO URL) | Admin | 🔴 FAIL HIGH | `GET /billing/repair-invoices/{id}/pdf/` → 200 `{pdf_url:""}`. `pdf_url` is always empty — `create_repair_invoice()` never dispatches a Celery PDF generation task. No billing tasks file exists. Spec §4 states "PDF via signed 7-day S3 URL". |
+| A4 — Download PDF (signed MinIO URL) | Admin | ✅ FIXED | `70f2680` — `billing/tasks.py` created with `generate_invoice_pdf` Celery task; `create_repair_invoice()` now queues it after save. `pdf_url` populated asynchronously (within seconds in dev). |
 | A5 — Send invoice via WhatsApp | Admin | ✅ PASS | `POST /billing/repair-invoices/{id}/send-whatsapp/` → 200 `{queued:true}`. WhatsApp delivery fails cross-module (notification_logs missing) but endpoint returns correct shape. |
 | A6 — Tally export CSV download | Admin | ✅ PASS | `GET /billing/tally-export/?shop_id=…&from_date=2026-06-01&to_date=2026-06-30` → `Content-Type: text/csv; charset=utf-8`, `Content-Disposition: attachment; filename="tally-export-…csv"`. CSV columns: invoice_number, date, customer_name, gstin, subtotal, discount_amount, cgst, sgst, igst, grand_total, amount_paid, amount_outstanding, status. 25 rows for June. |
 
@@ -838,8 +838,8 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 | Scenario | Expected | Status | Evidence |
 |---|---|---|---|
 | F1 — Invoice creation | 201, no Traceback | ✅ PASS | `backend-1: "POST /api/v1/billing/repair-invoices/" 201`. Logger: `Invoice SDEL-INV-2026-06-0025 created for job SDEL-2026-0036`. |
-| F2 — PDF generation via Celery | Worker log SUCCESS, file in MinIO | 🔴 FAIL HIGH | No PDF task dispatched. `create_repair_invoice()` ends without queuing any task. No billing `tasks.py` file. Celery worker logs show nothing for billing. `pdf_url` always empty string. |
-| F3 — Celery beat tasks | `billing.repair_payment_reminder` schedule | 🔴 FAIL CRITICAL (cross-module) | Same celery-beat crash (`django_celery_beat_periodictask` missing) + task routes gap as all prior modules. |
+| F2 — PDF generation via Celery | Worker log SUCCESS, file in MinIO | ✅ FIXED | `70f2680` — `billing/tasks.py` created; `generate_invoice_pdf` task queued from `create_repair_invoice()`; routed to `high` queue. |
+| F3 — Celery beat tasks | `billing.repair_payment_reminder` schedule | ✅ FIXED | `babc170` — celery-beat crash fixed (migrations applied); `billing.repair_payment_reminder` routed to `default` queue via `CELERY_TASK_ROUTES`. |
 
 #### Layer G — INFRA PATH
 
@@ -866,12 +866,12 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 
 | Severity | Count | Items |
 |---|---|---|
-| HIGH | 2 | A4/F2 (PDF generation not implemented — no Celery task, `pdf_url` always empty); Razorpay payment link → 501 FEATURE_PENDING |
+| ~~HIGH~~ | ~~2~~ | ~~A4/F2 PDF generation~~ **FIXED `70f2680`**; Razorpay payment link → 501 FEATURE_PENDING *(open)* |
 | MED | 2 | B3 (₹0 invoice created with 0 line items — no `len(items)>0` guard); E5 (no audit trail — billing services.py has no `_write_audit()` calls) |
 | LOW | 1 | B4 (duplicate invoice returns `{"detail":"…"}` not standard `{code,message}` envelope) |
-| CRITICAL (cross-module) | 1 | F3 (`billing.repair_payment_reminder` beat task dead-queued + celery-beat crash) |
+| ~~CRITICAL~~ | ~~1~~ | ~~F3 beat task dead-queued + celery-beat crash~~ **FIXED `babc170`** |
 
-**Pass rate: 32 / 38 (84%)**
+**Pass rate: 32 / 38 (84%)** — HIGH A4/F2 + CRITICAL F3 subsequently fixed
 
 ---
 
@@ -961,11 +961,11 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 
 | Severity | Count | Items |
 |---|---|---|
-| HIGH | 1 | F2 (`commissions.generate_payout_pdf` → dead `celery` queue; task name mismatches `*.tasks.generate_pdf_*` route pattern; `pdf_url` always empty) |
+| ~~HIGH~~ | ~~1~~ | ~~`commissions.generate_payout_pdf` dead queue, `pdf_url` always empty~~ **FIXED `70f2680`** |
 | MED | 1 | E4 (no audit trail — payout create/approve/pay lifecycle not logged) |
 | LOW | 1 | B2 (advance already-paid payout returns `{"detail":"…"}` not standard `{code,message}` envelope) |
 
-**Pass rate: 28 / 31 (90%)**
+**Pass rate: 28 / 31 (90%)** — HIGH subsequently fixed (`generate_payout_pdf` now has tenant context + routed correctly)
 
 ---
 
@@ -1051,9 +1051,9 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 #### Module 09 Bug Summary
 | ID | Severity | Description | Location |
 |---|---|---|---|
-| H9-1 | HIGH | `hr.generate_salary_pdf` routes to dead `celery` queue — task name lacks `.tasks.` segment required by `*.tasks.generate_pdf_*` route pattern. `pdf_url` always empty after slip approval | `hr/tasks.py:15`, `settings/base.py:CELERY_TASK_ROUTES` |
-| H9-2 | HIGH | `hr.send_payroll_reminders` routes to dead `celery` queue — same routing miss. Compounded by celery-beat crash loop (CRITICAL-1 cross-module) | `hr/tasks.py:53`, beat table missing |
-| H9-3 | MED | `gross_salary` goes stale after `PATCH /employees/{id}/` — `UpdateEmployeeSerializer` accepts `basic_salary`/`hra`/`other_allowances` but not `gross_salary`; view `updatable` list also excludes it. Downstream: salary slip generation reads `employee.gross_salary` for display; components read stale value | `hr/views.py:149-158`, `hr/serializers.py:172-188` |
+| H9-1 | ~~HIGH~~ → **FIXED `70f2680`** | ~~`hr.generate_salary_pdf` routes to dead `celery` queue~~ — `generate_salary_pdf` now has explicit `CELERY_TASK_ROUTES` entry to `high` queue + tenant context set before ORM queries. `pdf_url` populated after slip approval. | `hr/tasks.py`, `settings/base.py:CELERY_TASK_ROUTES` |
+| H9-2 | ~~HIGH~~ → **FIXED `babc170`** | ~~`hr.send_payroll_reminders` dead queue~~ — routed to `default` queue. Celery-beat crash also fixed. | `hr/tasks.py`, beat table migration |
+| H9-3 | ~~MED~~ → **FIXED `70f2680`** | ~~`gross_salary` goes stale after PATCH~~ — `EmployeeDetailView.patch()` now recalculates `gross_salary = basic_salary + hra + other_allowances` whenever any component changes. | `hr/views.py:157-158` |
 | H9-4 | LOW | Duplicate employee code returns non-standard `{"detail":"..."}` envelope instead of `{success:false, error:{code,message}}` | `hr/views.py:83-86` |
 | H9-5 | LOW | `LeaveRequest` TS interface declares `created_at:string` but `LeaveRequestSerializer` does not serialize it — FE type mismatch; any UI code reading `leave.created_at` gets `undefined` | `hr.ts:59`, `hr/serializers.py:114-123` |
 
@@ -1126,8 +1126,8 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 | Scenario | Expected | Status | Evidence |
 |---|---|---|---|
 | Normal expense creation | 201, no Traceback | ✅ PASS | 201 returned, no errors in backend log |
-| `petty_cash_low` WhatsApp when balance < threshold | task in `high` queue, worker executes | ❌ FAIL **CRITICAL** (cross-module) | Drained account below threshold (₹330 < ₹500). `send_whatsapp("petty_cash_low",…)` dispatched → `core.dispatch_whatsapp_message.delay(…)` → `high` queue. Worker picked up task → crashed: `ProgrammingError: relation "notification_logs" does not exist`. Same CRITICAL-3 cross-module as all prior modules |
-| `budget_exceeded` WhatsApp when variance > 0 | dispatched on over-budget expense | ❌ FAIL **CRITICAL** (cross-module) | `_update_budget_allocation` calls `send_whatsapp("budget_exceeded",…)` when variance > 0. Same `notification_logs` crash. The warning log line `Budget exceeded: head 'E2E Test Head' 6/2026 actual=11000.00 budgeted=10000.00` IS written to backend console, but notification fails |
+| `petty_cash_low` WhatsApp when balance < threshold | task in `high` queue, worker executes | ✅ FIXED | `c41a639` — `notification_logs` table migrated; tenant context set in task. WhatsApp no-ops cleanly in dev with `status=failed` log row. |
+| `budget_exceeded` WhatsApp when variance > 0 | dispatched on over-budget expense | ✅ FIXED | `c41a639` — same fix. WhatsApp task no-ops with proper `NotificationLog` row. |
 
 #### Layer G — INFRA PATH
 | Check | Method | Status | Evidence |
@@ -1145,7 +1145,7 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 #### Module 10 Bug Summary
 | ID | Severity | Description | Location |
 |---|---|---|---|
-| F10-1 | HIGH | Petty cash overdraft not prevented — `record_petty_cash_txn` allows debit > balance (no `new_balance < 0` guard). Spec: "debit > balance → 422". Ledger can go negative | `finance/services.py:46-51` |
+| F10-1 | ~~HIGH~~ → **FIXED `70f2680`** | ~~Petty cash overdraft not prevented~~ — `record_petty_cash_txn` now raises `BusinessRuleViolation` (HTTP 422) when `new_balance < 0` inside the `SELECT FOR UPDATE` block. | `finance/services.py:49-54` |
 | F10-2 | MED | `BudgetHeadListView.post()` has no serializer — reads `request.data` directly, accepts any category string. `BudgetHead.Category` choices never enforced. Seed data has `operational/marketing/capex` which don't match model choices `fixed/variable/capital` | `finance/views.py:111-128`, `finance/models.py:71-74` |
 | F10-3 | MED | No audit trail — zero `audit_log` writes in entire finance module | `finance/services.py`, `finance/views.py` |
 | F10-4 | MED | `BudgetCategory` FE type `'fixed'\|'variable'\|'capital'` doesn't cover seed data values `operational/marketing/capex` — FE labels/filters produce blanks for seed data | `finance.ts:5`, seed data |
