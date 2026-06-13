@@ -277,6 +277,7 @@ export default function RegisterPage() {
   const [phoneOtp, setPhoneOtp] = useState('');
   const [emailCode, setEmailCode] = useState('');
   const [verifyLoading, setVerifyLoading] = useState(false);
+  const [slugEdited, setSlugEdited] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -290,17 +291,17 @@ export default function RegisterPage() {
   const password = form.watch('password');
   const strength = getStrength(password);
 
-  // Auto-generate slug from business name (only when user hasn't manually edited it)
+  // Auto-generate slug from business name until the user manually edits the field
   useEffect(() => {
-    if (form.getFieldState('slug').isDirty) return;
+    if (slugEdited) return;
     const auto = businessName
       .toLowerCase()
       .replace(/[^a-z0-9\s]/g, '')
       .trim()
       .replace(/\s+/g, '_')
       .slice(0, 50);
-    form.setValue('slug', auto, { shouldValidate: false });
-  }, [businessName, form]);
+    form.setValue('slug', auto, { shouldValidate: true });
+  }, [businessName, form, slugEdited]);
 
   async function onSubmit(values: FormValues) {
     setError(null);
@@ -527,8 +528,8 @@ export default function RegisterPage() {
                           className="h-11 pl-10"
                           {...field}
                           onChange={(e) => {
+                            setSlugEdited(true);
                             field.onChange(e);
-                            form.setValue('slug', e.target.value, { shouldDirty: true });
                           }}
                         />
                       </div>
