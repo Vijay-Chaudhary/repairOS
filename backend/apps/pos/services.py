@@ -483,6 +483,7 @@ def _write_audit(user, action, model_name, object_id, old_value=None, new_value=
 
 
 def _broadcast(shop_id, event_type: str, payload: dict) -> None:
-    logger.debug("WS broadcast shop=%s event=%s", shop_id, event_type)
+    from core.ws import send_to_shop
+    send_to_shop(str(shop_id), event_type, payload)
 
 

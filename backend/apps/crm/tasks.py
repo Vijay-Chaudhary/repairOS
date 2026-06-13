@@ -39,6 +39,10 @@ def mark_overdue_tasks(self):
             _notify_task_overdue(task)
         except Exception as exc:
             logger.exception("Failed to send overdue notification for task %s: %s", task.id, exc)
+        try:
+            _broadcast_task_due(task)
+        except Exception as exc:
+            logger.debug("WS broadcast failed for task %s: %s", task.id, exc)
 
     return updated
 
@@ -129,6 +133,20 @@ def send_lead_assigned_notification(self, lead_id: str, assignee_id: str) -> Non
             "source": lead.get_source_display(),
         },
     )
+
+
+def _broadcast_task_due(task) -> None:
+    from core.ws import send_to_shop
+    shop = None
+    if task.customer_id:
+        shop = task.customer.shop if task.customer else None
+    elif task.lead_id:
+        shop = task.lead.shop if task.lead else None
+    if shop:
+        send_to_shop(str(shop.id), "task.due_soon", {
+            "task_id": str(task.id),
+            "title": task.title,
+        })
 
 
 def _notify_task_overdue(task) -> None:

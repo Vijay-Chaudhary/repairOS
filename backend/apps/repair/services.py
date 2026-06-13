@@ -661,8 +661,8 @@ def _write_audit(user, action, model_name, object_id, old_value=None, new_value=
 
 
 def _broadcast(shop_id, event_type: str, payload: dict) -> None:
-    """Emit a WebSocket event to the shop channel. Stub until Channels routing is wired."""
-    logger.debug("WS broadcast shop=%s event=%s payload=%s", shop_id, event_type, payload)
+    from core.ws import send_to_shop
+    send_to_shop(str(shop_id), event_type, payload)
 
 
 

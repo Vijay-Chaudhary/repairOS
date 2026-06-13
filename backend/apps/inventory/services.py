@@ -86,6 +86,15 @@ def update_stock(
             created_by=user,
         )
 
+        # Real-time broadcast
+        from core.ws import send_to_shop
+        send_to_shop(str(shop.id), "stock.updated", {
+            "product_id": str(variant.product_id),
+            "variant_id": str(variant.id),
+            "shop_id": str(shop.id),
+            "qty": new_qty,
+        })
+
         # Low-stock alert
         if new_qty < stock.reorder_level and quantity_delta < 0:
             _emit_low_stock_alert(shop, variant, new_qty, stock.reorder_level)
@@ -294,10 +303,12 @@ def bulk_import_products(csv_text: str, user) -> dict:
 
 
 def _emit_low_stock_alert(shop, variant, current_qty, reorder_level) -> None:
-    logger.debug(
-        "Low stock: %s @ %s — qty=%s reorder=%s",
-        variant, shop.code, current_qty, reorder_level,
-    )
+    from core.ws import send_to_shop
+    send_to_shop(str(shop.id), "stock.low_alert", {
+        "product_id": str(variant.product_id),
+        "shop_id": str(shop.id),
+        "qty": current_qty,
+    })
     send_whatsapp(
         phone=shop.phone,
         template_name="low_stock_alert",
