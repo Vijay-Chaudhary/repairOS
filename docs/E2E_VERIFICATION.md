@@ -282,16 +282,16 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 |---|---|---|
 | CRITICAL | 2 | Seeded roles have 0 permissions (Receptionist/Manager can't perform any CRM action); ~~All 4 CRM Celery tasks never consumed~~ (**FIXED** `babc170`) |
 | HIGH | 1 | ~~WebSocket not configured~~ (**FIXED** `8f8393c`); `audit_logs` not written for comm-log creation or task creation/completion |
-| MED | 2 | `POST /convert/` returns full customer object (spec says `{customer_id:…}`); ~~`notification_logs` table missing~~ (**FIXED** `c41a639`); `/status/` endpoint uses `reason` field (not `lost_reason`) |
+| MED | 0 | ~~`POST /convert/` returns full customer object~~ (**FIXED** `a0e1e52`); ~~`notification_logs` table missing~~ (**FIXED** `c41a639`); ~~`/status/` endpoint uses `reason` field~~ (**FIXED** `a0e1e52`) |
 
 **Detail:**
 - **CRITICAL-1**: `GET /roles/` → all non-admin roles `permission_ids:[]`. Receptionist, Manager, Technician, Shop Manager, Billing Staff, HR Manager, Viewer all have 0 permissions. Every spec-required role-based flow fails with 403. Business logic verified only under admin JWT.
 - **CRITICAL-2** ✅ FIXED (`babc170`): CRM tasks now routed to `default` queue via `CELERY_TASK_ROUTES`.
 - **HIGH-1** ✅ FIXED (`8f8393c`): WebSocket routing wired in `asgi.py`. `TenantConsumer` accepts `/ws/` connections. `task.due_soon` events now broadcast via `send_to_shop()`.
 - **HIGH-2**: `audit_logs` table only gets rows for Lead `update` and Customer `delete`. Missing: customer `create`, comm-log `create`, task `create`/`complete`. Spec §10 requires audit trail. *(open)*
-- **MED-1**: Convert contract — spec `data:{customer_id:…}`, actual `data:{id:…, name:…, phone:…, …}` (full customer object). *(open)*
+- **MED-1** ✅ FIXED (`a0e1e52`): `/convert/` now returns `{customer_id: str(customer.id)}`.
 - **MED-2** ✅ FIXED (`c41a639`): `notification_logs` table migrated to all tenant DBs; notification tasks set tenant context before DB writes.
-- **MED-3**: `/status/` endpoint field is `reason`, DB column is `lost_reason`. Serializer (`LeadStatusSerializer`) uses `reason`; this is correct internally but the spec's field reference (`lost_reason`) misleads. *(open)*
+- **MED-3** ✅ FIXED (`a0e1e52`): `LeadStatusSerializer.reason` renamed to `lost_reason`; view passes `lost_reason` to `services.transition_lead()`.
 
 ---
 
@@ -377,14 +377,14 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 |---|---|---|
 | ~~CRITICAL~~ | ~~1~~ | ~~beat tasks dead-queued~~ **FIXED `babc170`** |
 | ~~HIGH~~ | ~~2~~ | ~~WebSocket~~ **FIXED `8f8393c`**; ~~notification_logs~~ **FIXED `c41a639`** |
-| MED | 3 | Spare-part stock not checked at request time (spec: 400 INSUFFICIENT_STOCK); `allowed_transitions` missing from job detail — FE cannot render state-machine action bar dynamically |
+| MED | 0 | ~~Spare-part stock not checked~~ (**FIXED** `a0e1e52`); ~~`allowed_transitions` missing~~ (**FIXED** `a0e1e52`) |
 
 **Detail:**
 - **CRITICAL-1** ✅ FIXED (`babc170`): All module beat tasks routed to `default` queue via `CELERY_TASK_ROUTES`.
 - **HIGH-1** ✅ FIXED (`8f8393c`): WebSocket routing wired; `_broadcast()` in repair service now calls `core.ws.send_to_shop()`.
 - **HIGH-2** ✅ FIXED (`c41a639`): `notification_logs` table migrated to all tenant DBs; notification tasks set tenant context.
-- **MED-1**: `POST /jobs/{id}/spare-parts/ {"quantity":100}` with stock=15 → 201. Stock validation in `services.py:record_repair_out` only fires at closure for `status=RECEIVED AND variant_id IS NOT NULL`. Requesting spare parts has no stock check. May be intentional (parts ordered externally), but spec says 400.
-- **MED-2/3**: `allowed_transitions` not in `JobTicketDetailSerializer`. `repair/serializers.py` has no computed field for next-valid statuses. Both H-1 and H-2 failures share this root cause.
+- **MED-1** ✅ FIXED (`a0e1e52`): `request_spare_part()` now checks `InventoryStock` for the job's shop before creating the request; raises `InsufficientStock` (400) if stock < requested_qty.
+- **MED-2/3** ✅ FIXED (`a0e1e52`): `JobTicketDetailSerializer` now includes `allowed_transitions = SerializerMethodField()` that reads from `VALID_TRANSITIONS[obj.status]`.
 
 ---
 
@@ -467,17 +467,17 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 | Severity | Count | Items |
 |---|---|---|
 | ~~CRITICAL~~ | ~~1~~ | ~~`pos.send_wholesale_payment_reminders` dead queue~~ **FIXED `babc170`** |
-| HIGH | 1 | Return over-quantity not validated — `_build_return_items()` allows qty > original_qty, creating inflated refunds and over-restocking |
-| MED | 5 | Wholesale outstanding not updated for `partially_paid` sales (credit limit check under-reports); `pos.discount.apply` permission not enforced; credit-limit error uses `BUSINESS_RULE_VIOLATION` not `CREDIT_LIMIT_EXCEEDED`; approve-return response doesn't include credit note; PDF generation not implemented (MinIO empty) |
+| ~~HIGH~~ | ~~1~~ | ~~Return over-quantity not validated~~ **FIXED `a0e1e52`** |
+| MED | 1 | PDF generation not implemented (MinIO empty) |
 
 **Detail:**
 - **CRITICAL-1** ✅ FIXED (`babc170`): `pos.send_wholesale_payment_reminders` now routed to `default` queue via `CELERY_TASK_ROUTES`.
-- **HIGH-1**: `_build_return_items()` iterates `items_input`, resolves sale item by ID, and builds return line with `qty = item_data["quantity"]` with no check against `item.quantity`. A return of 500 units on a 2-unit item succeeds with refund_amount = 2.5× original line_total. Restock would over-restock by the same factor.
-- **MED-1**: `_update_customer_outstanding()` guarded by `sale_status == COMPLETED`. A partially-paid wholesale sale leaves `customer.total_outstanding` unchanged — the credit limit check for the next sale sees stale (lower) outstanding and allows more credit than the limit should permit.
-- **MED-2**: `pos.discount.apply` permission — spec §5 says gated — but `SaleViewSet.get_permissions()` only checks `pos.counter_sale.create`. Discount fields flow through unchecked.
-- **MED-3**: Credit limit block returns `BUSINESS_RULE_VIOLATION`; spec §4 says `CREDIT_LIMIT_EXCEEDED`. Frontend error-code mapping will miss this.
-- **MED-4**: `SalesReturnSerializer` does not include `credit_note` nested object; the approve-return endpoint returns `credit_note: null`. Credit note number is accessible via the parent sale's `returns` array.
-- **MED-5**: No invoice/receipt PDF generation. `CreditNote.pdf_url` is always null. MinIO bucket has 0 objects.
+- **HIGH-1** ✅ FIXED (`a0e1e52`): `_build_return_items()` now raises `BusinessRuleViolation` when `qty > item.quantity`.
+- **MED-1** ✅ FIXED (`a0e1e52`): `_update_customer_outstanding()` now fires when `amount_outstanding > 0` regardless of `COMPLETED` vs `PARTIALLY_PAID` status.
+- **MED-2** ✅ FIXED (`a0e1e52`): `SaleViewSet.create()` checks `pos.discount.apply` permission when `discount_value > 0`.
+- **MED-3** ✅ FIXED (`a0e1e52`): `_check_credit_limit()` now raises `CreditLimitExceeded` (code: `CREDIT_LIMIT_EXCEEDED`).
+- **MED-4** ✅ FIXED (`a0e1e52`): `partial_update()` (approve) re-fetches `ret` with `select_related("credit_note")` before serializing; `credit_note_number` and `credit_note_pdf_url` now populated in response.
+- **MED-5**: No invoice/receipt PDF generation. `CreditNote.pdf_url` is always null. MinIO bucket has 0 objects. *(open)*
 
 ---
 
@@ -570,8 +570,8 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 | Severity | Count | Items |
 |---|---|---|
 | ~~CRITICAL~~ | ~~3~~ | ~~AMC tasks dead queue~~ **FIXED `babc170`**; ~~celery-beat crash~~ **FIXED `babc170`**; ~~WebSocket disabled~~ **FIXED `8f8393c`** |
-| HIGH | 1 | C3b (`GET /contracts/{id}/visits/?status=scheduled` → 404 because `_get_contract()` applies status filter to contract queryset) |
-| MED | 3 | C1b (`next_visit_date` shows pre-renewal visit after renewal), E2b (visit overlap), H6 (no WS client for `amc.visit_due`) |
+| ~~HIGH~~ | ~~1~~ | ~~C3b (`_get_contract()` applies visit status filter to contract queryset → 404)~~ **FIXED `a0e1e52`** |
+| MED | 1 | ~~C1b (`next_visit_date` shows pre-renewal visit)~~ **FIXED `a0e1e52`**; E2b (visit overlap); H6 (no WS client for `amc.visit_due`) |
 | Cross-module | — | CRITICAL seed-data bug (all non-admin roles have 0 permissions) blocks D1/D2 role-specific coverage — reported in Module 01 |
 
 **Pass rate: 22 / 30 (73%)** — all 3 CRITICALs subsequently fixed
@@ -666,7 +666,7 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 | Severity | Count | Items |
 |---|---|---|
 | ~~CRITICAL~~ | ~~2~~ | ~~`notification_logs` missing~~ **FIXED `c41a639`**; ~~WebSocket disabled~~ **FIXED `8f8393c`** |
-| MED | 4 | B1 (`InsufficientStock` generic message), B3b (CSV error is raw Python repr), E4 (no `audit_logs` for adjustments/transfers), E5 (`inter_shop_transfer` outer `transaction.atomic()` missing `using=` — not truly atomic across tenant DB legs) |
+| MED | 3 | B1 (`InsufficientStock` generic message), B3b (CSV error is raw Python repr), E4 (no `audit_logs` for adjustments/transfers); ~~E5 (`inter_shop_transfer` outer `transaction.atomic()` missing `using=`)~~ **FIXED `a0e1e52`** |
 | Cross-module | — | CRITICAL seed-data bug (all non-admin roles have 0 permissions) blocks role-specific coverage |
 
 **Pass rate: 23 / 29 (79%)** — both cross-module CRITICALs subsequently fixed
@@ -1045,7 +1045,7 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 | State | Where | Status | Evidence |
 |---|---|---|---|
 | Statutory IDs masked in employee API | `GET /hr/employees/` | ✅ PASS | `bank_account_masked`, `pan_masked`, `aadhar_masked` present; encrypted field names absent from response. New employee with values → `"****"` |
-| `BulkAttendanceSerializer` dead code | `hr/serializers.py:80`, `hr/views.py:21` | ❌ FAIL **LOW** | `BulkAttendanceSerializer` (per-record format, `{records:[...]}`) defined and imported in views but never used. `BulkAttendanceView` uses `DateRangeBulkAttendanceSerializer`. FE `hrApi.bulkMarkAttendance` matches DateRange format → FE/BE aligned but serializer is dead code |
+| `BulkAttendanceSerializer` dead code | `hr/serializers.py:80`, `hr/views.py:21` | ✅ FIXED `a0e1e52` | `BulkAttendanceSerializer` removed from `serializers.py`; import removed from `views.py`. |
 | `markSalaryPaid` absent from `hrApi` | `frontend/src/lib/api/hr.ts` | ✅ PASS (by design) | `hrApi` has `approveSalarySlip` (draft→approved) only. `paid` transition not in hrApi; salary page shows "paid" in status filter but has no Approve button for approved slips. `PATCH {status:"paid"}` works via backend; FE omission is intentional — paid status likely set externally (accounting integration) |
 
 #### Module 09 Bug Summary
@@ -1055,7 +1055,7 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 | H9-2 | ~~HIGH~~ → **FIXED `babc170`** | ~~`hr.send_payroll_reminders` dead queue~~ — routed to `default` queue. Celery-beat crash also fixed. | `hr/tasks.py`, beat table migration |
 | H9-3 | ~~MED~~ → **FIXED `70f2680`** | ~~`gross_salary` goes stale after PATCH~~ — `EmployeeDetailView.patch()` now recalculates `gross_salary = basic_salary + hra + other_allowances` whenever any component changes. | `hr/views.py:157-158` |
 | H9-4 | LOW | Duplicate employee code returns non-standard `{"detail":"..."}` envelope instead of `{success:false, error:{code,message}}` | `hr/views.py:83-86` |
-| H9-5 | LOW | `LeaveRequest` TS interface declares `created_at:string` but `LeaveRequestSerializer` does not serialize it — FE type mismatch; any UI code reading `leave.created_at` gets `undefined` | `hr.ts:59`, `hr/serializers.py:114-123` |
+| H9-5 | ~~LOW~~ → **FIXED `a0e1e52`** | ~~`LeaveRequest` TS interface declares `created_at:string` but `LeaveRequestSerializer` does not serialize it~~ — `created_at` added to `LeaveRequestSerializer.fields`. | `hr/serializers.py:114-123` |
 
 ---
 
@@ -1146,12 +1146,12 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 | ID | Severity | Description | Location |
 |---|---|---|---|
 | F10-1 | ~~HIGH~~ → **FIXED `70f2680`** | ~~Petty cash overdraft not prevented~~ — `record_petty_cash_txn` now raises `BusinessRuleViolation` (HTTP 422) when `new_balance < 0` inside the `SELECT FOR UPDATE` block. | `finance/services.py:49-54` |
-| F10-2 | MED | `BudgetHeadListView.post()` has no serializer — reads `request.data` directly, accepts any category string. `BudgetHead.Category` choices never enforced. Seed data has `operational/marketing/capex` which don't match model choices `fixed/variable/capital` | `finance/views.py:111-128`, `finance/models.py:71-74` |
+| F10-2 | ~~MED~~ → **FIXED `a0e1e52`** | ~~`BudgetHeadListView.post()` has no serializer~~ — now uses `CreateBudgetHeadSerializer`. Seed data category mismatch (operational/marketing/capex vs fixed/variable/capital) remains open. | `finance/views.py:111-128` |
 | F10-3 | MED | No audit trail — zero `audit_log` writes in entire finance module | `finance/services.py`, `finance/views.py` |
 | F10-4 | MED | `BudgetCategory` FE type `'fixed'\|'variable'\|'capital'` doesn't cover seed data values `operational/marketing/capex` — FE labels/filters produce blanks for seed data | `finance.ts:5`, seed data |
-| F10-5 | LOW | `PettyCashTransactionSerializer` missing `receipt_url` field — FE type declares it, UI reads `undefined` | `finance/serializers.py:33-45` |
-| F10-6 | LOW | `CreateAssetSerializer` has no `supplier_id` field — FE sends it but BE ignores; `ShopAsset.supplier` always null | `finance/serializers.py:121-134` |
-| F10-7 | LOW | `PettyCashAccountView` + `PettyCashTransactionView` use `hr.petty_cash.manage` permission — wrong `hr.` module prefix for a finance endpoint | `finance/views.py:43,57` |
+| F10-5 | ~~LOW~~ → **FIXED `a0e1e52`** | ~~`PettyCashTransactionSerializer` missing `receipt_url`~~ — added to `fields`. | `finance/serializers.py:33-45` |
+| F10-6 | ~~LOW~~ → **FIXED `a0e1e52`** | ~~`CreateAssetSerializer` has no `supplier_id`~~ — field added to serializer and wired in view. | `finance/serializers.py`, `finance/views.py:268` |
+| F10-7 | ~~LOW~~ → **FIXED `a0e1e52`** | ~~`hr.petty_cash.manage` wrong prefix~~ — corrected to `finance.petty_cash.manage`. | `finance/views.py:43,57` |
 | F10-8 | LOW | Duplicate asset code returns non-standard `{"detail":"…"}` envelope | `finance/views.py:263-266` |
 
 ---
