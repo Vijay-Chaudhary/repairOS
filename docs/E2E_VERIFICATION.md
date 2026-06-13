@@ -767,7 +767,7 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 | Severity | Count | Items |
 |---|---|---|
 | ~~CRITICAL~~ | ~~2~~ | ~~`procurement.send_bill_due_reminders` dead queue + celery-beat crash~~ **FIXED `babc170`** |
-| HIGH | 1 | C4 (`GET /purchase-returns/` returns `[]` for tenant-wide admin — `PurchaseReturnView.get()` missing `is_tenant_wide` guard in shop-id filter) |
+| ~~HIGH~~ | ~~1~~ | ~~C4 (`PurchaseReturnView.get()` missing `is_tenant_wide` guard)~~ **FIXED `ec239ca`** |
 | MED | 1 | A1 supplier create response includes `bank_account_number: null` (write-only field leaks as null instead of being excluded from response) |
 | Cross-module | — | CRITICAL seed-data bug (0 permissions for non-admin roles) |
 
@@ -867,7 +867,7 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 | Severity | Count | Items |
 |---|---|---|
 | ~~HIGH~~ | ~~2~~ | ~~A4/F2 PDF generation~~ **FIXED `70f2680`**; Razorpay payment link → 501 FEATURE_PENDING *(open)* |
-| MED | 2 | B3 (₹0 invoice created with 0 line items — no `len(items)>0` guard); E5 (no audit trail — billing services.py has no `_write_audit()` calls) |
+| MED | 0 | ~~B3 (₹0 invoice with 0 items)~~ **FIXED `ec239ca`**; ~~E5 (no audit trail)~~ **FIXED `ec239ca`** |
 | LOW | 1 | B4 (duplicate invoice returns `{"detail":"…"}` not standard `{code,message}` envelope) |
 | ~~CRITICAL~~ | ~~1~~ | ~~F3 beat task dead-queued + celery-beat crash~~ **FIXED `babc170`** |
 
@@ -962,7 +962,7 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 | Severity | Count | Items |
 |---|---|---|
 | ~~HIGH~~ | ~~1~~ | ~~`commissions.generate_payout_pdf` dead queue, `pdf_url` always empty~~ **FIXED `70f2680`** |
-| MED | 1 | E4 (no audit trail — payout create/approve/pay lifecycle not logged) |
+| MED | 0 | ~~E4 (no audit trail)~~ **FIXED `ec239ca`** |
 | LOW | 1 | B2 (advance already-paid payout returns `{"detail":"…"}` not standard `{code,message}` envelope) |
 
 **Pass rate: 28 / 31 (90%)** — HIGH subsequently fixed (`generate_payout_pdf` now has tenant context + routed correctly)
