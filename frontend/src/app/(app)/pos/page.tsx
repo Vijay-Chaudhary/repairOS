@@ -192,7 +192,7 @@ export default function PosPage() {
               <button
                 onClick={() => { setSaleType(t); setItems([]); }}
                 className={cn(
-                  'px-3 py-1.5 text-xs font-medium transition-colors',
+                  'h-9 px-3 text-xs font-medium transition-colors',
                   saleType === t ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)]',
                 )}
               >

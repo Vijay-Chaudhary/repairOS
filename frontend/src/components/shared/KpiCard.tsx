@@ -1,17 +1,27 @@
 import { type LucideIcon, TrendingUp, TrendingDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+type KpiVariant = 'default' | 'success' | 'warning' | 'danger';
+
 interface KpiCardProps {
   title: string;
   value: string | number;
   subtitle?: string;
   icon?: LucideIcon;
+  variant?: KpiVariant;
   trend?: { value: number; label?: string };
   loading?: boolean;
   className?: string;
 }
 
-export function KpiCard({ title, value, subtitle, icon: Icon, trend, loading, className }: KpiCardProps) {
+const iconBoxStyles: Record<KpiVariant, string> = {
+  default: 'bg-[var(--accent)]/10 text-[var(--accent)]',
+  success: 'bg-[var(--success)]/10 text-[var(--success)]',
+  warning: 'bg-[var(--warning)]/10 text-[var(--warning)]',
+  danger:  'bg-[var(--danger)]/10 text-[var(--danger)]',
+};
+
+export function KpiCard({ title, value, subtitle, icon: Icon, variant = 'default', trend, loading, className }: KpiCardProps) {
   return (
     <div className={cn('rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm', className)}>
       <div className="flex items-start justify-between gap-2">
@@ -31,8 +41,8 @@ export function KpiCard({ title, value, subtitle, icon: Icon, trend, loading, cl
           )}
         </div>
         {Icon && (
-          <div className="rounded-md bg-[var(--accent)]/10 p-2 shrink-0">
-            <Icon className="h-5 w-5 text-[var(--accent)]" />
+          <div className={cn('rounded-md p-2 shrink-0', iconBoxStyles[variant])}>
+            <Icon className="h-5 w-5" />
           </div>
         )}
       </div>

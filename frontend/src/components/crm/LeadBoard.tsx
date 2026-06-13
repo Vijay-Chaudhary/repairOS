@@ -17,12 +17,12 @@ export interface LeadColumnData {
 // ── Column definitions ────────────────────────────────────────────────────────
 
 const LEAD_KANBAN_COLS: KanbanColumnDef[] = [
-  { id: 'new',        label: 'New' },
-  { id: 'contacted',  label: 'Contacted' },
-  { id: 'interested', label: 'Interested' },
-  { id: 'quoted',     label: 'Quoted' },
-  { id: 'converted',  label: 'Converted', colorToken: 'var(--success, #16a34a)', collapsible: true, defaultCollapsed: true },
-  { id: 'lost',       label: 'Lost',      colorToken: 'var(--danger)',           collapsible: true, defaultCollapsed: true },
+  { id: 'new',        label: 'New',       colorToken: 'var(--accent)' },
+  { id: 'contacted',  label: 'Contacted', colorToken: 'var(--status-progress)' },
+  { id: 'interested', label: 'Interested',colorToken: 'var(--warning)' },
+  { id: 'quoted',     label: 'Quoted',    colorToken: 'var(--info)' },
+  { id: 'converted',  label: 'Converted', colorToken: 'var(--success)', collapsible: true, defaultCollapsed: true },
+  { id: 'lost',       label: 'Lost',      colorToken: 'var(--danger)',  collapsible: true, defaultCollapsed: true },
 ];
 
 // ── Valid transitions from backend spec §4.1 ─────────────────────────────────
@@ -86,6 +86,9 @@ export function LeadBoard({ columns, onCardMove }: LeadBoardProps) {
     [],
   );
 
+  const columnCounts = Object.fromEntries(columns.map((c) => [c.status, c.count]));
+  const isLoadingMap = Object.fromEntries(columns.map((c) => [c.status, c.isLoading]));
+
   return (
     <KanbanBoard
       columns={LEAD_KANBAN_COLS}
@@ -96,6 +99,9 @@ export function LeadBoard({ columns, onCardMove }: LeadBoardProps) {
       renderCard={renderCard}
       columnOrderStorageKey="repaiross-kanban-leads-column-order"
       transitionDialogs={LEAD_TRANSITION_DIALOGS}
+      columnCounts={columnCounts}
+      isLoadingMap={isLoadingMap}
+      emptyLabel="No leads in this stage"
     />
   );
 }

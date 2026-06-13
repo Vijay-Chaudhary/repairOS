@@ -1,7 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { Clock, User, Wrench, AlertTriangle, Star, MoreVertical, ArrowRight, RotateCcw, Eye } from 'lucide-react';
+import { differenceInCalendarDays } from 'date-fns';
+import { Clock, User, Wrench, AlertTriangle, Star, CalendarClock, MoreVertical, ArrowRight, RotateCcw, Eye } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,8 +21,8 @@ import { STATUS_TRANSITIONS } from '@/lib/api/repair';
 
 const PRIORITY_STYLE: Record<JobPriority, string> = {
   normal: '',
-  urgent: 'border-l-4 border-l-[var(--warning)]',
-  vip:    'border-l-4 border-l-[var(--accent)]',
+  urgent: 'border-l-4 border-l-[var(--warning)] bg-[var(--warning)]/5',
+  vip:    'border-l-4 border-l-[var(--accent)] bg-[var(--accent)]/5',
 };
 
 const PRIORITY_ICON = {
@@ -29,6 +30,8 @@ const PRIORITY_ICON = {
   urgent: <AlertTriangle className="h-3 w-3 text-[var(--warning)]" />,
   vip:    <Star className="h-3 w-3 text-[var(--accent)]" />,
 };
+
+const TERMINAL_STATUSES = new Set<JobStatus>(['delivered', 'closed', 'cancelled']);
 
 export interface JobCardKanbanProps {
   validTargets: string[];
@@ -44,6 +47,15 @@ interface JobCardProps {
 
 export function JobCard({ job, compact, kanban }: JobCardProps) {
   const router = useRouter();
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const deliveryDate = job.expected_delivery_date ? new Date(job.expected_delivery_date) : null;
+  const isOverdue =
+    deliveryDate !== null &&
+    deliveryDate < today &&
+    !TERMINAL_STATUSES.has(job.status);
+  const overdueDays = isOverdue && deliveryDate ? differenceInCalendarDays(today, deliveryDate) : 0;
 
   const handleCardClick = (e: React.MouseEvent) => {
     // Don't navigate if clicking inside the dropdown menu trigger area
@@ -67,10 +79,11 @@ export function JobCard({ job, compact, kanban }: JobCardProps) {
         PRIORITY_STYLE[job.priority],
       )}
     >
-      <div className="flex items-start justify-between gap-2 mb-2">
+      {/* Top row: job number + status + menu */}
+      <div className="flex items-center justify-between gap-2 mb-1.5">
         <div className="flex items-center gap-1 min-w-0">
           {PRIORITY_ICON[job.priority]}
-          <span className="font-mono text-xs text-[var(--text-muted)] font-medium truncate">
+          <span className="font-mono text-[11px] text-[var(--text-muted)] truncate">
             {job.job_number}
           </span>
         </div>
@@ -154,7 +167,8 @@ export function JobCard({ job, compact, kanban }: JobCardProps) {
         </div>
       </div>
 
-      <p className="text-body-sm font-medium text-[var(--text)] truncate">{job.customer_name}</p>
+      {/* Customer name — primary identifier */}
+      <p className="text-body font-semibold text-[var(--text)] truncate leading-snug">{job.customer_name}</p>
 
       <div className="flex items-center gap-1 mt-0.5 text-xs text-[var(--text-muted)]">
         <Wrench className="h-3 w-3 shrink-0" />
@@ -167,6 +181,19 @@ export function JobCard({ job, compact, kanban }: JobCardProps) {
             <div className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
               <User className="h-3 w-3 shrink-0" />
               <span className="truncate">{job.assigned_technician_name}</span>
+            </div>
+          )}
+          {job.expected_delivery_date && (
+            <div className={cn(
+              'flex items-center gap-1 text-xs',
+              isOverdue ? 'text-[var(--danger)] font-medium' : 'text-[var(--text-muted)]',
+            )}>
+              <CalendarClock className="h-3 w-3 shrink-0" />
+              <span>
+                {isOverdue
+                  ? `${overdueDays}d overdue`
+                  : `Due ${formatDate(job.expected_delivery_date)}`}
+              </span>
             </div>
           )}
           <div className="flex items-center justify-between mt-1">

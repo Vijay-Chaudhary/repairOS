@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 
 interface UiState {
   sidebarCollapsed: boolean;
+  mobileNavOpen: boolean;
   theme: 'light' | 'dark' | 'system';
   commandPaletteOpen: boolean;
   pendingToast: { type: 'success' | 'error' | 'info'; message: string } | null;
@@ -10,6 +11,8 @@ interface UiState {
 
   setSidebarCollapsed: (v: boolean) => void;
   toggleSidebar: () => void;
+  toggleMobileNav: () => void;
+  setMobileNavOpen: (v: boolean) => void;
   setTheme: (theme: 'light' | 'dark' | 'system') => void;
   setCommandPaletteOpen: (v: boolean) => void;
   setPendingToast: (toast: UiState['pendingToast']) => void;
@@ -22,6 +25,7 @@ export const useUiStore = create<UiState>()(
   persist(
     (set, get) => ({
       sidebarCollapsed: false,
+      mobileNavOpen: false,
       theme: 'system' as const,
       commandPaletteOpen: false,
       pendingToast: null,
@@ -29,6 +33,8 @@ export const useUiStore = create<UiState>()(
 
       setSidebarCollapsed: (v: boolean) => set({ sidebarCollapsed: v }),
       toggleSidebar: () => set({ sidebarCollapsed: !get().sidebarCollapsed }),
+      toggleMobileNav: () => set({ mobileNavOpen: !get().mobileNavOpen }),
+      setMobileNavOpen: (v: boolean) => set({ mobileNavOpen: v }),
       setTheme: (theme: 'light' | 'dark' | 'system') => set({ theme }),
       setCommandPaletteOpen: (v: boolean) => set({ commandPaletteOpen: v }),
       setPendingToast: (toast: UiState['pendingToast']) => set({ pendingToast: toast }),

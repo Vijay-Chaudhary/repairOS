@@ -26,22 +26,19 @@ const LIST_COLUMNS: Column<Invoice>[] = [
     key: 'number',
     header: 'Invoice #',
     cell: (r) => (
-      <div>
-        <p className="font-mono text-xs font-medium text-[var(--text)]">{r.invoice_number}</p>
-        {r.job_number && (
-          <p className="text-xs text-[var(--text-muted)]">Job {r.job_number}</p>
-        )}
-      </div>
+      <span className="font-mono text-xs font-medium text-[var(--text)]">
+        {r.invoice_number}{r.job_number ? <span className="text-[var(--text-muted)] font-normal"> · {r.job_number}</span> : null}
+      </span>
     ),
   },
   {
     key: 'customer',
     header: 'Customer',
     cell: (r) => (
-      <div>
-        <p className="text-body-sm font-medium text-[var(--text)]">{r.customer_name}</p>
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-body-sm font-medium text-[var(--text)] truncate">{r.customer_name}</span>
         {r.customer_phone && (
-          <p className="text-xs text-[var(--text-muted)]">{formatPhone(r.customer_phone)}</p>
+          <span className="text-xs text-[var(--text-muted)] shrink-0">{formatPhone(r.customer_phone)}</span>
         )}
       </div>
     ),

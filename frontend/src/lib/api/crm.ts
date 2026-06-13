@@ -122,6 +122,7 @@ export interface LeadFilters {
   shop_id?: string;
   status?: LeadStatus;
   assigned_to?: string;
+  source?: LeadSource;
   search?: string;
   page?: number;
 }

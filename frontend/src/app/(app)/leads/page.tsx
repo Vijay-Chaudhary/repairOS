@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Plus, Search, LayoutGrid, List } from 'lucide-react';
+import { Plus, Search, LayoutGrid, List, Filter, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -42,26 +42,80 @@ const leadSchema = z.object({
 
 type LeadFormValues = z.infer<typeof leadSchema>;
 
+const SOURCE_BADGE_STYLE: Record<LeadSource, string> = {
+  walk_in:  'bg-[var(--accent)]/10 text-[var(--accent)]',
+  whatsapp: 'bg-[var(--success)]/10 text-[var(--success)]',
+  referral: 'bg-[var(--info)]/10 text-[var(--info)]',
+  google:   'bg-[var(--warning)]/10 text-[var(--warning)]',
+  facebook: 'bg-[var(--accent)]/10 text-[var(--accent)]',
+  other:    'bg-[var(--surface-2)] text-[var(--text-muted)]',
+};
+
 const LIST_COLUMNS: Column<Lead>[] = [
-  { key: 'name', header: 'Name', cell: (r) => (
-    <div>
-      <p className="text-body-sm font-medium text-[var(--text)]">{r.name}</p>
-      <p className="text-xs text-[var(--text-muted)]">{formatPhone(r.phone)}</p>
-    </div>
-  )},
-  { key: 'source', header: 'Source', cell: (r) => (
-    <span className="text-body-sm text-[var(--text-muted)]">{SOURCE_LABELS[r.source]}</span>
-  )},
-  { key: 'status', header: 'Status', cell: (r) => <StatusBadge status={r.status} /> },
-  { key: 'device', header: 'Device', cell: (r) => (
-    <span className="text-body-sm text-[var(--text-muted)]">{r.device_type ?? '—'}</span>
-  )},
-  { key: 'assigned', header: 'Assigned', cell: (r) => (
-    <span className="text-body-sm text-[var(--text-muted)]">{r.assigned_to_name ?? '—'}</span>
-  )},
-  { key: 'date', header: 'Created', cell: (r) => (
-    <span className="text-body-sm text-[var(--text-muted)]">{formatDate(r.created_at)}</span>
-  )},
+  {
+    key: 'name',
+    header: 'Name',
+    cell: (r) => (
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-body-sm font-medium text-[var(--text)] truncate">{r.name}</span>
+        <a
+          href={`tel:${r.phone}`}
+          className="flex items-center gap-0.5 text-xs text-[var(--accent)] hover:underline shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Phone className="h-2.5 w-2.5" />
+          {formatPhone(r.phone)}
+        </a>
+      </div>
+    ),
+  },
+  {
+    key: 'source',
+    header: 'Source',
+    headerClassName: 'w-[110px]',
+    cell: (r) => (
+      <span className={cn('text-[11px] font-medium rounded-full px-2 py-0.5 whitespace-nowrap', SOURCE_BADGE_STYLE[r.source])}>
+        {SOURCE_LABELS[r.source]}
+      </span>
+    ),
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    headerClassName: 'w-[120px]',
+    cell: (r) => <StatusBadge status={r.status} />,
+  },
+  {
+    key: 'device',
+    header: 'Device',
+    headerClassName: 'w-[130px]',
+    cell: (r) => (
+      <span className="text-body-sm text-[var(--text-muted)]">{r.device_type ?? '—'}</span>
+    ),
+  },
+  {
+    key: 'notes',
+    header: 'Notes',
+    cell: (r) => r.notes
+      ? <span className="block text-xs text-[var(--text-muted)] italic truncate max-w-[220px]">{r.notes}</span>
+      : <span className="text-xs text-[var(--text-muted)]">—</span>,
+  },
+  {
+    key: 'assigned',
+    header: 'Assigned to',
+    headerClassName: 'w-[130px]',
+    cell: (r) => (
+      <span className="text-body-sm text-[var(--text-muted)]">{r.assigned_to_name ?? '—'}</span>
+    ),
+  },
+  {
+    key: 'date',
+    header: 'Created',
+    headerClassName: 'w-[100px]',
+    cell: (r) => (
+      <span className="text-body-sm text-[var(--text-muted)] tabular-nums">{formatDate(r.created_at)}</span>
+    ),
+  },
 ];
 
 export default function LeadsPage() {
@@ -71,6 +125,7 @@ export default function LeadsPage() {
 
   const [view, setView] = useState<ViewMode>('kanban');
   const [search, setSearch] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<LeadSource | 'all'>('all');
   const [createOpen, setCreateOpen] = useState(false);
   const [listPage, setListPage] = useState(1);
 
@@ -80,7 +135,8 @@ export default function LeadsPage() {
   const baseFilters = useMemo(() => ({
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
     search: debouncedSearch || undefined,
-  }), [isAllShops, activeShopId, debouncedSearch]);
+    source: sourceFilter === 'all' ? undefined : sourceFilter,
+  }), [isAllShops, activeShopId, debouncedSearch, sourceFilter]);
 
   // Kanban: per-column queries
   const columnQueries = useQueries({
@@ -146,18 +202,32 @@ export default function LeadsPage() {
           />
         </div>
 
+        {/* Source filter */}
+        <Select value={sourceFilter} onValueChange={(v) => setSourceFilter(v as LeadSource | 'all')}>
+          <SelectTrigger className="h-9 w-[140px]">
+            <Filter className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+            <SelectValue placeholder="All sources" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All sources</SelectItem>
+            {(Object.entries(SOURCE_LABELS) as [LeadSource, string][]).map(([v, l]) => (
+              <SelectItem key={v} value={v}>{l}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         <div className="flex items-center gap-1 ml-auto">
           <div className="flex rounded-md border border-[var(--border)] overflow-hidden">
             <button
               onClick={() => setView('kanban')}
-              className={cn('p-2 transition-colors', view === 'kanban' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--surface)] text-[var(--text-muted)] hover:bg-[var(--surface-2)]')}
+              className={cn('h-9 w-9 flex items-center justify-center transition-colors', view === 'kanban' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--surface)] text-[var(--text-muted)] hover:bg-[var(--surface-2)]')}
               title="Kanban view"
             >
               <LayoutGrid className="h-4 w-4" />
             </button>
             <button
               onClick={() => setView('list')}
-              className={cn('p-2 transition-colors', view === 'list' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--surface)] text-[var(--text-muted)] hover:bg-[var(--surface-2)]')}
+              className={cn('h-9 w-9 flex items-center justify-center transition-colors', view === 'list' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--surface)] text-[var(--text-muted)] hover:bg-[var(--surface-2)]')}
               title="List view"
             >
               <List className="h-4 w-4" />

@@ -18,14 +18,14 @@ export interface KanbanColumnData {
 // ── Column definitions ────────────────────────────────────────────────────────
 
 const JOB_KANBAN_COLS: KanbanColumnDef[] = [
-  { id: 'open',             label: 'Open' },
-  { id: 'in_progress',      label: 'In Progress' },
-  { id: 'on_hold',          label: 'On Hold',  colorToken: 'var(--warning)' },
-  { id: 'ready_for_qc',     label: 'QC' },
-  { id: 'ready_for_pickup', label: 'Ready' },
-  { id: 'delivered',        label: 'Delivered' },
-  { id: 'cancelled',        label: 'Cancelled', colorToken: 'var(--danger)',      collapsible: true, defaultCollapsed: true },
-  { id: 'closed',           label: 'Closed',    colorToken: 'var(--text-muted)',  collapsible: true, defaultCollapsed: true },
+  { id: 'open',             label: 'Open',        colorToken: 'var(--status-open)' },
+  { id: 'in_progress',      label: 'In Progress', colorToken: 'var(--status-progress)' },
+  { id: 'on_hold',          label: 'On Hold',     colorToken: 'var(--status-hold)' },
+  { id: 'ready_for_qc',     label: 'QC',          colorToken: 'var(--accent)' },
+  { id: 'ready_for_pickup', label: 'Ready',        colorToken: 'var(--status-ready)' },
+  { id: 'delivered',        label: 'Delivered',   colorToken: 'var(--success)' },
+  { id: 'cancelled',        label: 'Cancelled',   colorToken: 'var(--status-cancelled)', collapsible: true, defaultCollapsed: true },
+  { id: 'closed',           label: 'Closed',      colorToken: 'var(--text-muted)',        collapsible: true, defaultCollapsed: true },
 ];
 
 // ── Valid transitions from backend spec §4.1 (Kanban columns only) ────────────
@@ -105,6 +105,9 @@ export function JobBoard({ columns, onCardMove }: JobBoardProps) {
     [onCardMove, isAdmin],
   );
 
+  const columnCounts = Object.fromEntries(columns.map((c) => [c.status, c.count]));
+  const isLoadingMap = Object.fromEntries(columns.map((c) => [c.status, c.isLoading]));
+
   return (
     <KanbanBoard
       columns={JOB_KANBAN_COLS}
@@ -115,6 +118,9 @@ export function JobBoard({ columns, onCardMove }: JobBoardProps) {
       renderCard={renderCard}
       columnOrderStorageKey="repaiross-kanban-jobs-column-order"
       transitionDialogs={JOB_TRANSITION_DIALOGS}
+      columnCounts={columnCounts}
+      isLoadingMap={isLoadingMap}
+      emptyLabel="No jobs in this stage"
     />
   );
 }

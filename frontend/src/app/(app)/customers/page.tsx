@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -17,35 +17,87 @@ import { useActiveShopStore } from '@/lib/stores/activeShopStore';
 import { useDebounce } from '@/lib/hooks/useDebounce';
 import { formatDate } from '@/lib/format/date';
 import { formatPhone } from '@/lib/format/phone';
+import { cn } from '@/lib/utils';
+
+const TYPE_BADGE: Record<CustomerType, string> = {
+  individual: 'bg-[var(--info)]/10 text-[var(--info)]',
+  business:   'bg-[var(--accent)]/10 text-[var(--accent)]',
+};
+const TYPE_LABEL: Record<CustomerType, string> = {
+  individual: 'Individual',
+  business:   'Business',
+};
 
 const LIST_COLUMNS: Column<Customer>[] = [
-  { key: 'name', header: 'Name', cell: (r) => (
-    <div>
-      <p className="text-body-sm font-medium text-[var(--text)]">{r.name}</p>
-      <p className="text-xs text-[var(--text-muted)]">{formatPhone(r.phone)}</p>
-    </div>
-  )},
-  { key: 'type', header: 'Type', cell: (r) => (
-    <span className="text-body-sm text-[var(--text-muted)] capitalize">{r.customer_type}</span>
-  )},
-  { key: 'city', header: 'City', cell: (r) => (
-    <span className="text-body-sm text-[var(--text-muted)]">{r.city ?? '—'}</span>
-  )},
-  { key: 'jobs', header: 'Jobs', cell: (r) => (
-    <span className="font-mono text-body-sm text-[var(--text)]">{r.total_jobs}</span>
-  )},
-  { key: 'billed', header: 'Total billed', cell: (r) => (
-    <Money amount={r.total_billed} className="text-body-sm" />
-  )},
-  { key: 'outstanding', header: 'Outstanding', cell: (r) => (
-    <Money
-      amount={r.total_outstanding}
-      className={r.total_outstanding > 0 ? 'text-body-sm text-[var(--danger)]' : 'text-body-sm'}
-    />
-  )},
-  { key: 'since', header: 'Since', cell: (r) => (
-    <span className="text-body-sm text-[var(--text-muted)]">{formatDate(r.created_at)}</span>
-  )},
+  {
+    key: 'name',
+    header: 'Name',
+    cell: (r) => (
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-body-sm font-medium text-[var(--text)] truncate">{r.name}</span>
+        <a
+        href={`tel:${r.phone}`}
+        className="flex items-center gap-0.5 text-xs text-[var(--accent)] hover:underline shrink-0"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Phone className="h-2.5 w-2.5" />
+        {formatPhone(r.phone)}
+      </a>
+      </div>
+    ),
+  },
+  {
+    key: 'type',
+    header: 'Type',
+    headerClassName: 'w-[110px]',
+    cell: (r) => (
+      <span className={cn('text-[11px] font-medium rounded-full px-2 py-0.5 whitespace-nowrap', TYPE_BADGE[r.customer_type])}>
+        {TYPE_LABEL[r.customer_type]}
+      </span>
+    ),
+  },
+  {
+    key: 'city',
+    header: 'City',
+    cell: (r) => (
+      <span className="text-body-sm text-[var(--text-muted)]">{r.city ?? '—'}</span>
+    ),
+  },
+  {
+    key: 'jobs',
+    header: 'Jobs',
+    headerClassName: 'w-[60px] text-right',
+    className: 'text-right',
+    cell: (r) => r.total_jobs > 0
+      ? <span className="inline-flex items-center justify-center min-w-[20px] h-5 rounded-full bg-[var(--accent)]/10 text-[var(--accent)] text-[11px] font-medium px-1.5 tabular-nums">{r.total_jobs}</span>
+      : <span className="text-xs text-[var(--text-muted)]">—</span>,
+  },
+  {
+    key: 'billed',
+    header: 'Total billed',
+    headerClassName: 'text-right w-[120px]',
+    className: 'text-right',
+    cell: (r) => r.total_billed > 0
+      ? <Money amount={r.total_billed} className="text-body-sm tabular-nums" />
+      : <span className="text-xs text-[var(--text-muted)]">—</span>,
+  },
+  {
+    key: 'outstanding',
+    header: 'Outstanding',
+    headerClassName: 'text-right w-[120px]',
+    className: 'text-right',
+    cell: (r) => r.total_outstanding > 0
+      ? <Money amount={r.total_outstanding} className="text-body-sm tabular-nums text-[var(--danger)] font-medium" />
+      : <span className="text-xs text-[var(--text-muted)]">—</span>,
+  },
+  {
+    key: 'since',
+    header: 'Since',
+    headerClassName: 'w-[100px]',
+    cell: (r) => (
+      <span className="text-body-sm text-[var(--text-muted)] tabular-nums">{formatDate(r.created_at)}</span>
+    ),
+  },
 ];
 
 export default function CustomersPage() {

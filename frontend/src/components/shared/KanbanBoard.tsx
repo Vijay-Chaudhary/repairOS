@@ -64,6 +64,9 @@ export interface KanbanBoardProps<T extends KanbanCardBase> {
   renderCard: (card: T, isDragging: boolean) => React.ReactNode;
   columnOrderStorageKey: string;
   transitionDialogs?: Record<string, TransitionDialog>;
+  columnCounts?: Record<string, number>;
+  isLoadingMap?: Record<string, boolean>;
+  emptyLabel?: string;
 }
 
 // ── localStorage helpers ─────────────────────────────────────────────────────
@@ -172,6 +175,9 @@ interface SortableColumnProps<T extends KanbanCardBase> {
   overColumnId: string | null;
   renderCard: (card: T, isDragging: boolean) => React.ReactNode;
   isValidTarget: boolean;
+  apiCount?: number;
+  isLoading?: boolean;
+  emptyLabel?: string;
 }
 
 function SortableColumn<T extends KanbanCardBase>({
@@ -182,6 +188,9 @@ function SortableColumn<T extends KanbanCardBase>({
   activeCardId,
   renderCard,
   isValidTarget,
+  apiCount,
+  isLoading,
+  emptyLabel,
 }: SortableColumnProps<T>) {
   const {
     attributes,
@@ -200,6 +209,8 @@ function SortableColumn<T extends KanbanCardBase>({
 
   const isDraggingCard = activeCardId !== null;
 
+  const displayCount = apiCount ?? cards.length;
+
   return (
     <div
       ref={setNodeRef}
@@ -211,6 +222,14 @@ function SortableColumn<T extends KanbanCardBase>({
         isDraggingCard && !isValidTarget && activeCardId && 'opacity-60',
       )}
     >
+      {/* Colored accent stripe */}
+      {!collapsed && colDef.colorToken && (
+        <div
+          className="h-[3px] rounded-t-lg mb-1 shrink-0"
+          style={{ background: colDef.colorToken }}
+        />
+      )}
+
       {/* Column header */}
       <div
         className={cn(
@@ -232,12 +251,6 @@ function SortableColumn<T extends KanbanCardBase>({
 
         {!collapsed && (
           <div className="flex items-center gap-1.5 flex-1 min-w-0">
-            {colDef.colorToken && (
-              <span
-                className="w-2 h-2 rounded-full shrink-0"
-                style={{ background: colDef.colorToken }}
-              />
-            )}
             <h3 className="text-body-sm font-semibold text-[var(--text)] truncate">
               {colDef.label}
             </h3>
@@ -248,12 +261,12 @@ function SortableColumn<T extends KanbanCardBase>({
           <span
             className={cn(
               'min-w-[20px] h-5 rounded-full text-[10px] font-semibold px-1.5 flex items-center justify-center',
-              cards.length > 0
+              displayCount > 0
                 ? 'bg-[var(--accent)]/15 text-[var(--accent)]'
                 : 'bg-[var(--surface-2)] text-[var(--text-muted)]',
             )}
           >
-            {cards.length}
+            {displayCount}
           </span>
 
           {colDef.collapsible && (
@@ -285,9 +298,14 @@ function SortableColumn<T extends KanbanCardBase>({
               isDraggingCard && isValidTarget && 'bg-[var(--accent)]/5',
             )}
           >
-            {cards.length === 0 ? (
+            {isLoading ? (
+              <>
+                <div className="animate-pulse bg-[var(--border)] rounded-md h-[72px]" />
+                <div className="animate-pulse bg-[var(--border)] rounded-md h-[72px] opacity-60" />
+              </>
+            ) : cards.length === 0 ? (
               <div className="flex items-center justify-center h-16">
-                <p className="text-xs text-[var(--text-muted)]">Empty</p>
+                <p className="text-xs text-[var(--text-muted)]">{emptyLabel ?? 'Nothing here'}</p>
               </div>
             ) : (
               cards.map((card) => (
@@ -363,6 +381,9 @@ export function KanbanBoard<T extends KanbanCardBase>({
   renderCard,
   columnOrderStorageKey,
   transitionDialogs,
+  columnCounts,
+  isLoadingMap,
+  emptyLabel,
 }: KanbanBoardProps<T>) {
   const defaultOrder = columnDefs.map((c) => c.id);
 
@@ -603,6 +624,9 @@ export function KanbanBoard<T extends KanbanCardBase>({
                   overColumnId={overColumnId}
                   renderCard={renderCard}
                   isValidTarget={isValidDrop}
+                  apiCount={columnCounts?.[colDef.id]}
+                  isLoading={isLoadingMap?.[colDef.id]}
+                  emptyLabel={emptyLabel}
                 />
               );
             })}

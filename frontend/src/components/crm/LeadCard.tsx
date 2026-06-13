@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Phone, Wrench, ChevronRight, MoreVertical, UserCheck, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Phone, Wrench, ChevronRight, MoreVertical, UserCheck, UserCircle, Pencil, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -231,6 +231,19 @@ export function LeadCard({ lead }: LeadCardProps) {
         )}
         <span className="text-xs text-[var(--text-muted)] ml-auto">{formatDate(lead.created_at)}</span>
       </div>
+
+      {/* Assignee */}
+      {lead.assigned_to_name && (
+        <div className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
+          <UserCircle className="h-3 w-3 shrink-0" />
+          <span className="truncate">{lead.assigned_to_name}</span>
+        </div>
+      )}
+
+      {/* Notes preview */}
+      {lead.notes && (
+        <p className="text-xs text-[var(--text-muted)] truncate italic">{lead.notes}</p>
+      )}
 
       {/* Primary action(s) */}
       {showPrimary && (

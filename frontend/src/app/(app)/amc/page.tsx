@@ -166,7 +166,7 @@ function AmcPageInner() {
             <button
               onClick={() => setView('list')}
               className={cn(
-                'px-2.5 py-1.5 text-xs flex items-center gap-1',
+                'h-9 px-3 text-xs flex items-center gap-1',
                 view === 'list'
                   ? 'bg-[var(--accent)] text-white'
                   : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)]',
@@ -179,7 +179,7 @@ function AmcPageInner() {
             <button
               onClick={() => setView('calendar')}
               className={cn(
-                'px-2.5 py-1.5 text-xs flex items-center gap-1 border-l border-[var(--border)]',
+                'h-9 px-3 text-xs flex items-center gap-1 border-l border-[var(--border)]',
                 view === 'calendar'
                   ? 'bg-[var(--accent)] text-white'
                   : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)]',
