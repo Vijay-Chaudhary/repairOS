@@ -29,6 +29,33 @@ def _retry_countdown(attempt: int) -> int:
         return _RETRY_COUNTDOWNS[-1]
 
 
+def _set_tenant_context(tenant_slug: str) -> None:
+    """Register and activate tenant DB for this worker process."""
+    from django.db import connections
+    from core.context import set_tenant_db_alias
+    from master.models import TenantDatabase
+
+    alias = f"tenant_{tenant_slug}"
+    if alias not in connections.databases:
+        tdb = TenantDatabase.objects.using("default").get(tenant__slug=tenant_slug)
+        connections.databases[alias] = {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": tdb.db_name,
+            "HOST": tdb.db_host,
+            "PORT": str(tdb.db_port),
+            "USER": tdb.db_user,
+            "PASSWORD": tdb.decrypt_password(),
+            "CONN_MAX_AGE": 0,
+            "CONN_HEALTH_CHECKS": False,
+            "OPTIONS": {},
+            "TIME_ZONE": None,
+            "ATOMIC_REQUESTS": False,
+            "AUTOCOMMIT": True,
+            "TEST": {},
+        }
+    set_tenant_db_alias(alias)
+
+
 # ── WhatsApp ──────────────────────────────────────────────────────────────────
 
 @app.task(
@@ -43,6 +70,7 @@ def dispatch_whatsapp_message(
     template_name: str,
     variables: dict,
     log_id: str | None = None,
+    tenant_slug: str = "",
 ) -> None:
     """
     Send a WhatsApp template message via Meta Cloud API.
@@ -52,8 +80,16 @@ def dispatch_whatsapp_message(
     Writes / updates NotificationLog for every attempt.
     After max_retries exhausted → queues SMS fallback.
     """
+    from core.context import clear_tenant_context
     from django.conf import settings
     from core.models import NotificationLog
+
+    if tenant_slug:
+        try:
+            _set_tenant_context(tenant_slug)
+        except Exception as exc:
+            logger.error("dispatch_whatsapp_message: cannot set tenant %s: %s", tenant_slug, exc)
+            return
 
     now = timezone.now()
 
@@ -162,7 +198,8 @@ def dispatch_whatsapp_message(
         log.failed_reason = f"HTTP {exc.code}: {body[:500]}"
         log.save(update_fields=["status", "failed_reason", "updated_at"])
         dispatch_sms_fallback.delay(
-            log_id=str(log.id), phone=phone, template_name=template_name, variables=variables
+            log_id=str(log.id), phone=phone, template_name=template_name,
+            variables=variables, tenant_slug=tenant_slug,
         )
 
     except Exception as exc:
@@ -173,8 +210,13 @@ def dispatch_whatsapp_message(
         log.failed_reason = str(exc)[:500]
         log.save(update_fields=["status", "failed_reason", "updated_at"])
         dispatch_sms_fallback.delay(
-            log_id=str(log.id), phone=phone, template_name=template_name, variables=variables
+            log_id=str(log.id), phone=phone, template_name=template_name,
+            variables=variables, tenant_slug=tenant_slug,
         )
+
+    finally:
+        if tenant_slug:
+            clear_tenant_context()
 
 
 # ── SMS fallback ──────────────────────────────────────────────────────────────
@@ -187,34 +229,48 @@ def dispatch_sms_fallback(
     phone: str,
     template_name: str,
     variables: dict,
+    tenant_slug: str = "",
 ) -> None:
     """
     SMS fallback triggered after WhatsApp retries are exhausted.
     Production: set SMS_GATEWAY_KEY to enable MSG91 sends.
     Dev/local: logs what would be sent; does not raise.
     """
+    from core.context import clear_tenant_context
     from django.conf import settings
     from core.models import NotificationLog
 
-    gateway_key: str = getattr(settings, "SMS_GATEWAY_KEY", "")
-    message = " | ".join([template_name] + [f"{k}={v}" for k, v in variables.items()])
-
-    if not gateway_key:
-        logger.warning(
-            "SMS fallback: gateway not configured — would send to %s: %s",
-            phone,
-            message[:120],
-        )
+    if tenant_slug:
         try:
-            log = NotificationLog.objects.get(id=log_id)
-            log.failed_reason = (log.failed_reason + " | SMS fallback: gateway not configured")[:1000]
-            log.save(update_fields=["failed_reason", "updated_at"])
-        except Exception:
-            pass
-        return
+            _set_tenant_context(tenant_slug)
+        except Exception as exc:
+            logger.error("dispatch_sms_fallback: cannot set tenant %s: %s", tenant_slug, exc)
+            return
 
-    # MSG91 integration — replace with real HTTP call when key is available.
-    logger.info("SMS fallback: would send to %s via MSG91 (not yet implemented)", phone)
+    try:
+        gateway_key: str = getattr(settings, "SMS_GATEWAY_KEY", "")
+        message = " | ".join([template_name] + [f"{k}={v}" for k, v in variables.items()])
+
+        if not gateway_key:
+            logger.warning(
+                "SMS fallback: gateway not configured — would send to %s: %s",
+                phone,
+                message[:120],
+            )
+            try:
+                log = NotificationLog.objects.get(id=log_id)
+                log.failed_reason = (log.failed_reason + " | SMS fallback: gateway not configured")[:1000]
+                log.save(update_fields=["failed_reason", "updated_at"])
+            except Exception:
+                pass
+            return
+
+        # MSG91 integration — replace with real HTTP call when key is available.
+        logger.info("SMS fallback: would send to %s via MSG91 (not yet implemented)", phone)
+
+    finally:
+        if tenant_slug:
+            clear_tenant_context()
 
 
 # ── Email ─────────────────────────────────────────────────────────────────────
@@ -227,6 +283,7 @@ def dispatch_email_message(
     subject: str,
     body: str,
     template_name: str = "email",
+    tenant_slug: str = "",
 ) -> None:
     """
     Send a plain-text email via Django's mail backend.
@@ -234,32 +291,45 @@ def dispatch_email_message(
     Production: configure EMAIL_BACKEND + EMAIL_HOST_* in settings.
     Writes a NotificationLog row.
     """
+    from core.context import clear_tenant_context
     from django.conf import settings
     from django.core.mail import send_mail
     from core.models import NotificationLog
 
-    now = timezone.now()
-    log = NotificationLog.objects.create(
-        template_name=template_name,
-        channel=NotificationLog.Channel.EMAIL,
-        recipient_email=to,
-        status=NotificationLog.Status.QUEUED,
-        attempt_count=1,
-        last_attempt_at=now,
-    )
-
-    from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@repaiross.app")
+    if tenant_slug:
+        try:
+            _set_tenant_context(tenant_slug)
+        except Exception as exc:
+            logger.error("dispatch_email_message: cannot set tenant %s: %s", tenant_slug, exc)
+            return
 
     try:
-        send_mail(subject=subject, message=body, from_email=from_email, recipient_list=[to])
-        log.status = NotificationLog.Status.SENT
-        log.sent_at = timezone.now()
-        log.save(update_fields=["status", "sent_at", "updated_at"])
-        logger.info("Email sent: template=%s to=%s", template_name, to)
-    except Exception as exc:
-        logger.error("Email send failed: template=%s to=%s error=%s", template_name, to, exc)
-        if self.request.retries < self.max_retries:
-            raise self.retry(exc=exc, countdown=_retry_countdown(self.request.retries))
-        log.status = NotificationLog.Status.FAILED
-        log.failed_reason = str(exc)[:500]
-        log.save(update_fields=["status", "failed_reason", "updated_at"])
+        now = timezone.now()
+        log = NotificationLog.objects.create(
+            template_name=template_name,
+            channel=NotificationLog.Channel.EMAIL,
+            recipient_email=to,
+            status=NotificationLog.Status.QUEUED,
+            attempt_count=1,
+            last_attempt_at=now,
+        )
+
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@repaiross.app")
+
+        try:
+            send_mail(subject=subject, message=body, from_email=from_email, recipient_list=[to])
+            log.status = NotificationLog.Status.SENT
+            log.sent_at = timezone.now()
+            log.save(update_fields=["status", "sent_at", "updated_at"])
+            logger.info("Email sent: template=%s to=%s", template_name, to)
+        except Exception as exc:
+            logger.error("Email send failed: template=%s to=%s error=%s", template_name, to, exc)
+            if self.request.retries < self.max_retries:
+                raise self.retry(exc=exc, countdown=_retry_countdown(self.request.retries))
+            log.status = NotificationLog.Status.FAILED
+            log.failed_reason = str(exc)[:500]
+            log.save(update_fields=["status", "failed_reason", "updated_at"])
+
+    finally:
+        if tenant_slug:
+            clear_tenant_context()

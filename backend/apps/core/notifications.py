@@ -93,7 +93,16 @@ def send_whatsapp(
         return
 
     from core.tasks import dispatch_whatsapp_message  # avoid circular at module load
-    dispatch_whatsapp_message.delay(phone=phone, template_name=template_name, variables=variables)
+    try:
+        from core.context import get_tenant_db_alias
+        alias = get_tenant_db_alias()
+        tenant_slug = alias.removeprefix("tenant_") if alias and alias.startswith("tenant_") else ""
+    except Exception:
+        tenant_slug = ""
+
+    dispatch_whatsapp_message.delay(
+        phone=phone, template_name=template_name, variables=variables, tenant_slug=tenant_slug
+    )
 
 
 def send_email(
@@ -110,4 +119,13 @@ def send_email(
     if not to:
         return
     from core.tasks import dispatch_email_message  # avoid circular at module load
-    dispatch_email_message.delay(to=to, subject=subject, body=body, template_name=template_name)
+    try:
+        from core.context import get_tenant_db_alias
+        alias = get_tenant_db_alias()
+        tenant_slug = alias.removeprefix("tenant_") if alias and alias.startswith("tenant_") else ""
+    except Exception:
+        tenant_slug = ""
+
+    dispatch_email_message.delay(
+        to=to, subject=subject, body=body, template_name=template_name, tenant_slug=tenant_slug
+    )
