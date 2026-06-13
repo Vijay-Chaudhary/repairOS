@@ -21,7 +21,7 @@ class TenantMiddleware:
     Resolution order:
       1. JWT claim `tenant_slug` (authenticated requests) — authoritative.
       2. Subdomain `{slug}.API_DOMAIN` (pre-auth login, OTP endpoints).
-      3. `X-Tenant-Slug` header (local dev only, when DEBUG=True).
+      3. `X-Tenant-Slug` header (single-domain deployments and local dev).
 
     The connection alias `tenant_{slug}` is added to `connections.databases`
     once and cached for the process lifetime; credentials are cached in Redis
@@ -84,12 +84,13 @@ class TenantMiddleware:
         if slug:
             return slug
 
-        # 3. Dev header fallback
-        if getattr(settings, "DEBUG", False):
-            header = getattr(settings, "TENANT_SLUG_DEV_HEADER", "HTTP_X_TENANT_SLUG")
-            slug = request.META.get(header)
-            if slug:
-                return slug.lower()
+        # 3. X-Tenant-Slug header — used by single-domain deployments and local dev.
+        # Safe as a last resort: JWT (step 1) already wins for authenticated requests,
+        # and credentials are still validated against the resolved tenant DB.
+        header = getattr(settings, "TENANT_SLUG_DEV_HEADER", "HTTP_X_TENANT_SLUG")
+        slug = request.META.get(header)
+        if slug:
+            return slug.lower()
 
         return None
 

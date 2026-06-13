@@ -10,6 +10,12 @@ import {
   Building2, AtSign, User, Phone, Mail, Lock, XCircle,
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api/client';
+import { authApi } from '@/lib/api/auth';
+import { settingsApi } from '@/lib/api/settings';
+import { useAuthStore } from '@/lib/stores/authStore';
+import { useActiveShopStore } from '@/lib/stores/activeShopStore';
+import { wsClient } from '@/lib/ws/client';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -69,7 +75,7 @@ interface OtpBoxesProps {
 }
 
 function OtpBoxes({ value, onChange, label }: OtpBoxesProps) {
-  const digits = value.padEnd(6, '').slice(0, 6).split('');
+  const digits = Array.from({ length: 6 }, (_, i) => value[i] ?? '');
   const refs = useRef<(HTMLInputElement | null)[]>(Array(6).fill(null));
 
   const handleChange = useCallback(
@@ -215,7 +221,7 @@ function ProvisioningView({ done }: { done: boolean }) {
           {done ? 'Workspace ready!' : 'Setting up your workspace…'}
         </h1>
         {done ? (
-          <p className="text-sm text-[var(--text-muted)]">Redirecting you to sign in…</p>
+          <p className="text-sm text-[var(--text-muted)]">Redirecting you to your dashboard…</p>
         ) : (
           <div className="flex items-center gap-3">
             <p className="text-sm text-[var(--text-muted)]">This usually takes under a minute.</p>
@@ -295,11 +301,15 @@ function ProvisioningView({ done }: { done: boolean }) {
 // ── Main page ────────────────────────────────────────────────────────────────
 
 export default function RegisterPage() {
+  const router = useRouter();
+  const { setAccessToken, setUser } = useAuthStore();
+  const { setShops } = useActiveShopStore();
   const [status, setStatus] = useState<ProvisionStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [pendingSlug, setPendingSlug] = useState('');
   const [phoneMasked, setPhoneMasked] = useState('');
   const [pendingEmail, setPendingEmail] = useState('');
+  const [pendingPassword, setPendingPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [phoneOtp, setPhoneOtp] = useState('');
   const [emailCode, setEmailCode] = useState('');
@@ -342,6 +352,7 @@ export default function RegisterPage() {
       setPendingSlug(result.slug);
       setPhoneMasked(result.phone_masked);
       setPendingEmail(values.email);
+      setPendingPassword(values.password);
       setStatus('verifying');
     } catch (e: unknown) {
       const err = e as { message?: string };
@@ -385,7 +396,29 @@ export default function RegisterPage() {
         });
         if (res.status === 'active') {
           setStatus('active');
-          setTimeout(() => (window.location.href = '/login'), 3000);
+          try {
+            const loginRes = await authApi.login(
+              { email: pendingEmail, password: pendingPassword },
+              slug,
+            );
+            setAccessToken(loginRes.access);
+            setUser(loginRes.user);
+            // Non-critical side effects — a new tenant may have no shops yet.
+            // Don't let these block the redirect; AppLayout retries on mount.
+            try {
+              const shops = await settingsApi.listShops();
+              setShops(shops);
+              const shopId = useActiveShopStore.getState().activeShopId;
+              wsClient.connect(shopId, loginRes.user.id);
+            } catch {
+              // intentionally ignored
+            }
+            router.replace('/dashboard');
+          } catch {
+            // Auto-login failed — fall back to login page without a hard reload
+            // so Zustand state (token + user) survives the navigation.
+            router.replace(`/login?tenant=${slug}`);
+          }
           return;
         }
         if (res.status === 'failed') {

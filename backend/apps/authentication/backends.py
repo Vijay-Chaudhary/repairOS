@@ -14,6 +14,8 @@ class EmailBackend(ModelBackend):
         except User.DoesNotExist:
             User().set_password(password)  # Constant-time — avoids timing oracle
             return None
+        except Exception:
+            return None
         if user.check_password(password):
             return user
         return None

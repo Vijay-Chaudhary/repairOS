@@ -19,11 +19,14 @@ class LoginSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         from core.exceptions import AccountLocked
+        from django.db import ProgrammingError, OperationalError
 
         try:
             user = User.objects.get(email=attrs["email"].lower())
         except User.DoesNotExist:
             raise serializers.ValidationError({"email": ["No account found with this email."]})
+        except (ProgrammingError, OperationalError):
+            raise serializers.ValidationError({"non_field_errors": ["Workspace not found. Please check your workspace URL."]})
 
         if user.is_locked:
             raise AccountLocked(user.locked_until)

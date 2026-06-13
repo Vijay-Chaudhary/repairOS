@@ -12,8 +12,13 @@ export interface OtpRequestResponse {
 }
 
 export const authApi = {
-  login: (body: { email: string; password: string; tenant_slug?: string }) =>
-    apiFetch<LoginResponse>('/auth/login/', { method: 'POST', body: JSON.stringify(body), skipAuth: true }),
+  login: (body: { email: string; password: string }, tenantSlug?: string) =>
+    apiFetch<LoginResponse>('/auth/login/', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      skipAuth: true,
+      headers: tenantSlug ? { 'X-Tenant-Slug': tenantSlug } : {},
+    }),
 
   otpRequest: (body: { phone: string }) =>
     apiFetch<OtpRequestResponse>('/auth/otp/request/', { method: 'POST', body: JSON.stringify(body), skipAuth: true }),

@@ -43,10 +43,7 @@ function LoginForm() {
     setApiError(null);
     setLockedUntil(null);
     try {
-      const res = await authApi.login({
-        ...values,
-        ...(tenantSlug ? { tenant_slug: tenantSlug } : {}),
-      });
+      const res = await authApi.login(values, tenantSlug || undefined);
       setAccessToken(res.access);
       setUser(res.user);
       const shops = await settingsApi.listShops();
@@ -62,6 +59,8 @@ function LoginForm() {
       if (e instanceof ApiError) {
         if (e.code === 'ACCOUNT_LOCKED') {
           setLockedUntil('Your account is temporarily locked. Please try again later.');
+        } else if (e.code === 'NOT_FOUND' || e.code === 'TENANT_DB_UNAVAILABLE') {
+          setApiError('Workspace not found. Please check your workspace URL or contact support.');
         } else {
           setApiError('Email or password is incorrect.');
         }
