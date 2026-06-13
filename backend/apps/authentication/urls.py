@@ -10,6 +10,7 @@ from .views import (
     OTPRequestView,
     OTPVerifyView,
     PasswordChangeView,
+    PasswordResetView,
     TokenRefreshView,
 )
 
@@ -26,6 +27,8 @@ urlpatterns = [
     # Common routes
     path("logout/", LogoutView.as_view(), name="auth-logout"),
     path("password/change/", PasswordChangeView.as_view(), name="auth-password-change"),
+    path("password/reset/", PasswordResetView.as_view(), name="auth-password-reset"),
+    path("password/reset", PasswordResetView.as_view()),
     path("me/", MeView.as_view(), name="auth-me"),
     # No-trailing-slash duplicates for Next.js proxy (strips slash before forwarding)
     path("send-otp", OTPRequestView.as_view()),

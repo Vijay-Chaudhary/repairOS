@@ -112,6 +112,18 @@ class PasswordChangeSerializer(serializers.Serializer):
         return attrs
 
 
+class PasswordResetSerializer(serializers.Serializer):
+    """Used by the forgot-password flow — no old password required (OTP already verified identity)."""
+    new_password = serializers.CharField(write_only=True, min_length=8)
+
+    _PASSWORD_POLICY = re.compile(r'^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};\':"\\|,.<>\/?]).{8,}$')
+
+    def validate_new_password(self, value: str) -> str:
+        if not self._PASSWORD_POLICY.match(value):
+            raise serializers.ValidationError("Password must be at least 8 characters and include an uppercase letter, a number, and a special character.")
+        return value
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # User detail
 # ──────────────────────────────────────────────────────────────────────────────

@@ -37,4 +37,28 @@ export const authApi = {
 
   changePassword: (body: { old_password: string; new_password: string }) =>
     apiPost<void>('/auth/password/change/', body),
+
+  otpRequestWithTenant: (body: { phone: string }, tenantSlug: string) =>
+    apiFetch<OtpRequestResponse>('/auth/otp/request/', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      skipAuth: true,
+      headers: { 'X-Tenant-Slug': tenantSlug },
+    }),
+
+  otpVerifyWithTenant: (body: { phone: string; otp: string }, tenantSlug: string) =>
+    apiFetch<LoginResponse>('/auth/otp/verify/', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      skipAuth: true,
+      headers: { 'X-Tenant-Slug': tenantSlug },
+    }),
+
+  resetPassword: (body: { new_password: string }, accessToken: string) =>
+    apiFetch<{ message: string }>('/auth/password/reset/', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: { Authorization: `Bearer ${accessToken}` },
+      skipAuth: true,
+    }),
 };

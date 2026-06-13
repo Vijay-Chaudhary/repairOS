@@ -413,6 +413,24 @@ class PasswordChangeView(APIView):
         return Response({"message": "Password changed successfully."})
 
 
+class PasswordResetView(APIView):
+    """
+    POST /auth/password/reset/
+    Requires Bearer token obtained via OTP verify (forgot-password flow).
+    Takes { new_password } — no old password required.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from .serializers import PasswordResetSerializer
+        serializer = PasswordResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        request.user.set_password(serializer.validated_data["new_password"])
+        request.user.save(update_fields=["password"])
+        _write_audit(request, request.user.id, AuditLog.Action.UPDATE, extra={"action": "password_reset"})
+        return Response({"success": True, "data": {"message": "Password reset successfully."}})
+
+
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
