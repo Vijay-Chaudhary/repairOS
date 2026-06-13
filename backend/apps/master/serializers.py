@@ -117,7 +117,7 @@ class RegisterTenantSerializer(serializers.Serializer):
     phone = serializers.CharField(max_length=20)
     email = serializers.EmailField()
     password = serializers.CharField(min_length=8, write_only=True)
-    plan_id = serializers.UUIDField()
+    plan_id = serializers.UUIDField(required=False, allow_null=True)
 
 
 class RegisterVerifySerializer(serializers.Serializer):

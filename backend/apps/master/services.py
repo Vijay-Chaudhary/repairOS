@@ -100,10 +100,17 @@ def initiate_registration(data: dict) -> dict:
     if Tenant.objects.filter(slug=slug).exists():
         raise ValueError(f"Slug '{slug}' is already taken.")
 
-    try:
-        SubscriptionPlan.objects.get(id=data["plan_id"])
-    except SubscriptionPlan.DoesNotExist:
-        raise ValueError("Plan not found.")
+    plan_id = data.get("plan_id")
+    if plan_id:
+        try:
+            SubscriptionPlan.objects.get(id=plan_id)
+        except SubscriptionPlan.DoesNotExist:
+            raise ValueError("Plan not found.")
+    else:
+        default_plan = SubscriptionPlan.objects.order_by("price_monthly_inr").first()
+        if not default_plan:
+            raise ValueError("No subscription plans available.")
+        data["plan_id"] = default_plan.id
 
     phone_otp = f"{random.randint(0, 999999):06d}"
     email_code = f"{random.randint(0, 999999):06d}"
