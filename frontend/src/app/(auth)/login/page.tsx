@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Eye, EyeOff, AlertCircle, Wrench } from 'lucide-react';
 import { authApi } from '@/lib/api/auth';
 import { settingsApi } from '@/lib/api/settings';
 import { useAuthStore } from '@/lib/stores/authStore';
@@ -17,8 +18,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { ApiError } from '@/lib/api/client';
 
 const schema = z.object({
-  email: z.string().email('Invalid email'),
-  password: z.string().min(1, 'Required'),
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(1, 'Password is required'),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -31,6 +32,7 @@ function LoginForm() {
   const { setShops } = useActiveShopStore();
   const [apiError, setApiError] = useState<string | null>(null);
   const [lockedUntil, setLockedUntil] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -41,7 +43,10 @@ function LoginForm() {
     setApiError(null);
     setLockedUntil(null);
     try {
-      const res = await authApi.login({ ...values, ...(tenantSlug ? { tenant_slug: tenantSlug } : {}) });
+      const res = await authApi.login({
+        ...values,
+        ...(tenantSlug ? { tenant_slug: tenantSlug } : {}),
+      });
       setAccessToken(res.access);
       setUser(res.user);
       const shops = await settingsApi.listShops();
@@ -66,50 +71,134 @@ function LoginForm() {
     }
   }
 
+  const errorMessage = apiError ?? lockedUntil;
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--bg)] px-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div>
-          <h1 className="text-h1 text-[var(--text)]">Sign in to RepairOS</h1>
-          <p className="mt-1 text-body-sm text-[var(--text-muted)]">
-            Or{' '}
-            <Link href="/otp" className="text-[var(--accent)] hover:underline">sign in with OTP</Link>
-          </p>
+    <div className="w-full max-w-sm mx-auto space-y-7">
+      {/* Mobile-only logo */}
+      <div className="lg:hidden flex items-center gap-2.5 mb-2">
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center"
+          style={{ background: 'var(--accent)' }}
+        >
+          <Wrench className="w-4 h-4 text-white" strokeWidth={2.5} />
         </div>
-
-        {(apiError || lockedUntil) && (
-          <div className="rounded-md bg-[var(--danger)]/10 border border-[var(--danger)]/30 p-3 text-body-sm text-[var(--danger)]">
-            {apiError ?? lockedUntil}
-          </div>
-        )}
-
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField control={form.control} name="email" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Email</FormLabel>
-                <FormControl><Input type="email" autoComplete="email" placeholder="you@example.com" {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-            <FormField control={form.control} name="password" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Password</FormLabel>
-                <FormControl><Input type="password" autoComplete="current-password" {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-            <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting ? 'Signing in…' : 'Sign in'}
-            </Button>
-          </form>
-        </Form>
-
-        <p className="text-center text-body-sm text-[var(--text-muted)]">
-          Don&apos;t have an account?{' '}
-          <Link href="/register" className="text-[var(--accent)] hover:underline">Start free trial</Link>
-        </p>
+        <span className="font-semibold text-[var(--text)]">RepairOS</span>
       </div>
+
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold text-[var(--text)]">Welcome back</h1>
+        <p className="text-sm text-[var(--text-muted)]">Sign in to your workspace to continue</p>
+      </div>
+
+      {errorMessage && (
+        <div className="flex items-start gap-2.5 rounded-xl bg-[var(--danger)]/10 border border-[var(--danger)]/25 px-4 py-3 text-sm text-[var(--danger)]">
+          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" strokeWidth={2} />
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-sm font-medium text-[var(--text)]">
+                  Email address
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    type="email"
+                    autoComplete="email"
+                    placeholder="you@company.com"
+                    className="h-11"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <FormItem>
+                <div className="flex items-center justify-between">
+                  <FormLabel className="text-sm font-medium text-[var(--text)]">
+                    Password
+                  </FormLabel>
+                  <Link
+                    href="/forgot-password"
+                    className="text-xs text-[var(--accent)] hover:underline"
+                    tabIndex={-1}
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
+                <FormControl>
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      className="h-11 pr-10"
+                      {...field}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+                      style={{ minHeight: 0, minWidth: 0 }}
+                    >
+                      {showPassword
+                        ? <EyeOff className="w-4 h-4" strokeWidth={2} />
+                        : <Eye className="w-4 h-4" strokeWidth={2} />}
+                    </button>
+                  </div>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <Button
+            type="submit"
+            className="w-full h-11 font-semibold text-sm"
+            disabled={form.formState.isSubmitting}
+          >
+            {form.formState.isSubmitting ? (
+              <span className="flex items-center gap-2">
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Signing in…
+              </span>
+            ) : (
+              'Sign in'
+            )}
+          </Button>
+        </form>
+      </Form>
+
+      {/* Divider */}
+      <div className="relative flex items-center gap-3">
+        <div className="flex-1 border-t border-[var(--border)]" />
+        <span className="text-xs text-[var(--text-muted)]">or continue with</span>
+        <div className="flex-1 border-t border-[var(--border)]" />
+      </div>
+
+      <Button variant="outline" className="w-full h-11 font-medium text-sm" asChild>
+        <Link href="/otp">Sign in with OTP</Link>
+      </Button>
+
+      <p className="text-center text-sm text-[var(--text-muted)]">
+        New to RepairOS?{' '}
+        <Link href="/register" className="font-semibold text-[var(--accent)] hover:underline">
+          Start your free trial
+        </Link>
+      </p>
     </div>
   );
 }
