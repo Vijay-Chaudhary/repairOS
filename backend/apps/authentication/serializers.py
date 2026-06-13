@@ -134,3 +134,20 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ["id", "email", "phone", "full_name", "avatar_url", "is_active", "created_at"]
         read_only_fields = ["id", "email", "created_at"]
+
+
+class ProfileUpdateSerializer(serializers.Serializer):
+    full_name  = serializers.CharField(max_length=200, required=False)
+    phone      = serializers.CharField(max_length=20,  required=False)
+    avatar_url = serializers.CharField(max_length=500, allow_blank=True, required=False)
+
+    def validate_phone(self, value: str) -> str:
+        if not _PHONE_REGEX.match(value):
+            raise serializers.ValidationError("Phone must be in the format +91XXXXXXXXXX.")
+        return value
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+        if "phone" in attrs and User.objects.exclude(pk=user.pk).filter(phone=attrs["phone"]).exists():
+            raise serializers.ValidationError({"phone": "This phone number is already in use."})
+        return attrs

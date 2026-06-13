@@ -61,4 +61,7 @@ export const authApi = {
       headers: { Authorization: `Bearer ${accessToken}` },
       skipAuth: true,
     }),
+
+  updateMe: (body: { full_name?: string; phone?: string; avatar_url?: string }) =>
+    apiFetch<AuthUser>('/auth/me/', { method: 'PATCH', body: JSON.stringify(body) }),
 };

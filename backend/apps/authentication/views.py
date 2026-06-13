@@ -434,8 +434,7 @@ class PasswordResetView(APIView):
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
-        user = request.user
+    def _user_response(self, user, request):
         tenant_slug = _get_tenant_slug(request)
         from .tokens import _build_token_claims
         claims = _build_token_claims(user, tenant_slug)
@@ -450,3 +449,25 @@ class MeView(APIView):
             "role_ids": claims.get("role_ids", []),
             "permissions": claims.get("permissions", []),
         })
+
+    def get(self, request):
+        return self._user_response(request.user, request)
+
+    def patch(self, request):
+        from .serializers import ProfileUpdateSerializer
+        serializer = ProfileUpdateSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        user = request.user
+        update_fields = []
+        for field in ("full_name", "phone", "avatar_url"):
+            if field in data:
+                setattr(user, field, data[field])
+                update_fields.append(field)
+
+        if update_fields:
+            user.save(update_fields=update_fields)
+            _write_audit(request, user.id, AuditLog.Action.UPDATE, extra={"fields": update_fields})
+
+        return self._user_response(user, request)
