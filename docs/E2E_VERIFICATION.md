@@ -288,7 +288,7 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 - **CRITICAL-1**: `GET /roles/` → all non-admin roles `permission_ids:[]`. Receptionist, Manager, Technician, Shop Manager, Billing Staff, HR Manager, Viewer all have 0 permissions. Every spec-required role-based flow fails with 403. Business logic verified only under admin JWT.
 - **CRITICAL-2** ✅ FIXED (`babc170`): CRM tasks now routed to `default` queue via `CELERY_TASK_ROUTES`.
 - **HIGH-1** ✅ FIXED (`8f8393c`): WebSocket routing wired in `asgi.py`. `TenantConsumer` accepts `/ws/` connections. `task.due_soon` events now broadcast via `send_to_shop()`.
-- **HIGH-2**: `audit_logs` table only gets rows for Lead `update` and Customer `delete`. Missing: customer `create`, comm-log `create`, task `create`/`complete`. Spec §10 requires audit trail. *(open)*
+- **HIGH-2** ✅ FIXED (`c4855a8`): `CustomerViewSet.create()`, `CommunicationLogViewSet.perform_create()`, `FollowUpTaskViewSet.perform_create()`, and `FollowUpTaskViewSet.complete()` now write `audit_log` rows.
 - **MED-1** ✅ FIXED (`a0e1e52`): `/convert/` now returns `{customer_id: str(customer.id)}`.
 - **MED-2** ✅ FIXED (`c41a639`): `notification_logs` table migrated to all tenant DBs; notification tasks set tenant context before DB writes.
 - **MED-3** ✅ FIXED (`a0e1e52`): `LeadStatusSerializer.reason` renamed to `lost_reason`; view passes `lost_reason` to `services.transition_lead()`.
@@ -868,7 +868,7 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 |---|---|---|
 | ~~HIGH~~ | ~~2~~ | ~~A4/F2 PDF generation~~ **FIXED `70f2680`**; Razorpay payment link → 501 FEATURE_PENDING *(open)* |
 | MED | 0 | ~~B3 (₹0 invoice with 0 items)~~ **FIXED `ec239ca`**; ~~E5 (no audit trail)~~ **FIXED `ec239ca`** |
-| LOW | 1 | B4 (duplicate invoice returns `{"detail":"…"}` not standard `{code,message}` envelope) |
+| LOW | 0 | ~~B4 (duplicate invoice non-standard envelope)~~ **FIXED `c4855a8`** |
 | ~~CRITICAL~~ | ~~1~~ | ~~F3 beat task dead-queued + celery-beat crash~~ **FIXED `babc170`** |
 
 **Pass rate: 32 / 38 (84%)** — HIGH A4/F2 + CRITICAL F3 subsequently fixed
@@ -963,7 +963,7 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 |---|---|---|
 | ~~HIGH~~ | ~~1~~ | ~~`commissions.generate_payout_pdf` dead queue, `pdf_url` always empty~~ **FIXED `70f2680`** |
 | MED | 0 | ~~E4 (no audit trail)~~ **FIXED `ec239ca`** |
-| LOW | 1 | B2 (advance already-paid payout returns `{"detail":"…"}` not standard `{code,message}` envelope) |
+| LOW | 0 | ~~B2 (advance already-paid payout non-standard envelope)~~ **FIXED `c4855a8`** |
 
 **Pass rate: 28 / 31 (90%)** — HIGH subsequently fixed (`generate_payout_pdf` now has tenant context + routed correctly)
 
