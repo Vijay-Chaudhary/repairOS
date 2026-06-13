@@ -638,10 +638,13 @@ def customer_lifetime_value(shop_ids: list) -> dict:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def amc_contract_summary(shop_ids: list) -> dict:
+def amc_contract_summary(shop_ids: list, status: str = "") -> dict:
     from amc.models import AMCContract
 
-    qs = AMCContract.objects.filter(shop_id__in=shop_ids).values("status").annotate(count=Count("id"))
+    qs = AMCContract.objects.filter(shop_id__in=shop_ids)
+    if status:
+        qs = qs.filter(status=status)
+    qs = qs.values("status").annotate(count=Count("id"))
     by_status = {r["status"]: r["count"] for r in qs}
     return {"by_status": by_status, "total": sum(by_status.values())}
 
@@ -683,7 +686,7 @@ def amc_revenue(shop_ids: list, date_from: date, date_to: date) -> dict:
         start_date__lte=date_to,
         end_date__gte=date_from,
     )
-    total = qs.aggregate(total=Sum("annual_charge"))["total"] or _ZERO
+    total = qs.aggregate(total=Sum("value"))["total"] or _ZERO
     return {"total_revenue": _d(total), "contract_count": qs.count()}
 
 
@@ -702,8 +705,9 @@ def inventory_valuation(shop_ids: list) -> dict:
         value = stock.quantity_in_stock * stock.variant.cost_price
         total_value += value
         rows.append({
-            "sku": stock.variant.sku,
+            "sku": stock.variant.barcode or stock.variant.product.sku,
             "product": stock.variant.product.name,
+            "variant": stock.variant.variant_name,
             "qty": str(stock.quantity_in_stock),
             "cost_price": _d(stock.variant.cost_price),
             "total_value": _d(value),
@@ -731,7 +735,7 @@ def stock_movement_ledger(shop_ids: list, date_from: date, date_to: date,
     rows = [
         {
             "date": str(t.created_at.date()),
-            "sku": t.variant.sku,
+            "sku": t.variant.barcode or t.variant.variant_name,
             "type": t.type,
             "quantity": str(t.quantity),
         }
@@ -776,17 +780,18 @@ def supplier_payable_aged(shop_ids: list, overdue_days: int = 0) -> dict:
 
 
 def purchase_summary(shop_ids: list, date_from: date, date_to: date) -> dict:
+    from django.db.models import Sum
     from procurement.models import PurchaseOrder
 
     qs = PurchaseOrder.objects.filter(
         shop_id__in=shop_ids,
         created_at__date__gte=date_from,
         created_at__date__lte=date_to,
-    ).select_related("supplier")
+    ).select_related("supplier").annotate(po_total=Sum("items__line_total"))
 
     by_supplier: dict[str, Decimal] = {}
     for po in qs:
-        by_supplier[po.supplier.name] = by_supplier.get(po.supplier.name, _ZERO) + (po.grand_total or _ZERO)
+        by_supplier[po.supplier.name] = by_supplier.get(po.supplier.name, _ZERO) + (po.po_total or _ZERO)
 
     total_pos = qs.count()
     return {"total_purchase_orders": total_pos, "by_supplier": {k: _d(v) for k, v in by_supplier.items()}}

@@ -1243,17 +1243,17 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 **Routes:** `/platform` (separate subdomain or `/_platform`)  
 **Celery tasks:** `master.provision_tenant`  
 **Run date:** 2026-06-12  
-**Overall:** ❌ FAIL — Critical Celery routing bug blocks tenant provisioning; no reactivate endpoint
+**Overall:** ✅ PASS — All criticals fixed (commit `babc170` Celery routing, commit `89b45fb` reactivate + db_status + subscriptions)
 
 #### Layer A — FLOW
 | Journey | Role | Status | Evidence |
 |---|---|---|---|
-| List tenants in master DB | Platform Admin | ✅ PASS | `GET /api/v1/platform/tenants/` → 2 tenants returned: `demo` (active) + `testshop` (active), cursor paginated. Both show `plan_id: null` (no seed subscriptions for these tenants). |
-| View tenant subscription plan + status | Platform Admin | ✅ PASS | `GET /api/v1/platform/tenants/{id}/` → `{id, name, slug, status:"active", plan, subscription: null, db_status:"active"}`. Search (`?search=demo`) returns 1 result; `?db_status=active` returns 2 results. |
-| Suspend tenant | Platform Admin | ✅ PASS | `POST /api/v1/platform/tenants/{e2etest_id}/suspend/` → 200 `{status:"suspended"}`; `tenants.status=suspended` in master DB ✓; `audit_log_master` row written with `event_type=tenant.suspended`, `actor_email=platform@repaiross.app` ✓ |
-| Reactivate tenant | Platform Admin | ❌ FAIL | No `/reactivate/` endpoint exposed — `services.reactivate_tenant()` exists but not wired in `master/urls.py`. Once suspended, no API path to reactivate. |
+| List tenants in master DB | Platform Admin | ✅ PASS | `GET /api/v1/platform/tenants/` → 3 tenants: `demo` (Professional plan, active), `testshop` (Starter, active), `e2etest` (Starter, active), cursor paginated. |
+| View tenant subscription plan + status | Platform Admin | ✅ PASS | `GET /api/v1/platform/tenants/{demo_id}/` → `{status:"active", db_status:"active", subscription:{plan:{name:"Professional",...}, status:"active", current_period_start:"2026-06-01"}}`. `subscription` no longer null after `seed_demo` fix. commit `89b45fb` |
+| Suspend tenant | Platform Admin | ✅ PASS | `POST /api/v1/platform/tenants/{testshop_id}/suspend/` → 200 `{status:"suspended", db_status:"suspended"}`; `tenants.status=suspended`, `tenant_databases.is_active=false` in master DB ✓; `audit_log_master` row `event_type=tenant.suspended` ✓ |
+| Reactivate tenant | Platform Admin | ✅ PASS | `POST /api/v1/platform/tenants/{testshop_id}/reactivate/` → 200 `{status:"active", db_status:"active"}`; `tenants.status=active`, `tenant_databases.is_active=true` restored ✓. commit `89b45fb` |
 | Register new tenant (2-step) | Public | ✅ PASS | Step 1: `POST /api/v1/register/` → 202 `{slug:"e2etest", phone_masked:"+91****1111", expires_in:600, dev_phone_otp:"844662", dev_email_code:"579053"}`. Step 2: `POST /api/v1/register/verify/` → 201 `{tenant_id:"d33b7096-...", slug:"e2etest", status:"provisioning"}`; `tenants` + `tenant_subscriptions` rows created in master DB; `tenant.created` audit log written. |
-| Provision new tenant; DB created | Async (Celery) | ❌ FAIL | `provision_tenant.delay()` called; task `master.provision_tenant` routes to dead `celery` queue (LLEN 10→11); worker never processes it; tenant stays `provisioning` forever; `repaiross_tenant_e2etest` PG DB never created (confirmed: `SELECT datname FROM pg_database` — not found). |
+| Provision new tenant; DB created | Async (Celery) | ✅ PASS | `provision_tenant.apply_async(queue='low')` dispatched; worker received `master.provision_tenant[007f2de0-...]` at `23:57:48`; completed in 6.78s; `repaiross_tenant_e2etest` PG DB created (`SELECT datname FROM pg_database` → found); `tenant_databases` row created `is_active=true`. commit `babc170` |
 | Create subscription plan | Platform Admin | ✅ PASS | `POST /api/v1/platform/plans/` → 201 `{id, name:"Professional", max_shops:5, max_users:25, price_monthly_inr:"2999.00", features:{crm:true, erp:true}}` |
 
 #### Layer B — VALIDATION
@@ -1270,7 +1270,7 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 | `/api/v1/platform/tenants/` | GET | cursor-paginated list | ✅ PASS | `{items:[{id,name,slug,db_status,plan_id,plan_name,subscription_status,is_active,trial_ends_at,owner_email,owner_phone,created_at}], meta:{next_cursor,prev_cursor}}` |
 | `/api/v1/register/` | POST | 202 `{slug, phone_masked, expires_in}` | ✅ PASS | Response matches spec; `dev_*` OTP fields present in DEBUG mode |
 | `/api/v1/register/verify/` | POST | 201 `{tenant_id, slug, status}` | ✅ PASS | Response shape correct; status=provisioning |
-| `/api/v1/platform/tenants/{id}/` | GET | tenant + subscription | ⚠️ PARTIAL | `subscription: null` for tenants seeded without subscription records (demo, testshop). FE `TenantDetail.subscription` allows null — handled, but both seed tenants missing subscription data is a gap. |
+| `/api/v1/platform/tenants/{id}/` | GET | tenant + subscription | ✅ PASS | `subscription:{plan:{name:"Professional",...}, status:"active", current_period_start:"2026-06-01", current_period_end:"2026-07-01"}` for demo tenant. `seed_demo` now creates SubscriptionPlan + TenantSubscription. commit `89b45fb` |
 | `/api/v1/platform/plans/` | GET | `{items:[…]}` (not cursor-paginated) | ✅ PASS | Returns `{items:[...]}` — note: not cursor-paginated (unlike other list endpoints); FE `platformApi.listPlans()` expects `{items:[]}` ✓ |
 
 #### Layer D — AUTHZ
@@ -1284,37 +1284,37 @@ Copy this block for each module session. Fill Pass/Fail in the Status column and
 | Action | DB effect | Status | Evidence |
 |---|---|---|---|
 | Registration verified | `tenants` row (status=provisioning) + `tenant_subscriptions` row in master DB | ✅ PASS | `SELECT slug, status FROM tenants WHERE slug='e2etest'` → `provisioning` |
-| Tenant provisioned | `tenants.status=active`, `tenant_databases` row, new PG DB | ❌ FAIL | Provisioning task never ran; `e2etest` remains `provisioning`; no `tenant_databases` row; `repaiross_tenant_e2etest` DB not in `pg_database` |
-| Tenant suspended | `tenants.status=suspended` | ✅ PASS | DB confirms `status=suspended` after `POST /suspend/` |
-| `suspend_tenant` updates TenantDatabase.is_active | `tenant_databases.is_active=false` | ❌ FAIL | `suspend_tenant()` only sets `Tenant.status`; never updates `TenantDatabase.is_active`; `?db_status=suspended` filter (which checks `database__is_active=False`) returns 0 results; `get_db_status()` shows `db_status="active"` for suspended tenants that have a DB |
+| Tenant provisioned | `tenants.status=active`, `tenant_databases` row, new PG DB | ✅ PASS | Celery worker received `master.provision_tenant[007f2de0-...]` from `low` queue; completed in 6.78s; `repaiross_tenant_e2etest` in `pg_database`; `tenant_databases` row `is_active=true`. commit `babc170` |
+| Tenant suspended | `tenants.status=suspended`, `tenant_databases.is_active=false` | ✅ PASS | `POST /suspend/` → DB: `status=suspended`, `is_active=f`; `?db_status=suspended` filter returns 1 result; `get_db_status()` returns `"suspended"`. commit `89b45fb` |
+| `suspend_tenant` updates TenantDatabase.is_active | `tenant_databases.is_active=false` | ✅ PASS | `suspend_tenant()` now runs `TenantDatabase.objects.using("default").filter(tenant=tenant).update(is_active=False)`; `?db_status=suspended` returns testshop ✓; `?db_status=active` returns demo+e2etest ✓. commit `89b45fb` |
 | `audit_log_master` written | on create + suspend | ✅ PASS | `SELECT event_type FROM audit_log_master` → `tenant.created`, `tenant.suspended` both present |
 
 #### Layer F — LOGGING / OBSERVABILITY
 | Scenario | Expected | Status | Evidence |
 |---|---|---|---|
-| `master.provision_tenant` task routing | `low` queue (via `master.tasks.*` rule) | ❌ FAIL | Task name is `master.provision_tenant` (no `.tasks.` segment) — does NOT match `master.tasks.*` pattern; routes to dead `celery` queue; Redis `celery` LLEN=11 (was 10 before this test); worker never picks it up |
+| `master.provision_tenant` task routing | `low` queue | ✅ PASS | Explicit route `"master.provision_tenant": {"queue": "low"}` added; worker log: `Task master.provision_tenant[007f2de0-...] received` from `low` queue; `celery` dead queue drained (was LLEN=11, now 0). commit `babc170` |
 
 #### Layer G — INFRA PATH
 | Check | Method | Status | Evidence |
 |---|---|---|---|
-| New tenant PG DB created after provisioning | `pg_database` query | ❌ FAIL | `SELECT datname FROM pg_database WHERE datname='repaiross_tenant_e2etest'` → no rows — provisioning task never executed |
+| New tenant PG DB created after provisioning | `pg_database` query | ✅ PASS | `SELECT datname FROM pg_database WHERE datname='repaiross_tenant_e2etest'` → `repaiross_tenant_e2etest` found. DB created by `provision_tenant` task running from `low` queue. commit `babc170` |
 | Master DB queries | `DATABASES["default"]` | ✅ PASS | All master DB endpoints (`platform/tenants/`, `register/`) correctly use `using("default")`; no cross-contamination with tenant DBs |
 
 #### Layer H — UX STATES
 | State | Where | Status | Evidence |
 |---|---|---|---|
 | Platform frontend page renders | `/platform` | ✅ PASS | `GET http://localhost:3000/platform` → 200 HTML |
-| Provisioning status poll | `GET /register/status/?slug=e2etest` | ✅ PASS | Returns `{slug:"e2etest", status:"provisioning"}` — tenant stuck provisioning due to dead queue bug |
-| Seed gap: no platform admin user | test env | ❌ FAIL | Platform admin user (`platform@repaiross.app`) not present in `seed_demo.py` and not in `create_test_users.py` (which doesn't run during docker up); had to create manually via SQL |
-| Seed gap: no subscription plans | test env | ❌ FAIL | `subscription_plans` table empty after seed — no `seed_demo.py` logic creates plans; registration requires plan_id |
+| Provisioning status poll | `GET /register/status/?slug=e2etest` | ✅ PASS | Returns `{slug:"e2etest", status:"active"}` after provisioning task completed. |
+| Seed gap: no platform admin user | test env | ✅ PASS | `seed_demo` now creates `platform@repaiross.app` with `is_platform_admin=True` in demo tenant DB; always resets password to avoid lockout. commit `89b45fb` |
+| Seed gap: no subscription plans | test env | ✅ PASS | `seed_demo` now calls `_seed_subscription()` which creates `SubscriptionPlan("Professional")` and `TenantSubscription(status=active)` for demo tenant; `subscription_plans` table has data after `seed_demo`. commit `89b45fb` |
 
 #### Findings
 | ID | Severity | Description | Location |
 |---|---|---|---|
-| F12-1 | **Critical** | `provision_tenant` task routes to dead `celery` queue — task `name="master.provision_tenant"` (no `.tasks.` segment); does NOT match `master.tasks.*` wildcard in `CELERY_TASK_ROUTES`; worker never processes it; new tenant stays `provisioning` forever, DB never created, admin user never seeded. | `master/tasks.py:8`, `config/settings.py:CELERY_TASK_ROUTES` |
-| F12-2 | **High** | No `reactivate_tenant` endpoint — `services.reactivate_tenant()` exists but is not exposed in `master/urls.py`; a suspended tenant cannot be reactivated via API. | `master/urls.py`, `master/services.py:254` |
-| F12-3 | **High** | `suspend_tenant` does not update `TenantDatabase.is_active=False` — `?db_status=suspended` filter (`database__is_active=False`) always returns empty; `get_db_status()` reports `"active"` for tenants that are `Tenant.status=suspended` but have an existing DB record. | `master/services.py:241`, `master/views.py:182-184`, `master/serializers.py:50-57` |
-| F12-4 | **Medium** | Seed gap — platform admin user and subscription plans not created by `seed_demo.py`; `create_test_users.py` requires manual invocation but fails without tenant DB alias; registration flow requires a `plan_id` to exist in master DB — renders the whole registration flow untestable out-of-box. | `master/management/commands/seed_demo.py`, `create_test_users.py` |
+| F12-1 | ~~**Critical**~~ **FIXED** `babc170` | `provision_tenant` task routes to dead `celery` queue — fixed by replacing wildcard `CELERY_TASK_ROUTES` with explicit per-task routes; `"master.provision_tenant": {"queue": "low"}`; `CELERY_TASK_DEFAULT_QUEUE="default"` guards future tasks; dead `celery` queue drained. | `config/settings/base.py:CELERY_TASK_ROUTES` |
+| F12-2 | ~~**High**~~ **FIXED** `89b45fb` | No `reactivate_tenant` endpoint — fixed by adding `TenantReactivateView` to `master/views.py` and wiring `POST /platform/tenants/{id}/reactivate/` in `master/urls.py`. | `master/views.py:228`, `master/urls.py:12` |
+| F12-3 | ~~**High**~~ **FIXED** `89b45fb` | `suspend_tenant` does not update `TenantDatabase.is_active=False` — fixed; also added `TenantDatabase` to `services.py` imports (was `NameError`); views re-fetch tenant with `select_related("database")` after service call so serializer sees fresh `is_active`. | `master/services.py:18,247,263`, `master/views.py:224-225,243-244` |
+| F12-4 | ~~**Medium**~~ **FIXED** `89b45fb` | Seed gap — `seed_demo.py` now creates platform admin user + subscription plan; `_seed_subscription()` creates `SubscriptionPlan("Professional")` + `TenantSubscription(status=active)` for demo tenant; always resets passwords to prevent lockout. | `master/management/commands/seed_demo.py` |
 
 ---
 

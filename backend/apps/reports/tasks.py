@@ -37,16 +37,55 @@ def _data_to_csv(data: dict) -> str:
     return output.getvalue()
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=30)
-def run_export(self, job_id: str) -> None:
+def _ensure_tenant_db(tenant_slug: str) -> str:
+    """Register the tenant DB connection in the worker process if not already registered."""
+    from django.db import connections
+    from master.models import TenantDatabase
+
+    alias = f"tenant_{tenant_slug}"
+    if alias not in connections.databases:
+        tdb = TenantDatabase.objects.using("default").select_related("tenant").get(
+            tenant__slug=tenant_slug
+        )
+        connections.databases[alias] = {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": tdb.db_name,
+            "HOST": tdb.db_host,
+            "PORT": str(tdb.db_port),
+            "USER": tdb.db_user,
+            "PASSWORD": tdb.decrypt_password(),
+            "CONN_MAX_AGE": 0,
+            "CONN_HEALTH_CHECKS": False,
+            "OPTIONS": {},
+            "TIME_ZONE": None,
+            "ATOMIC_REQUESTS": False,
+            "AUTOCOMMIT": True,
+            "TEST": {},
+        }
+    return alias
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=30, name="reports.tasks.run_export")
+def run_export(self, job_id: str, tenant_slug: str = "") -> None:
+    from core.context import set_tenant_db_alias, clear_tenant_context
     from reports.models import ExportJob
     from reports import services
     from reports.views import REPORT_REGISTRY
+
+    if tenant_slug:
+        try:
+            alias = _ensure_tenant_db(tenant_slug)
+            set_tenant_db_alias(alias)
+        except Exception as exc:
+            logger.error("run_export: cannot set tenant context for %s: %s", tenant_slug, exc)
+            return
 
     try:
         job = ExportJob.objects.get(id=job_id)
     except ExportJob.DoesNotExist:
         logger.error("run_export: ExportJob %s not found", job_id)
+        if tenant_slug:
+            clear_tenant_context()
         return
 
     job.status = ExportJob.Status.PROCESSING
@@ -138,3 +177,6 @@ def run_export(self, job_id: str) -> None:
         job.completed_at = timezone.now()
         job.save(update_fields=["status", "completed_at"])
         raise self.retry(exc=exc) if self.request.retries < self.max_retries else exc
+    finally:
+        if tenant_slug:
+            clear_tenant_context()

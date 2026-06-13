@@ -267,40 +267,40 @@ def _gstr2_json(shop_ids, qp):
 
 
 REPORT_REGISTRY: dict[str, tuple[str, callable]] = {
-    "revenue-summary":            ("billing", _revenue_summary),
-    "outstanding-dues":           ("billing", _outstanding_dues),
-    "outstanding-dues-repair":    ("billing", _outstanding_dues),       # FE catalogue slug
-    "outstanding-dues-wholesale": ("erp",     _outstanding_wholesale),
-    "payment-collection-log":     ("billing", _payment_collection_log),
-    "pnl-summary":                ("billing", _pnl_summary),
-    "pl-summary":                 ("billing", _pnl_summary),            # FE catalogue slug
-    "expense-by-category":        ("erp",     lambda s, q: services.expense_by_category(
-                                                  s, _parse_date(q.get("date_from"), date(2020,1,1)),
-                                                  _parse_date(q.get("date_to"), date.today()),
-                                                  q.get("category", ""))),
-    "budget-vs-actual":           ("erp",     _budget_vs_actual),
-    "job-status-summary":         ("repair",  _job_status_summary),
-    "job-turnaround-time":        ("repair",  _job_turnaround),
-    "warranty-claims":            ("repair",  _warranty_claims),
-    "fault-template-usage":       ("repair",  _fault_template_usage),
-    "technician-performance":     ("repair",  _technician_performance),
-    "commission-ledger":          ("hr",      _commission_ledger),
-    "lead-conversion":            ("crm",     _lead_conversion),
-    "customer-acquisition":       ("crm",     _customer_acquisition),
-    "customer-lifetime-value":    ("crm",     _clv),
-    "amc-contract-summary":       ("amc",     _amc_contract_summary),
-    "amc-visit-compliance":       ("amc",     _amc_visit_compliance),
-    "amc-revenue":                ("amc",     _amc_revenue),
-    "inventory-valuation":        ("erp",     _inventory_valuation),
-    "stock-movement-ledger":      ("erp",     _stock_movement),
-    "supplier-payable-aged":      ("erp",     _supplier_payable),
-    "supplier-payable":           ("erp",     _supplier_payable),       # FE catalogue slug
-    "purchase-summary":           ("erp",     _purchase_summary),
-    "hr-attendance-summary":      ("hr",      _hr_attendance_summary),
-    "salary-register":            ("hr",      _salary_register),
-    "petty-cash-summary":         ("hr",      _petty_cash_summary),
-    "gstr-1":                     ("billing", _gstr1_json),             # FE catalogue slug
-    "gstr-2":                     ("billing", _gstr2_json),             # FE catalogue slug
+    "revenue-summary":            ("revenue",   _revenue_summary),
+    "outstanding-dues":           ("revenue",   _outstanding_dues),
+    "outstanding-dues-repair":    ("revenue",   _outstanding_dues),       # FE catalogue slug
+    "outstanding-dues-wholesale": ("inventory", _outstanding_wholesale),
+    "payment-collection-log":     ("revenue",   _payment_collection_log),
+    "pnl-summary":                ("revenue",   _pnl_summary),
+    "pl-summary":                 ("revenue",   _pnl_summary),            # FE catalogue slug
+    "expense-by-category":        ("inventory", lambda s, q: services.expense_by_category(
+                                                    s, _parse_date(q.get("date_from"), date(2020,1,1)),
+                                                    _parse_date(q.get("date_to"), date.today()),
+                                                    q.get("category", ""))),
+    "budget-vs-actual":           ("inventory", _budget_vs_actual),
+    "job-status-summary":         ("repair",    _job_status_summary),
+    "job-turnaround-time":        ("repair",    _job_turnaround),
+    "warranty-claims":            ("repair",    _warranty_claims),
+    "fault-template-usage":       ("repair",    _fault_template_usage),
+    "technician-performance":     ("repair",    _technician_performance),
+    "commission-ledger":          ("hr",        _commission_ledger),
+    "lead-conversion":            ("crm",       _lead_conversion),
+    "customer-acquisition":       ("crm",       _customer_acquisition),
+    "customer-lifetime-value":    ("crm",       _clv),
+    "amc-contract-summary":       ("amc",       _amc_contract_summary),
+    "amc-visit-compliance":       ("amc",       _amc_visit_compliance),
+    "amc-revenue":                ("amc",       _amc_revenue),
+    "inventory-valuation":        ("inventory", _inventory_valuation),
+    "stock-movement-ledger":      ("inventory", _stock_movement),
+    "supplier-payable-aged":      ("inventory", _supplier_payable),
+    "supplier-payable":           ("inventory", _supplier_payable),       # FE catalogue slug
+    "purchase-summary":           ("inventory", _purchase_summary),
+    "hr-attendance-summary":      ("hr",        _hr_attendance_summary),
+    "salary-register":            ("hr",        _salary_register),
+    "petty-cash-summary":         ("hr",        _petty_cash_summary),
+    "gstr-1":                     ("revenue",   _gstr1_json),             # FE catalogue slug
+    "gstr-2":                     ("revenue",   _gstr2_json),             # FE catalogue slug
 }
 
 # CSV reports served as downloads rather than JSON
@@ -339,7 +339,9 @@ class ReportView(APIView):
                 status=ExportJob.Status.QUEUED,
                 requested_by=request.user if request.user.is_authenticated else None,
             )
-            tasks.run_export.delay(str(job.id))
+            token = getattr(request, "auth", None)
+            tenant_slug = token.get("tenant_slug", "") if token else ""
+            tasks.run_export.delay(str(job.id), tenant_slug)
             return Response(
                 {"export_job_id": str(job.id), "status": job.status},
                 status=status.HTTP_202_ACCEPTED,
@@ -385,7 +387,7 @@ class ExportJobDetailView(APIView):
 
 
 class GSTR1View(APIView):
-    permission_classes = [IsAuthenticated, require_permission("reports.billing.view")]
+    permission_classes = [IsAuthenticated, require_permission("reports.revenue.view")]
 
     def get(self, request: Request) -> Response:
         shop_ids = _shop_ids_from_request(request)
@@ -398,7 +400,7 @@ class GSTR1View(APIView):
 
 
 class GSTR2View(APIView):
-    permission_classes = [IsAuthenticated, require_permission("reports.erp.view")]
+    permission_classes = [IsAuthenticated, require_permission("reports.revenue.view")]
 
     def get(self, request: Request) -> Response:
         shop_ids = _shop_ids_from_request(request)
