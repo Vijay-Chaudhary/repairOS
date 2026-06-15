@@ -171,16 +171,14 @@ export function LeadCard({ lead }: LeadCardProps) {
       {/* Header row: name + menu on one line, phone below */}
       <div>
         <div className="flex items-center gap-2 mb-1.5">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <Link
-              href={`/leads/${lead.id}`}
-              className="text-body-sm font-semibold text-[var(--text)] hover:underline truncate capitalize min-w-0"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {lead.name}
-            </Link>
-            <StatusBadge status={lead.status} className="shrink-0" />
-          </div>
+          <Link
+            href={`/leads/${lead.id}`}
+            className="text-body-sm font-semibold text-[var(--text)] hover:underline truncate capitalize flex-1 min-w-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {lead.name}
+          </Link>
+          <StatusBadge status={lead.status} className="shrink-0" />
           <Can anyOf={['crm.leads.edit', 'crm.leads.convert']}>
             <div data-lead-menu className="shrink-0">
             <DropdownMenu>
