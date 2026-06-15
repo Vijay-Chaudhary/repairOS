@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Can } from '@/components/shared/Can';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { StatusBadge } from '@/components/shared/StatusBadge';
 import { LogCommunicationSheet } from './LogCommunicationSheet';
 import { crmApi, LEAD_TRANSITIONS, SOURCE_LABELS, type Lead, type LeadSource, type QuoteItem } from '@/lib/api/crm';
 import { qk } from '@/lib/query/keys';
@@ -170,13 +171,16 @@ export function LeadCard({ lead }: LeadCardProps) {
       {/* Header row: name + menu on one line, phone below */}
       <div>
         <div className="flex items-center justify-between gap-2 mb-1.5">
-          <Link
-            href={`/leads/${lead.id}`}
-            className="text-body-sm font-semibold text-[var(--text)] hover:underline truncate capitalize"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {lead.name}
-          </Link>
+          <div className="flex items-center gap-2 min-w-0">
+            <Link
+              href={`/leads/${lead.id}`}
+              className="text-body-sm font-semibold text-[var(--text)] hover:underline truncate capitalize"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {lead.name}
+            </Link>
+            <StatusBadge status={lead.status} className="shrink-0" />
+          </div>
           <Can anyOf={['crm.leads.edit', 'crm.leads.convert']}>
             <div data-lead-menu>
             <DropdownMenu>
