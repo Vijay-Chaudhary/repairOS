@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -72,14 +72,15 @@ export default function LedgerPage() {
   const [typeFilter, setTypeFilter] = useState<TxType | 'all'>('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [listPage, setListPage] = useState(1);
+  useEffect(() => { setListPage(1); }, [typeFilter, dateFrom, dateTo]);
 
   const filters = {
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
     type: typeFilter === 'all' ? undefined : typeFilter,
     date_from: dateFrom || undefined,
     date_to: dateTo || undefined,
-    cursor,
+    page: listPage,
   };
 
   const { data, isLoading, error } = useQuery({
@@ -123,10 +124,10 @@ export default function LedgerPage() {
           keyExtractor={(r) => r.id}
           emptyTitle="No transactions"
           emptyDescription="Stock movements will appear here once items are bought, sold, or adjusted."
-          hasNextPage={!!data?.meta?.next_cursor}
-          hasPrevPage={!!cursor}
-          onNextPage={() => setCursor(data?.meta?.next_cursor ?? undefined)}
-          onPrevPage={() => setCursor(undefined)}
+          page={listPage}
+          totalPages={data?.meta?.total_pages}
+          onPageChange={setListPage}
+          totalCount={data?.meta?.count}
         />
       </div>
     </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { CreditCard } from 'lucide-react';
@@ -70,13 +70,14 @@ export default function PaymentsPage() {
   const [methodFilter, setMethodFilter] = useState<PaymentMethod | 'all'>('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [listPage, setListPage] = useState(1);
+  useEffect(() => { setListPage(1); }, [methodFilter, dateFrom, dateTo]);
 
   const filters = {
     method: methodFilter === 'all' ? undefined : methodFilter,
     date_from: dateFrom || undefined,
     date_to: dateTo || undefined,
-    cursor,
+    page: listPage,
   };
 
   const { data, isLoading, error } = useQuery({
@@ -137,10 +138,10 @@ export default function PaymentsPage() {
           onRowClick={(r) => router.push(`/invoices/${r.invoice_id}`)}
           emptyTitle="No payments recorded"
           emptyDescription="Payments recorded against invoices will appear here."
-          hasNextPage={!!data?.meta?.next_cursor}
-          hasPrevPage={!!cursor}
-          onNextPage={() => setCursor(data?.meta?.next_cursor ?? undefined)}
-          onPrevPage={() => setCursor(undefined)}
+          page={listPage}
+          totalPages={data?.meta?.total_pages}
+          onPageChange={setListPage}
+          totalCount={data?.meta?.count}
         />
       </div>
     </div>

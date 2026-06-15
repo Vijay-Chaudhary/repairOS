@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Download, Play } from 'lucide-react';
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { PaginationBar } from '@/components/shared/PaginationBar';
 import { Money } from '@/components/shared/Money';
 import { Can } from '@/components/shared/Can';
 import { hrApi, MONTHS, type SlipStatus } from '@/lib/api/hr';
@@ -23,12 +24,16 @@ export default function SalaryPage() {
   const [year, setYear] = useState(now.getFullYear());
   const [statusFilter, setStatusFilter] = useState<SlipStatus | 'all'>('all');
   const [pdfLoading, setPdfLoading] = useState<string | null>(null);
+  const [listPage, setListPage] = useState(1);
+
+  useEffect(() => { setListPage(1); }, [month, year, statusFilter]);
 
   const filters = {
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
     month,
     year,
     status: statusFilter === 'all' ? undefined : statusFilter,
+    page: listPage,
   };
 
   const { data, isLoading } = useQuery({
@@ -186,6 +191,15 @@ export default function SalaryPage() {
               </tbody>
             </table>
           </div>
+        )}
+        {data?.meta?.total_pages !== undefined && data.meta.total_pages > 1 && (
+          <PaginationBar
+            page={listPage}
+            totalPages={data.meta.total_pages}
+            totalCount={data.meta.count}
+            loading={isLoading}
+            onPageChange={setListPage}
+          />
         )}
       </div>
     </div>

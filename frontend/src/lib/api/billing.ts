@@ -75,7 +75,7 @@ export interface InvoiceFilters {
   date_from?: string;
   date_to?: string;
   outstanding_only?: boolean;
-  cursor?: string;
+  page?: number;
 }
 
 export interface PaymentFilters {
@@ -83,7 +83,7 @@ export interface PaymentFilters {
   method?: PaymentMethod;
   date_from?: string;
   date_to?: string;
-  cursor?: string;
+  page?: number;
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────

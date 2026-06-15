@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Search, FileText } from 'lucide-react';
@@ -86,15 +86,16 @@ export default function InvoicesPage() {
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | 'all'>('all');
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [listPage, setListPage] = useState(1);
 
   const debouncedSearch = useDebounce(search, 350);
+  useEffect(() => { setListPage(1); }, [debouncedSearch, statusFilter]);
 
   const allFilters = {
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
     search: debouncedSearch || undefined,
     status: statusFilter === 'all' ? undefined : statusFilter,
-    cursor,
+    page: listPage,
   };
 
   const outstandingFilters = {
@@ -192,10 +193,10 @@ export default function InvoicesPage() {
               onRowClick={handleRowClick}
               emptyTitle="No invoices yet"
               emptyDescription="Invoices are generated from completed repair jobs."
-              hasNextPage={!!allQuery.data?.meta?.next_cursor}
-              hasPrevPage={!!cursor}
-              onNextPage={() => setCursor(allQuery.data?.meta?.next_cursor ?? undefined)}
-              onPrevPage={() => setCursor(undefined)}
+              page={listPage}
+              totalPages={allQuery.data?.meta?.total_pages}
+              onPageChange={setListPage}
+              totalCount={allQuery.data?.meta?.count}
             />
           </TabsContent>
 

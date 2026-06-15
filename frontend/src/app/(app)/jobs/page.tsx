@@ -155,9 +155,10 @@ export default function JobsPage() {
   const [search, setSearch] = useState('');
   const [priority, setPriority] = useState<JobPriority | 'all'>('all');
   const [technicianId, setTechnicianId] = useState<string | 'all'>('all');
-  const [listCursor, setListCursor] = useState<string | undefined>(undefined);
+  const [listPage, setListPage] = useState(1);
 
   const debouncedSearch = useDebounce(search, 350);
+  React.useEffect(() => { setListPage(1); }, [debouncedSearch, priority, technicianId]);
 
   const { data: usersData } = useQuery({
     queryKey: ['settings', 'users', activeShopId],
@@ -189,10 +190,10 @@ export default function JobsPage() {
     count: columnQueries[i]?.data?.meta?.count ?? (columnQueries[i]?.data?.items?.length ?? 0),
   }));
 
-  // List view: cursor-paginated
+  // List view: page-number paginated
   const listQuery = useQuery({
-    queryKey: qk.jobs({ ...baseFilters, cursor: listCursor }),
-    queryFn: () => repairApi.listJobs({ ...baseFilters, cursor: listCursor }),
+    queryKey: qk.jobs({ ...baseFilters, page: listPage }),
+    queryFn: () => repairApi.listJobs({ ...baseFilters, page: listPage }),
     staleTime: 30_000,
     enabled: view === 'list',
   });
@@ -334,10 +335,10 @@ export default function JobsPage() {
               label: 'New Job',
               onClick: () => router.push('/jobs/new'),
             }}
-            hasNextPage={!!listQuery.data?.meta?.next_cursor}
-            hasPrevPage={!!listCursor}
-            onNextPage={() => setListCursor(listQuery.data?.meta?.next_cursor ?? undefined)}
-            onPrevPage={() => setListCursor(undefined)}
+            page={listPage}
+            totalPages={listQuery.data?.meta?.total_pages}
+            onPageChange={setListPage}
+            totalCount={listQuery.data?.meta?.count}
           />
         )}
       </div>

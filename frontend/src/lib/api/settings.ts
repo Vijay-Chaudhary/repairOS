@@ -98,7 +98,7 @@ export const settingsApi = {
     apiPatch<TenantBranding>('/tenants/me/', body),
 
   // Users
-  listUsers: (filters: { search?: string; is_active?: boolean; role?: string; cursor?: string } = {}) =>
+  listUsers: (filters: { search?: string; is_active?: boolean; role?: string; page?: number } = {}) =>
     apiGet<{ items: TenantUser[]; meta: PageMeta }>(
       '/users/',
       filters as Record<string, string | boolean | undefined>,

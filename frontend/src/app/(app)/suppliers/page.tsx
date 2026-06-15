@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Search } from 'lucide-react';
@@ -60,11 +60,14 @@ export default function SuppliersPage() {
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [formOpen, setFormOpen] = useState(false);
+  const [listPage, setListPage] = useState(1);
   const debouncedSearch = useDebounce(search, 350);
 
+  useEffect(() => { setListPage(1); }, [debouncedSearch]);
+
   const { data, isLoading, error } = useQuery({
-    queryKey: qk.suppliers({ search: debouncedSearch }),
-    queryFn: () => procurementApi.listSuppliers({ search: debouncedSearch || undefined }),
+    queryKey: qk.suppliers({ search: debouncedSearch, page: listPage }),
+    queryFn: () => procurementApi.listSuppliers({ search: debouncedSearch || undefined, page: listPage }),
     staleTime: 60_000,
   });
 
@@ -103,6 +106,10 @@ export default function SuppliersPage() {
           emptyTitle="No suppliers"
           emptyDescription="Add your first supplier to start raising purchase orders."
           emptyAction={{ label: 'New supplier', onClick: () => setFormOpen(true) }}
+          page={listPage}
+          totalPages={data?.meta?.total_pages}
+          onPageChange={setListPage}
+          totalCount={data?.meta?.count}
         />
       </div>
 

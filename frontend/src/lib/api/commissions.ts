@@ -70,7 +70,7 @@ export const commissionsApi = {
       filters as Record<string, string | undefined>,
     ),
 
-  listPayouts: (filters?: { technician_id?: string; status?: PayoutStatus }) =>
+  listPayouts: (filters?: { technician_id?: string; status?: PayoutStatus; page?: number }) =>
     apiGet<{ items: CommissionPayout[]; meta: PageMeta }>(
       '/commissions/payouts/',
       filters as Record<string, string | undefined>,

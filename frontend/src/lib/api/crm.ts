@@ -132,7 +132,7 @@ export interface CustomerFilters {
   customer_type?: CustomerType;
   search?: string;
   tag?: string;
-  cursor?: string;
+  page?: number;
 }
 
 export interface TaskFilters {
@@ -142,7 +142,7 @@ export interface TaskFilters {
   customer_id?: string;
   lead_id?: string;
   due_date?: string;
-  cursor?: string;
+  page?: number;
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus, CheckCircle2, Clock, AlertCircle, Filter } from 'lucide-react';
@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { PaginationBar } from '@/components/shared/PaginationBar';
 import { Can } from '@/components/shared/Can';
 import { TaskComposer } from '@/components/crm/TaskComposer';
 import { crmApi, TASK_PRIORITY_LABELS, type Task, type TaskStatus, type TaskPriority } from '@/lib/api/crm';
@@ -32,10 +33,14 @@ export default function TasksPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
   const [composerOpen, setComposerOpen] = useState(false);
+  const [listPage, setListPage] = useState(1);
+
+  useEffect(() => { setListPage(1); }, [statusFilter, priorityFilter]);
 
   const filters = {
     status: statusFilter === 'all' ? undefined : statusFilter,
     priority: priorityFilter === 'all' ? undefined : priorityFilter,
+    page: listPage,
   };
 
   const { data, isLoading } = useQuery({
@@ -124,6 +129,16 @@ export default function TasksPage() {
             />
           ))}
         </div>
+      )}
+
+      {data?.meta?.total_pages !== undefined && data.meta.total_pages > 1 && (
+        <PaginationBar
+          page={listPage}
+          totalPages={data.meta.total_pages}
+          totalCount={data.meta.count}
+          loading={isLoading}
+          onPageChange={setListPage}
+        />
       )}
 
       <TaskComposer open={composerOpen} onOpenChange={setComposerOpen} />

@@ -1,8 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { differenceInCalendarDays } from 'date-fns';
-import { Clock, User, Wrench, AlertTriangle, Star, CalendarClock, MoreVertical, ArrowRight, RotateCcw, Eye } from 'lucide-react';
+import { Clock, User, Wrench, AlertTriangle, Star, CalendarClock, MoreVertical, ArrowRight, RotateCcw, Eye, ChevronRight } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Money } from '@/components/shared/Money';
 import { Can } from '@/components/shared/Can';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { formatDate } from '@/lib/format/date';
 import { cn } from '@/lib/utils';
 import type { JobListItem, JobPriority, JobStatus } from '@/lib/api/repair';
@@ -33,6 +35,35 @@ const PRIORITY_ICON = {
 
 const TERMINAL_STATUSES = new Set<JobStatus>(['delivered', 'closed', 'cancelled']);
 
+// Primary CTA for each kanban status — the main forward step, no reason required
+const PRIMARY_TARGET: Partial<Record<JobStatus, JobStatus>> = {
+  open:             'in_progress',
+  in_progress:      'ready_for_qc',
+  on_hold:          'in_progress',
+  ready_for_qc:     'ready_for_pickup',
+  ready_for_pickup: 'delivered',
+  delivered:        'closed',
+  cancelled:        'open',
+};
+
+// Secondary CTA shown alongside primary when two paths are common
+const SECONDARY_TARGET: Partial<Record<JobStatus, JobStatus>> = {
+  in_progress: 'ready_for_pickup',
+};
+
+const CONFIRM_CONFIG: Partial<Record<JobStatus, { title: string; description: string; confirmLabel: string }>> = {
+  delivered: {
+    title: 'Mark as delivered?',
+    description: 'This marks the job as delivered to the customer.',
+    confirmLabel: 'Mark delivered',
+  },
+  closed: {
+    title: 'Close this job?',
+    description: 'Closing marks the job complete. It can no longer be moved.',
+    confirmLabel: 'Close job',
+  },
+};
+
 export interface JobCardKanbanProps {
   validTargets: string[];
   onMoveTo: (toStatus: JobStatus, fields?: Record<string, string>) => void;
@@ -47,6 +78,7 @@ interface JobCardProps {
 
 export function JobCard({ job, compact, kanban }: JobCardProps) {
   const router = useRouter();
+  const [confirmTarget, setConfirmTarget] = useState<JobStatus | null>(null);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -58,11 +90,40 @@ export function JobCard({ job, compact, kanban }: JobCardProps) {
   const overdueDays = isOverdue && deliveryDate ? differenceInCalendarDays(today, deliveryDate) : 0;
 
   const handleCardClick = (e: React.MouseEvent) => {
-    // Don't navigate if clicking inside the dropdown menu trigger area
     const target = e.target as HTMLElement;
     if (target.closest('[data-kanban-menu]')) return;
+    if (target.closest('[data-job-actions]')) return;
     router.push(`/jobs/${job.id}`);
   };
+
+  function handleQuickMove(to: JobStatus, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!kanban) return;
+    if (CONFIRM_CONFIG[to]) {
+      setConfirmTarget(to);
+      return;
+    }
+    kanban.onMoveTo(to);
+  }
+
+  function handleConfirmedMove() {
+    if (!kanban || !confirmTarget) return;
+    const target = confirmTarget;
+    setConfirmTarget(null);
+    kanban.onMoveTo(target);
+  }
+
+  const primaryTo = kanban ? PRIMARY_TARGET[job.status] : undefined;
+  const primaryLabel = primaryTo
+    ? STATUS_TRANSITIONS[job.status]?.find((t) => t.to === primaryTo)?.label
+    : undefined;
+  const showPrimary = !!(primaryTo && primaryLabel && kanban?.validTargets.includes(primaryTo));
+
+  const secondaryTo = kanban ? SECONDARY_TARGET[job.status] : undefined;
+  const secondaryLabel = secondaryTo
+    ? STATUS_TRANSITIONS[job.status]?.find((t) => t.to === secondaryTo)?.label
+    : undefined;
+  const showSecondary = !!(secondaryTo && secondaryLabel && kanban?.validTargets.includes(secondaryTo));
 
   // Derive menu items from STATUS_TRANSITIONS filtered to kanban.validTargets
   const menuTransitions = kanban
@@ -204,6 +265,58 @@ export function JobCard({ job, compact, kanban }: JobCardProps) {
             <Money amount={job.service_charge} className="text-xs" />
           </div>
         </div>
+      )}
+
+      {/* Quick-move action buttons */}
+      {showPrimary && (
+        <Can permission="repair.jobs.change_status">
+          <div className="mt-2" data-job-actions>
+            {showSecondary ? (
+              <div className="flex gap-1.5">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1 h-7 text-xs"
+                  onClick={(e) => handleQuickMove(primaryTo!, e)}
+                >
+                  {primaryLabel}
+                  <ChevronRight className="h-3 w-3 ml-1" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1 h-7 text-xs"
+                  onClick={(e) => handleQuickMove(secondaryTo!, e)}
+                >
+                  {secondaryLabel}
+                  <ChevronRight className="h-3 w-3 ml-1" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full h-7 text-xs"
+                onClick={(e) => handleQuickMove(primaryTo!, e)}
+              >
+                {primaryLabel}
+                <ChevronRight className="h-3 w-3 ml-1" />
+              </Button>
+            )}
+          </div>
+        </Can>
+      )}
+
+      {/* Confirm dialog for irreversible transitions */}
+      {confirmTarget && CONFIRM_CONFIG[confirmTarget] && (
+        <ConfirmDialog
+          open={!!confirmTarget}
+          onOpenChange={(open) => { if (!open) setConfirmTarget(null); }}
+          title={CONFIRM_CONFIG[confirmTarget]!.title}
+          description={CONFIRM_CONFIG[confirmTarget]!.description}
+          confirmLabel={CONFIRM_CONFIG[confirmTarget]!.confirmLabel}
+          onConfirm={handleConfirmedMove}
+        />
       )}
     </div>
   );

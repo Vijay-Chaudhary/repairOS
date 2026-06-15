@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Plus, Search, LayoutGrid, List, Filter, Phone } from 'lucide-react';
+import { Plus, Search, LayoutGrid, List, Filter, Phone, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,6 +23,7 @@ import {
 } from '@/lib/api/crm';
 import { qk } from '@/lib/query/keys';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
+import { useOfflineQueueStore } from '@/lib/stores/offlineQueueStore';
 import { useDebounce } from '@/lib/hooks/useDebounce';
 import { ApiError } from '@/lib/api/client';
 import { formatDate } from '@/lib/format/date';
@@ -122,6 +123,7 @@ export default function LeadsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { activeShopId, isAllShops } = useActiveShopStore();
+  const { isOnline } = useOfflineQueueStore();
 
   const [view, setView] = useState<ViewMode>('kanban');
   const [search, setSearch] = useState('');
@@ -188,6 +190,14 @@ export default function LeadsPage() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Offline banner */}
+      {!isOnline && (
+        <div className="flex items-center gap-2 px-4 py-2 bg-[var(--warning)]/10 border-b border-[var(--warning)]/30 text-[var(--warning)] text-body-sm">
+          <WifiOff className="h-4 w-4 shrink-0" />
+          Offline — showing saved data
+        </div>
+      )}
+
       {/* Top bar */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--border)] bg-[var(--surface)] flex-wrap gap-y-2">
         <h1 className="text-h1 text-[var(--text)] mr-2">Leads</h1>
@@ -244,11 +254,9 @@ export default function LeadsPage() {
       </div>
 
       {/* Board / List */}
-      <div className="flex-1 overflow-hidden p-4 md:p-6 flex flex-col min-h-0">
+      <div className="flex-1 overflow-auto p-4 md:p-6">
         {view === 'kanban' ? (
-          <div className="overflow-auto flex-1">
-            <LeadBoard columns={kanbanColumns} onCardMove={handleCardMove} />
-          </div>
+          <LeadBoard columns={kanbanColumns} onCardMove={handleCardMove} />
         ) : (
           <DataTable
             columns={LIST_COLUMNS}
@@ -264,7 +272,6 @@ export default function LeadsPage() {
             totalPages={listQuery.data?.meta?.total_pages}
             onPageChange={setListPage}
             totalCount={listQuery.data?.meta?.count}
-            className="flex-1 min-h-0"
           />
         )}
       </div>

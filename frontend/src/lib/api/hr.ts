@@ -87,7 +87,7 @@ export interface SalarySlip {
 }
 
 export const hrApi = {
-  listEmployees: (filters: { shop_id?: string; search?: string; is_active?: boolean; cursor?: string } = {}) =>
+  listEmployees: (filters: { shop_id?: string; search?: string; is_active?: boolean; page?: number } = {}) =>
     apiGet<{ items: Employee[]; meta: PageMeta }>(
       '/hr/employees/',
       filters as Record<string, string | boolean | undefined>,
@@ -139,7 +139,7 @@ export const hrApi = {
     notes?: string;
   }) => apiPost<{ created: number; updated: number }>('/hr/attendance/bulk/', body),
 
-  listLeaves: (filters: { shop_id?: string; status?: LeaveStatus; employee_id?: string; cursor?: string } = {}) =>
+  listLeaves: (filters: { shop_id?: string; status?: LeaveStatus; employee_id?: string; page?: number } = {}) =>
     apiGet<{ items: LeaveRequest[]; meta: PageMeta }>(
       '/hr/leave-requests/',
       filters as Record<string, string | undefined>,
@@ -157,7 +157,7 @@ export const hrApi = {
   reviewLeave: (id: string, status: 'approved' | 'rejected') =>
     apiPatch<LeaveRequest>(`/hr/leave-requests/${id}/`, { status }),
 
-  listSalarySlips: (filters: { month?: number; year?: number; shop_id?: string; status?: SlipStatus; cursor?: string } = {}) =>
+  listSalarySlips: (filters: { month?: number; year?: number; shop_id?: string; status?: SlipStatus; page?: number } = {}) =>
     apiGet<{ items: SalarySlip[]; meta: PageMeta }>(
       '/hr/salary-slips/',
       filters as Record<string, string | number | undefined>,

@@ -196,7 +196,7 @@ class CustomerViewSet(ShopScopedMixin, ModelViewSet):
     GET    /customers/{id}/timeline/ — communication timeline
     """
 
-    pagination_class = RepairOSCursorPagination
+    pagination_class = RepairOSPageNumberPagination
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_permissions(self):
@@ -341,7 +341,7 @@ class FollowUpTaskViewSet(ShopScopedMixin, ModelViewSet):
     POST   /tasks/{id}/complete/ — mark completed
     """
 
-    pagination_class = RepairOSCursorPagination
+    pagination_class = RepairOSPageNumberPagination
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_permissions(self):

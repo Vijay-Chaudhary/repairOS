@@ -22,7 +22,7 @@ const JOB_KANBAN_COLS: KanbanColumnDef[] = [
   { id: 'in_progress',      label: 'In Progress', colorToken: 'var(--status-progress)' },
   { id: 'on_hold',          label: 'On Hold',     colorToken: 'var(--status-hold)' },
   { id: 'ready_for_qc',     label: 'QC',          colorToken: 'var(--accent)' },
-  { id: 'ready_for_pickup', label: 'Ready',        colorToken: 'var(--status-ready)' },
+  { id: 'ready_for_pickup', label: 'Ready for Pickup',  colorToken: 'var(--status-ready)' },
   { id: 'delivered',        label: 'Delivered',   colorToken: 'var(--success)' },
   { id: 'cancelled',        label: 'Cancelled',   colorToken: 'var(--status-cancelled)', collapsible: true, defaultCollapsed: true },
   { id: 'closed',           label: 'Closed',      colorToken: 'var(--text-muted)',        collapsible: true, defaultCollapsed: true },

@@ -145,7 +145,7 @@ export interface JobFilters {
   date_from?: string;
   date_to?: string;
   search?: string;
-  cursor?: string;
+  page?: number;
 }
 
 export interface JobListResponse {
@@ -300,7 +300,7 @@ export const KANBAN_COLUMNS: Array<{ status: JobStatus; label: string }> = [
   { status: 'in_progress',     label: 'In Progress' },
   { status: 'on_hold',         label: 'On Hold' },
   { status: 'ready_for_qc',    label: 'QC' },
-  { status: 'ready_for_pickup',label: 'Ready' },
+  { status: 'ready_for_pickup',label: 'Ready for Pickup' },
   { status: 'delivered',       label: 'Delivered' },
 ];
 

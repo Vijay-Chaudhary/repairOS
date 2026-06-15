@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Search } from 'lucide-react';
@@ -55,14 +55,15 @@ export default function EmployeesPage() {
   const { activeShopId, isAllShops } = useActiveShopStore();
   const [search, setSearch] = useState('');
   const [showInactive, setShowInactive] = useState(false);
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [listPage, setListPage] = useState(1);
   const debouncedSearch = useDebounce(search, 350);
+  useEffect(() => { setListPage(1); }, [debouncedSearch, showInactive]);
 
   const filters = {
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
     search: debouncedSearch || undefined,
     is_active: showInactive ? undefined : true,
-    cursor,
+    page: listPage,
   };
 
   const { data, isLoading, error } = useQuery({
@@ -103,10 +104,10 @@ export default function EmployeesPage() {
           emptyTitle="No employees"
           emptyDescription="Add your first employee record."
           emptyAction={{ label: 'New employee', onClick: () => router.push('/hr/employees/new') }}
-          hasNextPage={!!data?.meta?.next_cursor}
-          hasPrevPage={!!cursor}
-          onNextPage={() => setCursor(data?.meta?.next_cursor ?? undefined)}
-          onPrevPage={() => setCursor(undefined)}
+          page={listPage}
+          totalPages={data?.meta?.total_pages}
+          onPageChange={setListPage}
+          totalCount={data?.meta?.count}
         />
       </div>
     </div>

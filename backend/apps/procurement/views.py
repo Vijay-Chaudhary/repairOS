@@ -20,7 +20,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from authentication.permissions import require_permission
-from core.pagination import RepairOSCursorPagination
+from core.pagination import RepairOSCursorPagination, RepairOSPageNumberPagination
 
 from . import services
 from .models import (
@@ -54,8 +54,6 @@ logger = logging.getLogger(__name__)
 
 
 class SupplierView(APIView):
-    pagination_class = RepairOSCursorPagination
-
     def get_permissions(self):
         return [require_permission("erp.suppliers.manage")()]
 
@@ -64,7 +62,7 @@ class SupplierView(APIView):
         if search := request.query_params.get("search"):
             from django.db.models import Q
             qs = qs.filter(Q(name__icontains=search) | Q(phone__icontains=search))
-        paginator = RepairOSCursorPagination()
+        paginator = RepairOSPageNumberPagination()
         page = paginator.paginate_queryset(qs, request)
         data = SupplierSerializer(page, many=True).data
         return paginator.get_paginated_response(data)
@@ -142,7 +140,7 @@ class PurchaseOrderView(APIView):
                 Q(po_number__icontains=search) | Q(supplier__name__icontains=search)
             )
 
-        paginator = RepairOSCursorPagination()
+        paginator = RepairOSPageNumberPagination()
         page = paginator.paginate_queryset(qs, request)
         data = PurchaseOrderSerializer(page if page is not None else qs, many=True).data
         if page is not None:
@@ -243,7 +241,7 @@ class PurchaseInvoiceView(APIView):
         if payment_status := request.query_params.get("payment_status"):
             qs = qs.filter(payment_status=payment_status)
 
-        paginator = RepairOSCursorPagination()
+        paginator = RepairOSPageNumberPagination()
         page = paginator.paginate_queryset(qs, request)
         data = PurchaseInvoiceSerializer(page if page is not None else qs, many=True).data
         if page is not None:

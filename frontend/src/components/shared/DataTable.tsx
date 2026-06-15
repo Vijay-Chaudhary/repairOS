@@ -7,7 +7,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { PaginationBar } from '@/components/shared/PaginationBar';
 import { cn } from '@/lib/utils';
 
 export interface Column<T> {
@@ -39,13 +40,6 @@ interface DataTableProps<T> {
   onPrevPage?: () => void;
   totalCount?: number;
   className?: string;
-}
-
-function getPageNumbers(current: number, total: number): (number | '...')[] {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-  if (current <= 4) return [1, 2, 3, 4, 5, '...', total];
-  if (current >= total - 3) return [1, '...', total - 4, total - 3, total - 2, total - 1, total];
-  return [1, '...', current - 1, current, current + 1, '...', total];
 }
 
 export function DataTable<T>({
@@ -127,77 +121,13 @@ export function DataTable<T>({
       )}
 
       {showPagination && (
-        <div className="flex items-center justify-between gap-2 shrink-0 border-t border-[var(--border)] pt-3">
-          <span className="text-xs text-[var(--text-muted)] shrink-0">
-            {totalCount !== undefined ? `${totalCount} record${totalCount !== 1 ? 's' : ''}` : ''}
-          </span>
-
-          <div className="flex items-center gap-1">
-            {/* First */}
-            <Button
-              variant="outline" size="sm"
-              className="hidden sm:flex h-8 w-8 p-0"
-              onClick={() => onPageChange(1)}
-              disabled={currentPage === 1 || loading}
-              title="First page"
-            >
-              <ChevronsLeft className="h-4 w-4" />
-            </Button>
-
-            {/* Prev */}
-            <Button
-              variant="outline" size="sm"
-              className="h-8 px-2 gap-1"
-              onClick={() => onPageChange(currentPage - 1)}
-              disabled={currentPage === 1 || loading}
-            >
-              <ChevronLeft className="h-4 w-4" />
-              <span className="hidden sm:inline">Prev</span>
-            </Button>
-
-            {/* Page numbers */}
-            {getPageNumbers(currentPage, totalPages!).map((n, i) =>
-              n === '...' ? (
-                <span key={`ellipsis-${i}`} className="w-8 text-center text-xs text-[var(--text-muted)] select-none">
-                  …
-                </span>
-              ) : (
-                <Button
-                  key={n}
-                  variant={n === currentPage ? 'default' : 'outline'}
-                  size="sm"
-                  className={cn('h-8 w-8 p-0 text-xs', n === currentPage && 'pointer-events-none')}
-                  onClick={() => onPageChange(n as number)}
-                  disabled={loading}
-                >
-                  {n}
-                </Button>
-              )
-            )}
-
-            {/* Next */}
-            <Button
-              variant="outline" size="sm"
-              className="h-8 px-2 gap-1"
-              onClick={() => onPageChange(currentPage + 1)}
-              disabled={currentPage === totalPages || loading}
-            >
-              <span className="hidden sm:inline">Next</span>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-
-            {/* Last */}
-            <Button
-              variant="outline" size="sm"
-              className="hidden sm:flex h-8 w-8 p-0"
-              onClick={() => onPageChange(totalPages!)}
-              disabled={currentPage === totalPages || loading}
-              title="Last page"
-            >
-              <ChevronsRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+        <PaginationBar
+          page={currentPage}
+          totalPages={totalPages!}
+          totalCount={totalCount}
+          loading={loading}
+          onPageChange={onPageChange!}
+        />
       )}
     </div>
   );

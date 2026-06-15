@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus, Check, X } from 'lucide-react';
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { PaginationBar } from '@/components/shared/PaginationBar';
 import { StaffPicker } from '@/components/shared/StaffPicker';
 import { Can } from '@/components/shared/Can';
 import { hrApi, LEAVE_TYPE_LABELS, type LeaveStatus, type LeaveType } from '@/lib/api/hr';
@@ -24,6 +25,9 @@ export default function LeavePage() {
   const { activeShopId, isAllShops } = useActiveShopStore();
   const [statusFilter, setStatusFilter] = useState<LeaveStatus | 'all'>('pending');
   const [createOpen, setCreateOpen] = useState(false);
+  const [listPage, setListPage] = useState(1);
+
+  useEffect(() => { setListPage(1); }, [statusFilter]);
 
   // Create form
   const [empId, setEmpId] = useState('');
@@ -33,12 +37,15 @@ export default function LeavePage() {
   const [days, setDays] = useState(1);
   const [reason, setReason] = useState('');
 
+  const leaveFilters = {
+    shop_id: isAllShops ? undefined : activeShopId ?? undefined,
+    status: statusFilter === 'all' ? undefined : statusFilter,
+    page: listPage,
+  };
+
   const { data, isLoading } = useQuery({
-    queryKey: qk.leaves({ shop_id: isAllShops ? undefined : activeShopId ?? undefined, status: statusFilter === 'all' ? undefined : statusFilter }),
-    queryFn: () => hrApi.listLeaves({
-      shop_id: isAllShops ? undefined : activeShopId ?? undefined,
-      status: statusFilter === 'all' ? undefined : statusFilter,
-    }),
+    queryKey: qk.leaves(leaveFilters),
+    queryFn: () => hrApi.listLeaves(leaveFilters),
     staleTime: 30_000,
   });
 
@@ -148,6 +155,15 @@ export default function LeavePage() {
               </div>
             ))}
           </div>
+        )}
+        {data?.meta?.total_pages !== undefined && data.meta.total_pages > 1 && (
+          <PaginationBar
+            page={listPage}
+            totalPages={data.meta.total_pages}
+            totalCount={data.meta.count}
+            loading={isLoading}
+            onPageChange={setListPage}
+          />
         )}
       </div>
 

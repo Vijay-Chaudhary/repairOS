@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
@@ -43,8 +43,9 @@ export default function AssetsPage() {
   const { activeShopId, isAllShops } = useActiveShopStore();
   const [showDisposed, setShowDisposed] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [listPage, setListPage] = useState(1);
   const [editing, setEditing] = useState<ShopAsset | null>(null);
+  useEffect(() => { setListPage(1); }, [showDisposed]);
 
   // Form
   const [name, setName] = useState('');
@@ -59,7 +60,7 @@ export default function AssetsPage() {
   const filters = {
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
     is_active: showDisposed ? undefined : true,
-    cursor,
+    page: listPage,
   };
 
   const { data, isLoading, error } = useQuery({
@@ -129,10 +130,10 @@ export default function AssetsPage() {
           emptyTitle="No assets"
           emptyDescription="Track shop equipment, tools, and other fixed assets."
           emptyAction={{ label: 'Add asset', onClick: () => setCreateOpen(true) }}
-          hasNextPage={!!data?.meta?.next_cursor}
-          hasPrevPage={!!cursor}
-          onNextPage={() => setCursor(data?.meta?.next_cursor ?? undefined)}
-          onPrevPage={() => setCursor(undefined)}
+          page={listPage}
+          totalPages={data?.meta?.total_pages}
+          onPageChange={setListPage}
+          totalCount={data?.meta?.count}
         />
       </div>
 

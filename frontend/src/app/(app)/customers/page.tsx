@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Search, Phone } from 'lucide-react';
@@ -108,15 +108,16 @@ export default function CustomersPage() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<CustomerType | 'all'>('all');
   const [createOpen, setCreateOpen] = useState(false);
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [listPage, setListPage] = useState(1);
 
   const debouncedSearch = useDebounce(search, 350);
+  useEffect(() => { setListPage(1); }, [debouncedSearch, typeFilter]);
 
   const filters = {
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
     search: debouncedSearch || undefined,
     customer_type: typeFilter === 'all' ? undefined : typeFilter,
-    cursor,
+    page: listPage,
   };
 
   const { data, isLoading, error } = useQuery({
@@ -172,10 +173,10 @@ export default function CustomersPage() {
           emptyTitle="No customers yet"
           emptyDescription="Create your first customer or convert a lead."
           emptyAction={{ label: 'New Customer', onClick: () => setCreateOpen(true) }}
-          hasNextPage={!!data?.meta?.next_cursor}
-          hasPrevPage={!!cursor}
-          onNextPage={() => setCursor(data?.meta?.next_cursor ?? undefined)}
-          onPrevPage={() => setCursor(undefined)}
+          page={listPage}
+          totalPages={data?.meta?.total_pages}
+          onPageChange={setListPage}
+          totalCount={data?.meta?.count}
         />
       </div>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { TrendingUp, Download } from 'lucide-react';
@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { PaginationBar } from '@/components/shared/PaginationBar';
 import { StaffPicker } from '@/components/shared/StaffPicker';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Money } from '@/components/shared/Money';
@@ -29,6 +30,9 @@ export default function CommissionsPage() {
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [payoutTechId, setPayoutTechId] = useState('');
   const [payoutStatus, setPayoutStatus] = useState<PayoutStatus | 'all'>('all');
+  const [payoutsPage, setPayoutsPage] = useState(1);
+
+  useEffect(() => { setPayoutsPage(1); }, [payoutStatus]);
 
   const periodStart = monthStart(selectedYear, selectedMonth);
   const periodEnd = monthEnd(selectedYear, selectedMonth);
@@ -41,9 +45,10 @@ export default function CommissionsPage() {
   });
 
   const { data: payoutsData, isLoading: payoutsLoading } = useQuery({
-    queryKey: qk.commissions({ status: payoutStatus }),
+    queryKey: qk.commissions({ status: payoutStatus, page: payoutsPage }),
     queryFn: () => commissionsApi.listPayouts({
       status: payoutStatus === 'all' ? undefined : payoutStatus,
+      page: payoutsPage,
     }),
     staleTime: 30_000,
   });
@@ -263,6 +268,16 @@ export default function CommissionsPage() {
                   </div>
                 ))}
               </div>
+            )}
+
+            {payoutsData?.meta?.total_pages !== undefined && payoutsData.meta.total_pages > 1 && (
+              <PaginationBar
+                page={payoutsPage}
+                totalPages={payoutsData.meta.total_pages}
+                totalCount={payoutsData.meta.count}
+                loading={payoutsLoading}
+                onPageChange={setPayoutsPage}
+              />
             )}
           </TabsContent>
         </Tabs>

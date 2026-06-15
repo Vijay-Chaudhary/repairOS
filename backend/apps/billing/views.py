@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from authentication.permissions import require_permission
-from core.pagination import RepairOSCursorPagination
+from core.pagination import RepairOSCursorPagination, RepairOSPageNumberPagination
 
 from . import services
 from .models import Payment, RepairInvoice
@@ -82,7 +82,7 @@ class RepairInvoiceView(APIView):
                 | Q(job__job_number__icontains=search)
             )
 
-        paginator = RepairOSCursorPagination()
+        paginator = RepairOSPageNumberPagination()
         page = paginator.paginate_queryset(qs, request)
         serializer = RepairInvoiceListSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
@@ -208,7 +208,7 @@ class PaymentView(APIView):
         if date_to:
             qs = qs.filter(paid_at__date__lte=date_to)
 
-        paginator = RepairOSCursorPagination()
+        paginator = RepairOSPageNumberPagination()
         page = paginator.paginate_queryset(qs, request)
         serializer = PaymentSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)

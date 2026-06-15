@@ -24,7 +24,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from authentication.permissions import require_permission
-from core.pagination import RepairOSCursorPagination
+from core.pagination import RepairOSCursorPagination, RepairOSPageNumberPagination
 
 from .models import Permission, Role, RolePermission, User, UserRole, UserTokenFamily
 
@@ -93,7 +93,7 @@ class PermissionSerializer(drf_serializers.ModelSerializer):
 # ── User views ────────────────────────────────────────────────────────────────
 
 class UserListCreateView(APIView):
-    pagination_class = RepairOSCursorPagination
+    pagination_class = RepairOSPageNumberPagination
 
     def get_permissions(self):
         return [require_permission("settings.users.manage")()]

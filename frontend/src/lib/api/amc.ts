@@ -54,7 +54,7 @@ export const amcApi = {
     customer_id?: string;
     search?: string;
     expiring_days?: number;
-    cursor?: string;
+    page?: number;
   } = {}) =>
     apiGet<{ items: AmcContract[]; meta: PageMeta }>(
       '/amc/contracts/',

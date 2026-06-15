@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Phone, Wrench, ChevronRight, MoreVertical, UserCheck, UserCircle, Pencil, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { cn } from '@/lib/utils';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -18,6 +19,15 @@ import { qk } from '@/lib/query/keys';
 import { ApiError } from '@/lib/api/client';
 import { formatDate } from '@/lib/format/date';
 import { formatPhone } from '@/lib/format/phone';
+
+const SOURCE_BADGE_STYLE: Record<LeadSource, string> = {
+  walk_in:  'bg-[var(--accent)]/10 text-[var(--accent)]',
+  whatsapp: 'bg-[var(--success)]/10 text-[var(--success)]',
+  referral: 'bg-[var(--info)]/10 text-[var(--info)]',
+  google:   'bg-[var(--warning)]/10 text-[var(--warning)]',
+  facebook: 'bg-[var(--accent)]/10 text-[var(--accent)]',
+  other:    'bg-[var(--surface-2)] text-[var(--text-muted)]',
+};
 
 interface LeadCardProps {
   lead: Lead;
@@ -142,24 +152,41 @@ export function LeadCard({ lead }: LeadCardProps) {
   const canReopen = isLost && !!lead.status_before_lost;
   const showPrimary = (primaryTransition || canReopen) && lead.status !== 'converted';
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (
+      target.closest('[data-lead-menu]') ||
+      target.closest('button') ||
+      target.closest('a[href]')
+    ) return;
+    router.push(`/leads/${lead.id}`);
+  };
+
   return (
-    <div className="bg-[var(--surface)] rounded-md border border-[var(--border)] p-3 pt-0 space-y-2 select-none">
+    <div
+      onClick={handleCardClick}
+      className="bg-[var(--surface)] rounded-md border border-[var(--border)] p-3 space-y-2 select-none cursor-pointer hover:shadow-md transition-shadow relative"
+    >
       {/* Header row: name + menu on one line, phone below */}
       <div>
-        <div className="flex items-center justify-between gap-2">
-          <div className="">
+        <div className="flex items-center justify-between gap-2 mb-1.5">
           <Link
             href={`/leads/${lead.id}`}
-            className="text-body-sm font-medium text-[var(--text)] hover:underline truncate capitalize"
+            className="text-body-sm font-semibold text-[var(--text)] hover:underline truncate capitalize"
+            onClick={(e) => e.stopPropagation()}
           >
             {lead.name}
           </Link>
-          </div>
-          <div className="">
           <Can anyOf={['crm.leads.edit', 'crm.leads.convert']}>
+            <div data-lead-menu>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-6 w-6 p-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 p-0 text-[var(--text-muted)] hover:text-[var(--text)]"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <MoreVertical className="h-3.5 w-3.5" />
                 </Button>
               </DropdownMenuTrigger>
@@ -207,8 +234,8 @@ export function LeadCard({ lead }: LeadCardProps) {
                 </Can>
               </DropdownMenuContent>
             </DropdownMenu>
+            </div>
           </Can>
-          </div>
         </div>
         <a
           href={`tel:${lead.phone}`}
@@ -221,7 +248,7 @@ export function LeadCard({ lead }: LeadCardProps) {
 
       {/* Meta */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-[var(--text-muted)] bg-[var(--surface-2)] rounded px-1.5 py-0.5">
+        <span className={cn('text-[11px] font-medium rounded-full px-2 py-0.5 whitespace-nowrap', SOURCE_BADGE_STYLE[lead.source])}>
           {SOURCE_LABELS[lead.source]}
         </span>
         {lead.device_type && (

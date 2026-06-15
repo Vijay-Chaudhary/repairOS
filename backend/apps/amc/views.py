@@ -17,7 +17,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
 from authentication.permissions import require_permission
-from core.pagination import RepairOSCursorPagination
+from core.pagination import RepairOSCursorPagination, RepairOSPageNumberPagination
 from crm.views import ShopScopedMixin
 
 from . import services
@@ -44,7 +44,7 @@ class AMCContractViewSet(ShopScopedMixin, GenericViewSet):
     POST   /amc/contracts/{id}/renew/  — manual renewal
     """
 
-    pagination_class = RepairOSCursorPagination
+    pagination_class = RepairOSPageNumberPagination
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_permissions(self):

@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from authentication.permissions import require_permission
-from core.pagination import RepairOSCursorPagination
+from core.pagination import RepairOSCursorPagination, RepairOSPageNumberPagination
 
 from . import services
 from .models import AttendanceRecord, Employee, LeaveRequest, SalarySlip
@@ -61,7 +61,7 @@ class EmployeeListCreateView(APIView):
             from django.db.models import Q as DQ
             qs = qs.filter(DQ(full_name__icontains=search) | DQ(employee_code__icontains=search))
 
-        paginator = RepairOSCursorPagination()
+        paginator = RepairOSPageNumberPagination()
         page = paginator.paginate_queryset(qs, request)
         data = EmployeeSerializer(page, many=True).data
         return paginator.get_paginated_response(data)
@@ -226,7 +226,7 @@ class LeaveRequestListCreateView(APIView):
         if emp_id := request.query_params.get("employee_id"):
             qs = qs.filter(employee_id=emp_id)
 
-        paginator = RepairOSCursorPagination()
+        paginator = RepairOSPageNumberPagination()
         page = paginator.paginate_queryset(qs, request)
         data = LeaveRequestSerializer(page, many=True).data
         return paginator.get_paginated_response(data)
@@ -297,7 +297,7 @@ class SalarySlipListView(APIView):
         if s := request.query_params.get("status"):
             qs = qs.filter(status=s)
 
-        paginator = RepairOSCursorPagination()
+        paginator = RepairOSPageNumberPagination()
         page = paginator.paginate_queryset(qs, request)
         data = SalarySlipSerializer(page, many=True).data
         return paginator.get_paginated_response(data)

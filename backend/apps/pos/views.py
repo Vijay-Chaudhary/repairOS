@@ -20,7 +20,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from authentication.permissions import require_permission
-from core.pagination import RepairOSCursorPagination
+from core.pagination import RepairOSCursorPagination, RepairOSPageNumberPagination
 from crm.views import ShopScopedMixin
 
 from . import services
@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 
 class SaleViewSet(ShopScopedMixin, GenericViewSet):
-    pagination_class = RepairOSCursorPagination
+    pagination_class = RepairOSPageNumberPagination
     http_method_names = ["get", "post", "head", "options"]
 
     def get_permissions(self):

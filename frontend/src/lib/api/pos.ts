@@ -169,7 +169,7 @@ export interface SaleFilters {
   date_from?: string;
   date_to?: string;
   search?: string;
-  cursor?: string;
+  page?: number;
 }
 
 // Shape returned by GET /inventory/stock/ — a shop-scoped, stock-aware variant record

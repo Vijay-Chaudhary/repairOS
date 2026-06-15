@@ -13,7 +13,7 @@ const STATUS_MAP: Record<string, { label: string; className: string }> = {
   open: { label: 'Open', className: 'bg-[var(--info)]/15 text-[var(--info)] border-[var(--info)]/30' },
   in_progress: { label: 'In Progress', className: 'bg-[var(--warning)]/15 text-[var(--warning)] border-[var(--warning)]/30' },
   on_hold: { label: 'On Hold', className: 'bg-[#8a6d3b]/15 text-[#8a6d3b] border-[#8a6d3b]/30' },
-  ready_for_pickup: { label: 'Ready', className: 'bg-[var(--success)]/15 text-[var(--success)] border-[var(--success)]/30' },
+  ready_for_pickup: { label: 'Ready for Pickup', className: 'bg-[var(--success)]/15 text-[var(--success)] border-[var(--success)]/30' },
   qc: { label: 'QC', className: 'bg-[var(--success)]/15 text-[var(--success)] border-[var(--success)]/30' },
   delivered: { label: 'Delivered', className: 'bg-[var(--accent)]/15 text-[var(--accent)] border-[var(--accent)]/30' },
   closed: { label: 'Closed', className: 'bg-[var(--text-muted)]/15 text-[var(--text-muted)] border-[var(--text-muted)]/30' },

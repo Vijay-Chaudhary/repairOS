@@ -104,7 +104,7 @@ export const financeApi = {
     budget_head_id?: string;
     date_from?: string;
     date_to?: string;
-    cursor?: string;
+    page?: number;
   } = {}) =>
     apiGet<{ items: Expense[]; meta: PageMeta }>(
       '/finance/expenses/',
@@ -148,7 +148,7 @@ export const financeApi = {
     shop_id?: string;
     condition?: AssetCondition;
     is_active?: boolean;
-    cursor?: string;
+    page?: number;
   } = {}) =>
     apiGet<{ items: ShopAsset[]; meta: PageMeta }>(
       '/finance/assets/',

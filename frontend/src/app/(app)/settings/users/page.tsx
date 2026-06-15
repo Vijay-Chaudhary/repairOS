@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -16,6 +16,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
+import { PaginationBar } from '@/components/shared/PaginationBar';
 import { ForbiddenPage } from '@/components/shared/ForbiddenPage';
 import { settingsApi, type TenantUser } from '@/lib/api/settings';
 import { qk } from '@/lib/query/keys';
@@ -43,18 +44,19 @@ function UsersInner() {
   const { user: me } = useAuthStore();
   const [search, setSearch] = useState('');
   const [showInactive, setShowInactive] = useState(false);
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [listPage, setListPage] = useState(1);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteRoleIds, setInviteRoleIds] = useState<string[]>([]);
   const [deactivateTarget, setDeactivateTarget] = useState<TenantUser | null>(null);
   const [forceLogoutTarget, setForceLogoutTarget] = useState<TenantUser | null>(null);
 
   const debouncedSearch = useDebounce(search, 350);
+  useEffect(() => { setListPage(1); }, [debouncedSearch, showInactive]);
 
   const filters = {
     search: debouncedSearch || undefined,
     is_active: showInactive ? undefined : true,
-    cursor,
+    page: listPage,
   };
 
   const { data, isLoading } = useQuery({
@@ -130,11 +132,11 @@ function UsersInner() {
             className="pl-9 h-9 w-[220px]"
             placeholder="Search name or email…"
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setCursor(undefined); }}
+            onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <label className="flex items-center gap-2 text-body-sm cursor-pointer">
-          <Switch checked={showInactive} onCheckedChange={(v) => { setShowInactive(v); setCursor(undefined); }} />
+          <Switch checked={showInactive} onCheckedChange={setShowInactive} />
           Show inactive
         </label>
       </div>
@@ -211,12 +213,15 @@ function UsersInner() {
                 ))}
               </tbody>
             </table>
-            {(data?.meta?.next_cursor || cursor) && (
-              <div className="flex gap-2 p-3 border-t border-[var(--border)]">
-                {cursor && <Button size="sm" variant="outline" onClick={() => setCursor(undefined)}>← Prev</Button>}
-                {data?.meta?.next_cursor && (
-                  <Button size="sm" variant="outline" onClick={() => setCursor(data.meta.next_cursor ?? undefined)}>Next →</Button>
-                )}
+            {data?.meta?.total_pages !== undefined && data.meta.total_pages > 1 && (
+              <div className="border-t border-[var(--border)] p-3">
+                <PaginationBar
+                  page={listPage}
+                  totalPages={data.meta.total_pages}
+                  totalCount={data.meta.count}
+                  loading={isLoading}
+                  onPageChange={setListPage}
+                />
               </div>
             )}
           </div>

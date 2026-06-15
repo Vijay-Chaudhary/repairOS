@@ -89,7 +89,7 @@ export interface TransactionFilters {
   type?: TxType;
   date_from?: string;
   date_to?: string;
-  cursor?: string;
+  page?: number;
 }
 
 export interface ProductFilters {
@@ -98,7 +98,7 @@ export interface ProductFilters {
   is_for_sale?: boolean;
   is_for_repair_use?: boolean;
   is_active?: boolean;
-  cursor?: string;
+  page?: number;
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────

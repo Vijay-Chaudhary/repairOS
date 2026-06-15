@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus } from 'lucide-react';
@@ -35,7 +35,7 @@ export default function ExpensesPage() {
   const queryClient = useQueryClient();
   const { activeShopId, isAllShops } = useActiveShopStore();
   const [createOpen, setCreateOpen] = useState(false);
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [listPage, setListPage] = useState(1);
 
   // Form state
   const [category, setCategory] = useState('');
@@ -46,7 +46,7 @@ export default function ExpensesPage() {
 
   const filters = {
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
-    cursor,
+    page: listPage,
   };
 
   const { data, isLoading, error } = useQuery({
@@ -102,10 +102,10 @@ export default function ExpensesPage() {
           emptyTitle="No expenses"
           emptyDescription="Record business expenses to track against your budget."
           emptyAction={{ label: 'Add expense', onClick: () => setCreateOpen(true) }}
-          hasNextPage={!!data?.meta?.next_cursor}
-          hasPrevPage={!!cursor}
-          onNextPage={() => setCursor(data?.meta?.next_cursor ?? undefined)}
-          onPrevPage={() => setCursor(undefined)}
+          page={listPage}
+          totalPages={data?.meta?.total_pages}
+          onPageChange={setListPage}
+          totalCount={data?.meta?.count}
         />
       </div>
 

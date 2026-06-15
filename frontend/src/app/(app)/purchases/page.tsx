@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
@@ -88,14 +88,15 @@ export default function PurchasesPage() {
   const { activeShopId, isAllShops } = useActiveShopStore();
   const [poStatus, setPoStatus] = useState<PoStatus | 'all'>('all');
   const [poBuilderOpen, setPoBuilderOpen] = useState(false);
-  const [poCursor, setPoCursor] = useState<string | undefined>(undefined);
-  const [invCursor, setInvCursor] = useState<string | undefined>(undefined);
+  const [poPage, setPoPage] = useState(1);
+  const [invPage, setInvPage] = useState(1);
   const [selectedInvoice, setSelectedInvoice] = useState<PurchaseInvoice | null>(null);
+  useEffect(() => { setPoPage(1); }, [poStatus]);
 
   const poFilters = {
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
     status: poStatus === 'all' ? undefined : poStatus,
-    cursor: poCursor,
+    page: poPage,
   };
 
   const { data: poData, isLoading: poLoading } = useQuery({
@@ -106,7 +107,7 @@ export default function PurchasesPage() {
 
   const invFilters = {
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
-    cursor: invCursor,
+    page: invPage,
   };
 
   const { data: invData, isLoading: invLoading } = useQuery({
@@ -170,10 +171,10 @@ export default function PurchasesPage() {
               emptyTitle="No purchase orders"
               emptyDescription="Create your first PO to order from a supplier."
               emptyAction={{ label: 'New PO', onClick: () => setPoBuilderOpen(true) }}
-              hasNextPage={!!poData?.meta?.next_cursor}
-              hasPrevPage={!!poCursor}
-              onNextPage={() => setPoCursor(poData?.meta?.next_cursor ?? undefined)}
-              onPrevPage={() => setPoCursor(undefined)}
+              page={poPage}
+              totalPages={poData?.meta?.total_pages}
+              onPageChange={setPoPage}
+              totalCount={poData?.meta?.count}
             />
           </TabsContent>
 
@@ -186,10 +187,10 @@ export default function PurchasesPage() {
               onRowClick={(r) => setSelectedInvoice(r)}
               emptyTitle="No purchase invoices"
               emptyDescription="Record supplier bills here after receiving goods."
-              hasNextPage={!!invData?.meta?.next_cursor}
-              hasPrevPage={!!invCursor}
-              onNextPage={() => setInvCursor(invData?.meta?.next_cursor ?? undefined)}
-              onPrevPage={() => setInvCursor(undefined)}
+              page={invPage}
+              totalPages={invData?.meta?.total_pages}
+              onPageChange={setInvPage}
+              totalCount={invData?.meta?.count}
             />
           </TabsContent>
         </Tabs>

@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from authentication.permissions import require_permission
-from core.pagination import RepairOSCursorPagination
+from core.pagination import RepairOSCursorPagination, RepairOSPageNumberPagination
 
 from . import services
 from .models import BudgetAllocation, BudgetHead, Expense, PettyCashAccount, PettyCashTransaction, ShopAsset
@@ -204,8 +204,7 @@ class ExpenseListCreateView(APIView):
             qs = qs.filter(date__lte=date_to)
 
         qs = qs.order_by("-date")
-        paginator = RepairOSCursorPagination()
-        paginator.ordering = "-date"
+        paginator = RepairOSPageNumberPagination()
         page = paginator.paginate_queryset(qs, request)
         return paginator.get_paginated_response(ExpenseSerializer(page, many=True).data)
 
@@ -245,8 +244,7 @@ class AssetListCreateView(APIView):
         # is_active=false → include all (active + disposed)
 
         qs = qs.order_by("name")
-        paginator = RepairOSCursorPagination()
-        paginator.ordering = "name"
+        paginator = RepairOSPageNumberPagination()
         page = paginator.paginate_queryset(qs, request)
         return paginator.get_paginated_response(ShopAssetSerializer(page, many=True).data)
 

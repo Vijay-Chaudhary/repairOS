@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Search, AlertTriangle, LayoutList, CalendarDays } from 'lucide-react';
@@ -84,9 +84,12 @@ function AmcPageInner() {
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'all'>('all');
   const [createOpen, setCreateOpen] = useState(false);
   const [customer, setCustomer] = useState<CustomerOption | null>(null);
+  const [listPage, setListPage] = useState(1);
   const debouncedSearch = useDebounce(search, 350);
 
   const view = searchParams.get('view') === 'calendar' ? 'calendar' : 'list';
+
+  useEffect(() => { setListPage(1); }, [debouncedSearch, statusFilter]);
 
   function setView(v: 'list' | 'calendar') {
     const params = new URLSearchParams(searchParams.toString());
@@ -99,6 +102,7 @@ function AmcPageInner() {
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
     status: statusFilter === 'all' ? undefined : statusFilter,
     search: debouncedSearch || undefined,
+    page: listPage,
   };
 
   const { data, isLoading, error } = useQuery({
@@ -233,6 +237,10 @@ function AmcPageInner() {
               emptyTitle="No AMC contracts"
               emptyDescription="Create your first maintenance contract."
               emptyAction={{ label: 'New contract', onClick: () => setCreateOpen(true) }}
+              page={listPage}
+              totalPages={data?.meta?.total_pages}
+              onPageChange={setListPage}
+              totalCount={data?.meta?.count}
             />
           </div>
         )}

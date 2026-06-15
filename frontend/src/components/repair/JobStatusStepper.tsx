@@ -8,7 +8,7 @@ const MILESTONES: Array<{ status: JobStatus; label: string; order: number }> = [
   { status: 'open',             label: 'Open',    order: 1 },
   { status: 'in_progress',      label: 'Working', order: 2 },
   { status: 'ready_for_qc',     label: 'QC',      order: 3 },
-  { status: 'ready_for_pickup', label: 'Ready',   order: 4 },
+  { status: 'ready_for_pickup', label: 'Ready for Pickup', order: 4 },
   { status: 'delivered',        label: 'Done',    order: 5 },
 ];
 

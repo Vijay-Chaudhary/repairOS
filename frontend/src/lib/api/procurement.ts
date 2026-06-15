@@ -137,7 +137,7 @@ export interface SupplierLedgerEntry {
 
 export const procurementApi = {
   // Suppliers
-  listSuppliers: (filters: { search?: string; is_active?: boolean } = {}) =>
+  listSuppliers: (filters: { search?: string; is_active?: boolean; page?: number } = {}) =>
     apiGet<{ items: Supplier[]; meta: PageMeta }>(
       '/procurement/suppliers/',
       filters as Record<string, string | boolean | undefined>,
@@ -171,7 +171,7 @@ export const procurementApi = {
     apiGet<{ items: SupplierLedgerEntry[]; balance: number }>(`/procurement/suppliers/${id}/ledger/`),
 
   // Purchase Orders
-  listPOs: (filters: { shop_id?: string; status?: PoStatus; supplier_id?: string; cursor?: string } = {}) =>
+  listPOs: (filters: { shop_id?: string; status?: PoStatus; supplier_id?: string; page?: number } = {}) =>
     apiGet<{ items: PurchaseOrder[]; meta: PageMeta }>(
       '/procurement/purchase-orders/',
       filters as Record<string, string | undefined>,
@@ -207,7 +207,7 @@ export const procurementApi = {
   }) => apiPost<GRNNote>('/procurement/grn/', body),
 
   // Purchase Invoices
-  listInvoices: (filters: { shop_id?: string; supplier_id?: string; payment_status?: PurchasePaymentStatus; cursor?: string } = {}) =>
+  listInvoices: (filters: { shop_id?: string; supplier_id?: string; payment_status?: PurchasePaymentStatus; page?: number } = {}) =>
     apiGet<{ items: PurchaseInvoice[]; meta: PageMeta }>(
       '/procurement/purchase-invoices/',
       filters as Record<string, string | undefined>,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
@@ -88,16 +88,17 @@ export default function SalesListPage() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<SaleType | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<SaleStatus | 'all'>('all');
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [listPage, setListPage] = useState(1);
 
   const debouncedSearch = useDebounce(search, 350);
+  useEffect(() => { setListPage(1); }, [debouncedSearch, typeFilter, statusFilter]);
 
   const filters = {
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
     sale_type: typeFilter === 'all' ? undefined : typeFilter,
     status: statusFilter === 'all' ? undefined : statusFilter,
     search: debouncedSearch || undefined,
-    cursor,
+    page: listPage,
   };
 
   const { data, isLoading, error } = useQuery({
@@ -169,10 +170,10 @@ export default function SalesListPage() {
           onRowClick={handleRowClick}
           emptyTitle="No sales yet"
           emptyDescription="Sales made from the POS terminal will appear here."
-          hasNextPage={!!data?.meta?.next_cursor}
-          hasPrevPage={!!cursor}
-          onNextPage={() => setCursor(data?.meta?.next_cursor ?? undefined)}
-          onPrevPage={() => setCursor(undefined)}
+          page={listPage}
+          totalPages={data?.meta?.total_pages}
+          onPageChange={setListPage}
+          totalCount={data?.meta?.count}
         />
       </div>
     </div>
