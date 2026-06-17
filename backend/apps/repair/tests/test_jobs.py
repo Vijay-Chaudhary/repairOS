@@ -823,3 +823,36 @@ class TestRepairOverviewService:
         data = get_repair_overview(Q(), None)
         assert len(data["needs_attention"]) == 8
         assert data["needs_attention"][0]["customer"].name == customer.name
+
+    def test_overview_is_scoped_per_shop(self, shop, customer, admin_user):
+        from django.db.models import Q
+        from core.models import Shop
+        from crm.models import Customer
+        from repair.models import JobTicket
+        from repair.services import get_repair_overview
+
+        shop_b = Shop.objects.create(
+            name="Zip Repairs",
+            code="ZIP",
+            address="Park Street",
+            city="Kolkata",
+            state="WB",
+            state_code="19",
+            phone="+919812345678",
+        )
+        customer_b = Customer.objects.create(
+            shop=shop_b, name="Asha Sen", phone="+919811100099"
+        )
+
+        # 2 open jobs in shop A, 3 open jobs in shop B
+        for _ in range(2):
+            j = self._make_job(shop, customer, admin_user)
+            JobTicket.objects.filter(pk=j.pk).update(status="open")
+        for _ in range(3):
+            j = self._make_job(shop_b, customer_b, admin_user)
+            JobTicket.objects.filter(pk=j.pk).update(status="open")
+
+        # explicit shop_id scopes to shop A only (no leakage from shop B)
+        assert get_repair_overview(Q(), shop.id)["kpis"]["open_jobs"] == 2
+        # mixin-style Q filter also scopes to shop A only
+        assert get_repair_overview(Q(shop_id=shop.id), None)["kpis"]["open_jobs"] == 2

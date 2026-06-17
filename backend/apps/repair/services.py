@@ -11,7 +11,8 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
-from django.db import transaction
+from django.db import models, transaction
+from django.db.models import Count, F, Q
 from django.utils import timezone
 
 from authentication.models import AuditLog
@@ -33,6 +34,9 @@ logger = logging.getLogger(__name__)
 # Default warranty period when shop/device-type settings are not yet available.
 # Replace with a settings lookup when the platform-admin module is built.
 DEFAULT_WARRANTY_DAYS = 30
+
+# Max number of jobs surfaced in the Repair Overview "needs attention" list.
+NEEDS_ATTENTION_LIMIT = 8
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Status transition map  (spec §4.1)
@@ -725,21 +729,26 @@ def _log_crm_comm(job: JobTicket, comm_type: str, summary: str, user) -> None:
         logger.exception("Failed to log CRM communication for job %s", job.job_number)
 
 
-# Import F here to avoid circular at module level
-from django.db import models
-
-
-def get_repair_overview(shop_filter, shop_id=None):
+def get_repair_overview(shop_filter: Q, shop_id: str | None = None) -> dict:
     """Aggregate KPIs, status breakdown, and a needs-attention list for the Repair Overview.
 
     Shop-wide summary: applies `shop_filter` (a Q from ShopScopedMixin) and an optional
     explicit `shop_id`. A handful of aggregate queries — no N+1.
     """
-    from django.db.models import Count, Q
-
-    TERMINAL = ["delivered", "closed", "cancelled"]
-    AWAITING_PARTS = ["requested", "approved", "ordered"]
-    STATUS_ORDER = ["open", "in_progress", "on_hold", "ready_for_qc", "ready_for_pickup", "delivered"]
+    TERMINAL = [JobTicket.Status.DELIVERED, JobTicket.Status.CLOSED, JobTicket.Status.CANCELLED]
+    AWAITING_PARTS = [
+        JobSparePartRequest.RequestStatus.REQUESTED,
+        JobSparePartRequest.RequestStatus.APPROVED,
+        JobSparePartRequest.RequestStatus.ORDERED,
+    ]
+    STATUS_ORDER = [
+        JobTicket.Status.OPEN,
+        JobTicket.Status.IN_PROGRESS,
+        JobTicket.Status.ON_HOLD,
+        JobTicket.Status.READY_FOR_QC,
+        JobTicket.Status.READY_FOR_PICKUP,
+        JobTicket.Status.DELIVERED,
+    ]
     today = timezone.localdate()
 
     base = JobTicket.objects.filter(shop_filter)
@@ -759,12 +768,16 @@ def get_repair_overview(shop_filter, shop_id=None):
         base.exclude(status__in=TERMINAL)
         .filter(
             Q(expected_delivery_date__lt=today)
+            # Flags only fully-unpaid jobs (advance_paid == 0); partial advances are
+            # intentionally not flagged.
             | Q(advance_paid=0, service_charge__gt=0)
             | Q(spare_part_requests__status__in=AWAITING_PARTS)
         )
         .select_related("customer")
         .distinct()
-        .order_by("expected_delivery_date", "intake_date")[:8]
+        .order_by(F("expected_delivery_date").asc(nulls_last=True), "intake_date")[
+            :NEEDS_ATTENTION_LIMIT
+        ]
     )
 
     needs_attention = [
