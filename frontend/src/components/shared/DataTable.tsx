@@ -40,6 +40,7 @@ interface DataTableProps<T> {
   onPrevPage?: () => void;
   totalCount?: number;
   className?: string;
+  density?: 'comfortable' | 'compact';
 }
 
 export function DataTable<T>({
@@ -47,7 +48,7 @@ export function DataTable<T>({
   emptyTitle = 'No data', emptyDescription, emptyAction,
   page, totalPages, onPageChange,
   hasNextPage, hasPrevPage, onNextPage, onPrevPage,
-  totalCount, className,
+  totalCount, className, density = 'comfortable',
 }: DataTableProps<T>) {
   if (error) {
     return (
@@ -63,11 +64,12 @@ export function DataTable<T>({
 
   const showPagination = onPageChange && totalPages !== undefined && totalPages > 0;
   const currentPage = page ?? 1;
+  const densityClass = density === 'compact' ? '[&_td]:py-1' : '[&_td]:py-2.5';
 
   return (
     <div className={cn('flex flex-col h-full gap-3', className)}>
       <div className="flex-1 min-h-0 overflow-auto rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-        <Table>
+        <Table className={densityClass}>
           <TableHeader>
             <TableRow>
               {columns.map((col) => (
