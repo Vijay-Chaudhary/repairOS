@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { differenceInCalendarDays } from 'date-fns';
-import { Clock, User, Wrench, AlertTriangle, Star, CalendarClock, MoreVertical, ArrowRight, RotateCcw, Eye, ChevronRight } from 'lucide-react';
+import { Clock, User, Wrench, AlertTriangle, Star, CalendarClock, MoreVertical, ArrowRight, RotateCcw, Eye, ChevronRight, CheckCircle2, IndianRupee } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +17,7 @@ import { Money } from '@/components/shared/Money';
 import { Can } from '@/components/shared/Can';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { formatDate } from '@/lib/format/date';
+import { sumMoney } from '@/lib/format/money';
 import { cn } from '@/lib/utils';
 import type { JobListItem, JobPriority, JobStatus } from '@/lib/api/repair';
 import { STATUS_TRANSITIONS } from '@/lib/api/repair';
@@ -88,6 +89,11 @@ export function JobCard({ job, compact, kanban }: JobCardProps) {
     deliveryDate < today &&
     !TERMINAL_STATUSES.has(job.status);
   const overdueDays = isOverdue && deliveryDate ? differenceInCalendarDays(today, deliveryDate) : 0;
+
+  const balance = sumMoney(job.service_charge) - sumMoney(job.advance_paid);
+  const hasCharge = sumMoney(job.service_charge) > 0;
+  const isPaid = hasCharge && balance <= 0;
+  const isDue = balance > 0;
 
   const handleCardClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -262,7 +268,19 @@ export function JobCard({ job, compact, kanban }: JobCardProps) {
               <Clock className="h-3 w-3 shrink-0" />
               <span>{formatDate(job.intake_date)}</span>
             </div>
-            <Money amount={job.service_charge} className="text-xs" />
+            {isDue ? (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--warning)]">
+                <IndianRupee className="h-3 w-3 shrink-0" />
+                Due <Money amount={balance} className="text-xs" />
+              </span>
+            ) : isPaid ? (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--success)]">
+                <CheckCircle2 className="h-3 w-3 shrink-0" />
+                Paid
+              </span>
+            ) : (
+              <Money amount={job.service_charge} className="text-xs text-[var(--text-muted)]" />
+            )}
           </div>
         </div>
       )}
