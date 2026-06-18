@@ -7,6 +7,7 @@ import { repairApi, KANBAN_COLUMNS, type RepairOverview } from '@/lib/api/repair
 import { qk } from '@/lib/query/keys';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
 import { Money } from '@/components/shared/Money';
+import { sumMoney } from '@/lib/format/money';
 import { Button } from '@/components/ui/button';
 import { Can } from '@/components/shared/Can';
 import { cn } from '@/lib/utils';
@@ -140,7 +141,8 @@ export default function RepairOverviewPage() {
           ) : (
             <ul className="divide-y divide-[var(--border)]">
               {data.needs_attention.map((j) => {
-                const unpaid = j.service_charge - j.advance_paid > 0;
+                const balance = sumMoney(j.service_charge) - sumMoney(j.advance_paid);
+                const unpaid = balance > 0;
                 return (
                   <li key={j.id}>
                     <Link
@@ -159,7 +161,7 @@ export default function RepairOverviewPage() {
                       <span className="shrink-0 flex items-center gap-2">
                         {unpaid && (
                           <span className="text-xs font-medium text-[var(--warning)]">
-                            <Money amount={j.service_charge - j.advance_paid} />
+                            <Money amount={balance} />
                           </span>
                         )}
                       </span>

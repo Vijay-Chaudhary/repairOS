@@ -36,7 +36,9 @@ const SAMPLE = {
     {
       id: 'j1', job_number: 'JOY-2026-0001', customer_name: 'Ravi Kumar',
       device_type: 'Smartphone', status: 'open',
-      expected_delivery_date: null, service_charge: 500, advance_paid: 0,
+      // DRF serializes DecimalField as strings — mirror that here so the test
+      // exercises the real wire contract, not a number the page never receives.
+      expected_delivery_date: null, service_charge: '500.00', advance_paid: '0.00',
     },
   ],
 };
@@ -64,6 +66,8 @@ describe('RepairOverviewPage', () => {
     expect(screen.getByText('7')).toBeInTheDocument();
     expect(screen.getByText('JOY-2026-0001')).toBeInTheDocument();
     expect(screen.getByText('Ravi Kumar')).toBeInTheDocument();
+    // Balance (service_charge - advance_paid) computed from string money fields renders.
+    expect(screen.getByText('₹500.00')).toBeInTheDocument();
   });
 
   it('shows an empty state when there are no jobs', async () => {

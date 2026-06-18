@@ -151,8 +151,9 @@ export interface RepairOverview {
     device_type: string;
     status: JobStatus;
     expected_delivery_date: string | null;
-    service_charge: number;
-    advance_paid: number;
+    // DRF DecimalField serializes to a string (COERCE_DECIMAL_TO_STRING defaults True).
+    service_charge: string;
+    advance_paid: string;
   }>;
 }
 
