@@ -146,6 +146,10 @@ export interface JobFilters {
   date_to?: string;
   search?: string;
   page?: number;
+  device_type?: string;
+  payment_status?: 'paid' | 'partial' | 'unpaid';
+  overdue?: boolean;
+  due_on?: string;
 }
 
 export interface JobListResponse {
