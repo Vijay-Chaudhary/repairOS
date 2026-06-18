@@ -166,11 +166,12 @@ export function LeadCard({ lead }: LeadCardProps) {
   return (
     <div
       onClick={handleCardClick}
-      className="bg-[var(--surface)] rounded-md border border-[var(--border)] p-3 space-y-2 select-none cursor-pointer hover:shadow-md transition-shadow relative"
+      className="bg-[var(--surface)] rounded-md border border-[var(--border)] pt-1 p-3 space-y-2 select-none cursor-pointer hover:shadow-md transition-shadow relative"
     >
       {/* Header row: name + menu on one line, phone below */}
       <div>
-        <div className="flex items-center gap-2 mb-1.5">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="flex-1 min-w-0">
           <Link
             href={`/leads/${lead.id}`}
             className="text-body-sm font-semibold text-[var(--text)] hover:underline truncate capitalize flex-1 min-w-0"
@@ -178,6 +179,7 @@ export function LeadCard({ lead }: LeadCardProps) {
           >
             {lead.name}
           </Link>
+          </div>
           <StatusBadge status={lead.status} className="shrink-0" />
           <Can anyOf={['crm.leads.edit', 'crm.leads.convert']}>
             <div data-lead-menu className="shrink-0">

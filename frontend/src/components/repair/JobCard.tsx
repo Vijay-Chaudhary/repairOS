@@ -136,7 +136,7 @@ export function JobCard({ job, compact, kanban }: JobCardProps) {
     <div
       onClick={handleCardClick}
       className={cn(
-        'bg-[var(--surface)] rounded-md border border-[var(--border)] p-3 cursor-pointer hover:shadow-md transition-shadow select-none relative',
+        'bg-[var(--surface)] rounded-md border border-[var(--border)] pt-0.5 p-3 cursor-pointer hover:shadow-md transition-shadow select-none relative',
         PRIORITY_STYLE[job.priority],
       )}
     >
