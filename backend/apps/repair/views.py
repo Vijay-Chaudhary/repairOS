@@ -4,7 +4,8 @@ Repair module views — 14 API endpoints from modules/02-repair §6.
 
 import logging
 
-from django.db.models import Q
+from django.db.models import DecimalField, ExpressionWrapper, F, Q
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -142,7 +143,6 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
         # Payment status (derive balance = service_charge - advance_paid)
         if payment_status := qp.get("payment_status", "").strip():
             if payment_status in ("paid", "partial", "unpaid"):
-                from django.db.models import DecimalField, ExpressionWrapper, F
                 qs = qs.annotate(
                     _balance=ExpressionWrapper(
                         F("service_charge") - F("advance_paid"),
@@ -158,9 +158,8 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
 
         # Overdue: expected delivery in the past and not in a terminal state
         if qp.get("overdue", "").strip().lower() == "true":
-            from django.utils import timezone
             qs = qs.filter(expected_delivery_date__lt=timezone.localdate()).exclude(
-                status__in=["delivered", "closed", "cancelled"]
+                status__in=[JobTicket.Status.DELIVERED, JobTicket.Status.CLOSED, JobTicket.Status.CANCELLED]
             )
 
         # Due on a specific date (expected delivery date)

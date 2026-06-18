@@ -830,3 +830,28 @@ class TestJobListFilters:
         res = admin_client.get("/api/v1/repair/jobs/", {"due_on": today.isoformat()})
         assert res.status_code == 200
         assert {r["job_number"] for r in res.data["items"]} == {due.job_number}
+
+    def test_payment_status_zero_charge_not_unpaid(self, admin_client, shop, customer, admin_user):
+        from repair.models import JobTicket
+        zero = self._make_job(shop, customer, admin_user)
+        JobTicket.objects.filter(pk=zero.pk).update(service_charge=0, advance_paid=0)
+        res = admin_client.get("/api/v1/repair/jobs/", {"payment_status": "unpaid"})
+        assert res.status_code == 200
+        assert zero.job_number not in {r["job_number"] for r in res.data["items"]}
+        # A zero-charge job has balance 0 → counts as paid, not unpaid
+        res_paid = admin_client.get("/api/v1/repair/jobs/", {"payment_status": "paid"})
+        assert zero.job_number in {r["job_number"] for r in res_paid.data["items"]}
+
+    def test_payment_status_invalid_value_ignored(self, admin_client, shop, customer, admin_user):
+        self._make_job(shop, customer, admin_user)
+        res = admin_client.get("/api/v1/repair/jobs/", {"payment_status": "bogus"})
+        assert res.status_code == 200
+        # Unknown value is ignored → all jobs returned, not an empty set
+        assert res.data["meta"]["count"] >= 1
+
+    def test_device_type_blank_ignored(self, admin_client, shop, customer, admin_user):
+        self._make_job(shop, customer, admin_user, device_type="Laptop")
+        res = admin_client.get("/api/v1/repair/jobs/", {"device_type": "   "})
+        assert res.status_code == 200
+        # Whitespace-only device_type is stripped to empty → filter not applied
+        assert res.data["meta"]["count"] >= 1
