@@ -8,6 +8,8 @@ interface UiState {
   commandPaletteOpen: boolean;
   pendingToast: { type: 'success' | 'error' | 'info'; message: string } | null;
   navGroupsOpen: Record<string, boolean>;
+  jobsListDensity: 'comfortable' | 'compact';
+  jobsHiddenColumns: string[];
 
   setSidebarCollapsed: (v: boolean) => void;
   toggleSidebar: () => void;
@@ -19,6 +21,8 @@ interface UiState {
   clearPendingToast: () => void;
   toggleNavGroup: (label: string) => void;
   setNavGroupOpen: (label: string, open: boolean) => void;
+  setJobsListDensity: (d: 'comfortable' | 'compact') => void;
+  toggleJobsColumn: (key: string) => void;
 }
 
 export const useUiStore = create<UiState>()(
@@ -30,6 +34,8 @@ export const useUiStore = create<UiState>()(
       commandPaletteOpen: false,
       pendingToast: null,
       navGroupsOpen: {},
+      jobsListDensity: 'comfortable' as const,
+      jobsHiddenColumns: [],
 
       setSidebarCollapsed: (v: boolean) => set({ sidebarCollapsed: v }),
       toggleSidebar: () => set({ sidebarCollapsed: !get().sidebarCollapsed }),
@@ -43,6 +49,13 @@ export const useUiStore = create<UiState>()(
         set((s) => ({ navGroupsOpen: { ...s.navGroupsOpen, [label]: !s.navGroupsOpen[label] } })),
       setNavGroupOpen: (label: string, open: boolean) =>
         set((s) => ({ navGroupsOpen: { ...s.navGroupsOpen, [label]: open } })),
+      setJobsListDensity: (d) => set({ jobsListDensity: d }),
+      toggleJobsColumn: (key) =>
+        set((s) => ({
+          jobsHiddenColumns: s.jobsHiddenColumns.includes(key)
+            ? s.jobsHiddenColumns.filter((k) => k !== key)
+            : [...s.jobsHiddenColumns, key],
+        })),
     }),
     {
       name: 'repairos-ui',
@@ -51,6 +64,8 @@ export const useUiStore = create<UiState>()(
         sidebarCollapsed: state.sidebarCollapsed,
         theme: state.theme,
         navGroupsOpen: state.navGroupsOpen,
+        jobsListDensity: state.jobsListDensity,
+        jobsHiddenColumns: state.jobsHiddenColumns,
       }),
     }
   )
