@@ -5,20 +5,23 @@ import { useRouter } from 'next/navigation';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { differenceInCalendarDays } from 'date-fns';
-import { Plus, Search, LayoutGrid, List, WifiOff, Filter, Phone, AlertTriangle, Star, CalendarClock } from 'lucide-react';
+import { Plus, Search, LayoutGrid, List, WifiOff, Phone, AlertTriangle, Star, CalendarClock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DataTable, type Column } from '@/components/shared/DataTable';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Money } from '@/components/shared/Money';
 import { Can } from '@/components/shared/Can';
 import { JobBoard, type KanbanColumnData } from '@/components/repair/JobBoard';
+import { JobFilterBar } from '@/components/repair/JobFilterBar';
+import { JobQuickFilters } from '@/components/repair/JobQuickFilters';
+import { EMPTY_JOB_FILTERS, toBaseApiFilters, type JobFilterState, type JobFilterCtx } from '@/lib/repair/jobFilters';
 import { repairApi, KANBAN_COLUMNS, type JobListItem, type JobStatus, type JobPriority } from '@/lib/api/repair';
 import { settingsApi } from '@/lib/api/settings';
 import { qk } from '@/lib/query/keys';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
 import { useOfflineQueueStore } from '@/lib/stores/offlineQueueStore';
+import { useAuthStore } from '@/lib/stores/authStore';
 import { useDebounce } from '@/lib/hooks/useDebounce';
 import { formatDate } from '@/lib/format/date';
 import { formatPhone } from '@/lib/format/phone';
@@ -26,13 +29,6 @@ import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 
 type ViewMode = 'kanban' | 'list';
-
-const PRIORITY_OPTIONS: Array<{ label: string; value: JobPriority | 'all' }> = [
-  { label: 'All priorities', value: 'all' },
-  { label: 'Normal', value: 'normal' },
-  { label: 'Urgent', value: 'urgent' },
-  { label: 'VIP', value: 'vip' },
-];
 
 const TERMINAL_STATUSES_SET = new Set<JobStatus>(['delivered', 'closed', 'cancelled']);
 
@@ -152,13 +148,15 @@ export default function JobsPage() {
   const { isOnline } = useOfflineQueueStore();
 
   const [view, setView] = useState<ViewMode>('kanban');
-  const [search, setSearch] = useState('');
-  const [priority, setPriority] = useState<JobPriority | 'all'>('all');
-  const [technicianId, setTechnicianId] = useState<string | 'all'>('all');
+  const [filters, setFilters] = useState<JobFilterState>(EMPTY_JOB_FILTERS);
   const [listPage, setListPage] = useState(1);
 
-  const debouncedSearch = useDebounce(search, 350);
-  React.useEffect(() => { setListPage(1); }, [debouncedSearch, priority, technicianId]);
+  const { user } = useAuthStore();
+  const debouncedSearch = useDebounce(filters.search, 350);
+
+  // Reset to page 1 whenever any filter changes (search is debounced separately)
+  const filterSignature = JSON.stringify({ ...filters, search: debouncedSearch });
+  React.useEffect(() => { setListPage(1); }, [filterSignature]);
 
   const { data: usersData } = useQuery({
     queryKey: ['settings', 'users', activeShopId],
@@ -166,12 +164,18 @@ export default function JobsPage() {
     staleTime: 300_000,
   });
 
+  const filterCtx: JobFilterCtx = useMemo(() => ({
+    todayIso: new Date().toISOString().slice(0, 10),
+    currentUserId: user?.id ?? '',
+    technicianName: (id) => usersData?.items.find((u) => u.id === id)?.full_name ?? id,
+  }), [user?.id, usersData]);
+
+  // Shared filters for every view (status excluded — applied per column / per list).
   const baseFilters = useMemo(() => ({
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
     search: debouncedSearch || undefined,
-    priority: priority === 'all' ? undefined : priority,
-    technician_id: technicianId === 'all' ? undefined : technicianId,
-  }), [isAllShops, activeShopId, debouncedSearch, priority, technicianId]);
+    ...toBaseApiFilters({ ...filters, search: debouncedSearch }, filterCtx),
+  }), [isAllShops, activeShopId, debouncedSearch, filters, filterCtx]);
 
   // Kanban: one query per column
   const columnQueries = useQueries({
@@ -191,9 +195,13 @@ export default function JobsPage() {
   }));
 
   // List view: page-number paginated
+  const listFilters = useMemo(
+    () => ({ ...baseFilters, status: filters.status === 'all' ? undefined : filters.status, page: listPage }),
+    [baseFilters, filters.status, listPage],
+  );
   const listQuery = useQuery({
-    queryKey: qk.jobs({ ...baseFilters, page: listPage }),
-    queryFn: () => repairApi.listJobs({ ...baseFilters, page: listPage }),
+    queryKey: qk.jobs(listFilters),
+    queryFn: () => repairApi.listJobs(listFilters),
     staleTime: 30_000,
     enabled: view === 'list',
   });
@@ -237,38 +245,17 @@ export default function JobsPage() {
           <Input
             placeholder="Search job #, customer, IMEI…"
             className="pl-9 h-9"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={filters.search}
+            onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
           />
         </div>
 
-        {/* Priority filter */}
-        <Select value={priority} onValueChange={(v) => setPriority(v as JobPriority | 'all')}>
-          <SelectTrigger className="h-9 w-[140px]">
-            <Filter className="h-3.5 w-3.5 text-[var(--text-muted)]" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PRIORITY_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Technician filter */}
-        {usersData?.items && usersData.items.length > 0 && (
-          <Select value={technicianId} onValueChange={setTechnicianId}>
-            <SelectTrigger className="h-9 w-[150px]">
-              <SelectValue placeholder="All technicians" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All technicians</SelectItem>
-              {usersData.items.map((u) => (
-                <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+        <JobFilterBar
+          filters={filters}
+          onChange={setFilters}
+          technicians={(usersData?.items ?? []).map((u) => ({ id: u.id, name: u.full_name }))}
+          ctx={filterCtx}
+        />
 
         <div className="flex items-center gap-1 ml-auto">
           {/* View toggle */}
@@ -315,6 +302,11 @@ export default function JobsPage() {
             </Button>
           </Can>
         </div>
+      </div>
+
+      {/* Quick filters */}
+      <div className="px-4 py-2 border-b border-[var(--border)] bg-[var(--surface)]">
+        <JobQuickFilters filters={filters} onChange={setFilters} ctx={filterCtx} />
       </div>
 
       {/* Board / List */}
