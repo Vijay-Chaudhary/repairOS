@@ -8,6 +8,8 @@ import {
   clearAll,
   applyPreset,
   isPresetActive,
+  hasActiveFilters,
+  jobsEmptyCopy,
   type JobFilterState,
 } from '../jobFilters';
 
@@ -88,5 +90,26 @@ describe('presets', () => {
     expect(applyPreset(state(), 'overdue', CTX).overdue).toBe(true);
     expect(applyPreset(state(), 'due_today', CTX).dueToday).toBe(true);
     expect(isPresetActive(state({ technicianId: 'u1' }), 'my_jobs', CTX)).toBe(true);
+  });
+});
+
+describe('hasActiveFilters & jobsEmptyCopy', () => {
+  it('detects no active filters on empty state', () => {
+    expect(hasActiveFilters(state())).toBe(false);
+  });
+
+  it('counts search and any filter as active', () => {
+    expect(hasActiveFilters(state({ search: 'x' }))).toBe(true);
+    expect(hasActiveFilters(state({ status: 'open' }))).toBe(true);
+    expect(hasActiveFilters(state({ overdue: true }))).toBe(true);
+  });
+
+  it('returns filter-aware copy', () => {
+    const empty = jobsEmptyCopy(false);
+    expect(empty.title).toMatch(/no jobs yet/i);
+    expect(empty.kanbanLabel).toMatch(/no jobs in this stage/i);
+    const filtered = jobsEmptyCopy(true);
+    expect(filtered.title).toMatch(/no matching jobs/i);
+    expect(filtered.kanbanLabel).toMatch(/no matches/i);
   });
 });

@@ -15,7 +15,7 @@ import { Can } from '@/components/shared/Can';
 import { JobBoard, type KanbanColumnData } from '@/components/repair/JobBoard';
 import { JobFilterBar } from '@/components/repair/JobFilterBar';
 import { JobQuickFilters } from '@/components/repair/JobQuickFilters';
-import { EMPTY_JOB_FILTERS, toBaseApiFilters, type JobFilterState, type JobFilterCtx } from '@/lib/repair/jobFilters';
+import { EMPTY_JOB_FILTERS, toBaseApiFilters, hasActiveFilters, jobsEmptyCopy, type JobFilterState, type JobFilterCtx } from '@/lib/repair/jobFilters';
 import { repairApi, KANBAN_COLUMNS, type JobListItem, type JobStatus, type JobPriority } from '@/lib/api/repair';
 import { settingsApi } from '@/lib/api/settings';
 import { qk } from '@/lib/query/keys';
@@ -150,6 +150,8 @@ export default function JobsPage() {
   const [view, setView] = useState<ViewMode>('kanban');
   const [filters, setFilters] = useState<JobFilterState>(EMPTY_JOB_FILTERS);
   const [listPage, setListPage] = useState(1);
+
+  const emptyCopy = useMemo(() => jobsEmptyCopy(hasActiveFilters(filters)), [filters]);
 
   const { user } = useAuthStore();
   const debouncedSearch = useDebounce(filters.search, 350);
@@ -312,7 +314,7 @@ export default function JobsPage() {
       {/* Board / List */}
       <div className="flex-1 overflow-auto p-4 md:p-6">
         {view === 'kanban' ? (
-          <JobBoard columns={kanbanColumns} onCardMove={handleCardMove} />
+          <JobBoard columns={kanbanColumns} onCardMove={handleCardMove} emptyLabel={emptyCopy.kanbanLabel} />
         ) : (
           <DataTable
             columns={LIST_COLUMNS}
@@ -321,8 +323,8 @@ export default function JobsPage() {
             error={listQuery.error as Error | null}
             keyExtractor={(r) => r.id}
             onRowClick={handleRowClick}
-            emptyTitle="No jobs yet"
-            emptyDescription="Create your first job to get started."
+            emptyTitle={emptyCopy.title}
+            emptyDescription={emptyCopy.description}
             emptyAction={{
               label: 'New Job',
               onClick: () => router.push('/jobs/new'),

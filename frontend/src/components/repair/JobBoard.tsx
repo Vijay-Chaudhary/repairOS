@@ -72,9 +72,10 @@ interface JobBoardProps {
     toStatus: JobStatus,
     fields?: Record<string, string>,
   ) => Promise<void>;
+  emptyLabel?: string;
 }
 
-export function JobBoard({ columns, onCardMove }: JobBoardProps) {
+export function JobBoard({ columns, onCardMove, emptyLabel }: JobBoardProps) {
   const { hasPermission, user } = useAuthStore();
   const isAdmin = user?.is_platform_admin || hasPermission('tenant.admin');
 
@@ -120,7 +121,7 @@ export function JobBoard({ columns, onCardMove }: JobBoardProps) {
       transitionDialogs={JOB_TRANSITION_DIALOGS}
       columnCounts={columnCounts}
       isLoadingMap={isLoadingMap}
-      emptyLabel="No jobs in this stage"
+      emptyLabel={emptyLabel ?? 'No jobs in this stage'}
     />
   );
 }

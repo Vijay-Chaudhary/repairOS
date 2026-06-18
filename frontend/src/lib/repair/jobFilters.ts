@@ -126,6 +126,33 @@ export function isPresetActive(s: JobFilterState, preset: QuickPreset, ctx: JobF
   }
 }
 
+/** True when search text or any panel/preset filter is active. */
+export function hasActiveFilters(s: JobFilterState): boolean {
+  return s.search.trim().length > 0 || activeFilterCount(s) > 0;
+}
+
+export interface JobsEmptyCopy {
+  title: string;
+  description: string;
+  kanbanLabel: string;
+}
+
+/** Empty-state copy that adapts to whether filters/search are narrowing the view. */
+export function jobsEmptyCopy(filtersActive: boolean): JobsEmptyCopy {
+  if (filtersActive) {
+    return {
+      title: 'No matching jobs',
+      description: 'No jobs match the current search and filters. Try clearing them.',
+      kanbanLabel: 'No matches',
+    };
+  }
+  return {
+    title: 'No jobs yet',
+    description: 'Create your first job to get started.',
+    kanbanLabel: 'No jobs in this stage',
+  };
+}
+
 export const QUICK_PRESETS: Array<{ id: QuickPreset; label: string }> = [
   { id: 'overdue',   label: 'Overdue' },
   { id: 'unpaid',    label: 'Unpaid' },
