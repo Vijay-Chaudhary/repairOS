@@ -168,13 +168,13 @@ export default function JobsPage() {
     todayIso: new Date().toISOString().slice(0, 10),
     currentUserId: user?.id ?? '',
     technicianName: (id) => usersData?.items.find((u) => u.id === id)?.full_name ?? id,
-  }), [user?.id, usersData]);
+  }), [user?.id, usersData?.items]);
 
   // Shared filters for every view (status excluded — applied per column / per list).
   const baseFilters = useMemo(() => ({
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
     search: debouncedSearch || undefined,
-    ...toBaseApiFilters({ ...filters, search: debouncedSearch }, filterCtx),
+    ...toBaseApiFilters(filters, filterCtx),
   }), [isAllShops, activeShopId, debouncedSearch, filters, filterCtx]);
 
   // Kanban: one query per column
