@@ -295,3 +295,37 @@ class ReviewSparePartSerializer(serializers.Serializer):
         choices=["approved", "rejected", "ordered", "received"]
     )
     po_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Repair overview
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class OverviewKpisSerializer(serializers.Serializer):
+    open_jobs = serializers.IntegerField()
+    overdue = serializers.IntegerField()
+    awaiting_parts = serializers.IntegerField()
+    ready_for_pickup = serializers.IntegerField()
+
+
+class OverviewStatusCountSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    count = serializers.IntegerField()
+
+
+class OverviewNeedsAttentionSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    job_number = serializers.CharField()
+    customer_name = serializers.CharField(source="customer.name")
+    device_type = serializers.CharField()
+    status = serializers.CharField()
+    expected_delivery_date = serializers.DateField(allow_null=True)
+    service_charge = serializers.DecimalField(max_digits=10, decimal_places=2)
+    advance_paid = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
+class RepairOverviewSerializer(serializers.Serializer):
+    kpis = OverviewKpisSerializer()
+    by_status = OverviewStatusCountSerializer(many=True)
+    needs_attention = OverviewNeedsAttentionSerializer(many=True)

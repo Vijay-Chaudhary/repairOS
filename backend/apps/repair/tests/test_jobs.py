@@ -856,3 +856,54 @@ class TestRepairOverviewService:
         assert get_repair_overview(Q(), shop.id)["kpis"]["open_jobs"] == 2
         # mixin-style Q filter also scopes to shop A only
         assert get_repair_overview(Q(shop_id=shop.id), None)["kpis"]["open_jobs"] == 2
+
+
+@pytest.mark.django_db
+class TestRepairOverviewEndpoint:
+    """GET /api/repair/overview/."""
+
+    def _make_job(self, shop, customer, admin_user, **kwargs):
+        from repair.services import create_job
+        defaults = {"device_type": "Smartphone", "problem_description": "Test.", "priority": "normal"}
+        defaults.update(kwargs)
+        return create_job(shop, customer, defaults, admin_user)
+
+    def test_returns_shape(self, admin_client, shop, customer, admin_user):
+        from repair.models import JobTicket
+        j = self._make_job(shop, customer, admin_user)
+        JobTicket.objects.filter(pk=j.pk).update(status="open", service_charge=500, advance_paid=0)
+
+        res = admin_client.get("/api/v1/repair/overview/")
+        assert res.status_code == 200
+        assert set(res.data["kpis"].keys()) == {"open_jobs", "overdue", "awaiting_parts", "ready_for_pickup"}
+        assert isinstance(res.data["by_status"], list)
+        assert res.data["by_status"][0]["status"] == "open"
+        assert len(res.data["needs_attention"]) == 1
+        item = res.data["needs_attention"][0]
+        assert item["job_number"] == j.job_number
+        assert item["customer_name"] == customer.name
+
+    def test_requires_permission(self, api_client, shop, customer):
+        from authentication.models import Permission, Role, RolePermission, User, UserRole
+        from authentication.tokens import _build_token_claims
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        user = User.objects.create_user(
+            email="noperm@repair.test", phone="+919000000099",
+            full_name="No Perm", password="NoPerm@1",
+        )
+        role, _ = Role.objects.get_or_create(name="Empty", defaults={"is_system_role": False})
+        perm, _ = Permission.objects.get_or_create(
+            codename="crm.customers.view", defaults={"module": "crm", "label": "crm.customers.view"}
+        )
+        RolePermission.objects.get_or_create(role=role, permission=perm)
+        UserRole.objects.create(user=user, role=role, shop=None)
+
+        refresh = RefreshToken.for_user(user)
+        access = refresh.access_token
+        for k, v in _build_token_claims(user, "test").items():
+            access[k] = v
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {str(access)}")
+
+        res = api_client.get("/api/v1/repair/overview/")
+        assert res.status_code == 403

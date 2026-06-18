@@ -8,6 +8,7 @@ from django.db.models import Q
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from authentication.permissions import require_permission
@@ -32,6 +33,7 @@ from .serializers import (
     JobTicketDetailSerializer,
     JobTicketListSerializer,
     JobTicketSerializer,
+    RepairOverviewSerializer,
     ReviewSparePartSerializer,
     SetStagesSerializer,
 )
@@ -409,3 +411,20 @@ class FaultTemplateViewSet(ShopScopedMixin, GenericViewSet):
 
 # Import inside action to avoid circular import at module level
 from .models import JobEstimate
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Repair overview  (read-only dashboard hub)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class RepairOverviewView(ShopScopedMixin, APIView):
+    """GET /repair/overview/ — KPI counts, jobs-by-status, and a needs-attention list."""
+
+    def get_permissions(self):
+        return [require_permission("repair.jobs.view")()]
+
+    def get(self, request):
+        shop_id = request.query_params.get("shop_id")
+        data = services.get_repair_overview(self._shop_filter(), shop_id)
+        return Response(RepairOverviewSerializer(data).data)
