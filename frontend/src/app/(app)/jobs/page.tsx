@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { differenceInCalendarDays } from 'date-fns';
-import { Plus, Search, LayoutGrid, List, WifiOff, Phone, AlertTriangle, Star, CalendarClock } from 'lucide-react';
+import { Plus, Search, LayoutGrid, List, WifiOff, Phone, AlertTriangle, Star, CalendarClock, Rows3, Rows2, Columns3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DataTable, type Column } from '@/components/shared/DataTable';
@@ -27,6 +27,8 @@ import { formatDate } from '@/lib/format/date';
 import { formatPhone } from '@/lib/format/phone';
 import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
+import { useUiStore } from '@/lib/stores/uiStore';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuCheckboxItem } from '@/components/ui/dropdown-menu';
 
 type ViewMode = 'kanban' | 'list';
 
@@ -141,6 +143,16 @@ const LIST_COLUMNS: Column<JobListItem>[] = [
   },
 ];
 
+const TOGGLEABLE_COLUMNS: Array<{ key: string; label: string }> = [
+  { key: 'device', label: 'Device' },
+  { key: 'status', label: 'Status' },
+  { key: 'due', label: 'Due Date' },
+  { key: 'technician', label: 'Technician' },
+  { key: 'charge', label: 'Charge' },
+  { key: 'balance', label: 'Balance' },
+  { key: 'intake', label: 'Intake' },
+];
+
 export default function JobsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -152,6 +164,12 @@ export default function JobsPage() {
   const [listPage, setListPage] = useState(1);
 
   const emptyCopy = useMemo(() => jobsEmptyCopy(hasActiveFilters(filters)), [filters]);
+
+  const { jobsListDensity, jobsHiddenColumns, setJobsListDensity, toggleJobsColumn } = useUiStore();
+  const visibleColumns = useMemo(
+    () => LIST_COLUMNS.filter((c) => !jobsHiddenColumns.includes(c.key)),
+    [jobsHiddenColumns],
+  );
 
   const { user } = useAuthStore();
   const debouncedSearch = useDebounce(filters.search, 350);
@@ -316,24 +334,70 @@ export default function JobsPage() {
         {view === 'kanban' ? (
           <JobBoard columns={kanbanColumns} onCardMove={handleCardMove} emptyLabel={emptyCopy.kanbanLabel} />
         ) : (
-          <DataTable
-            columns={LIST_COLUMNS}
-            data={listQuery.data?.items}
-            loading={listQuery.isLoading}
-            error={listQuery.error as Error | null}
-            keyExtractor={(r) => r.id}
-            onRowClick={handleRowClick}
-            emptyTitle={emptyCopy.title}
-            emptyDescription={emptyCopy.description}
-            emptyAction={{
-              label: 'New Job',
-              onClick: () => router.push('/jobs/new'),
-            }}
-            page={listPage}
-            totalPages={listQuery.data?.meta?.total_pages}
-            onPageChange={setListPage}
-            totalCount={listQuery.data?.meta?.count}
-          />
+          <div className="flex flex-col h-full gap-2">
+            <div className="flex items-center justify-end gap-1">
+              <div className="flex rounded-md border border-[var(--border)] overflow-hidden">
+                <button
+                  onClick={() => setJobsListDensity('comfortable')}
+                  className={cn('h-8 w-8 flex items-center justify-center', jobsListDensity === 'comfortable' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)]')}
+                  title="Comfortable rows"
+                  aria-label="Comfortable row density"
+                >
+                  <Rows3 className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setJobsListDensity('compact')}
+                  className={cn('h-8 w-8 flex items-center justify-center', jobsListDensity === 'compact' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)]')}
+                  title="Compact rows"
+                  aria-label="Compact row density"
+                >
+                  <Rows2 className="h-4 w-4" />
+                </button>
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="h-8 px-2 inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] text-body-sm text-[var(--text-muted)] hover:bg-[var(--surface-2)]"
+                    aria-label="Choose columns"
+                  >
+                    <Columns3 className="h-4 w-4" />
+                    <span className="hidden sm:inline">Columns</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {TOGGLEABLE_COLUMNS.map((col) => (
+                    <DropdownMenuCheckboxItem
+                      key={col.key}
+                      checked={!jobsHiddenColumns.includes(col.key)}
+                      onCheckedChange={() => toggleJobsColumn(col.key)}
+                      onSelect={(e) => e.preventDefault()}
+                    >
+                      {col.label}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            <DataTable
+              columns={visibleColumns}
+              density={jobsListDensity}
+              data={listQuery.data?.items}
+              loading={listQuery.isLoading}
+              error={listQuery.error as Error | null}
+              keyExtractor={(r) => r.id}
+              onRowClick={handleRowClick}
+              emptyTitle={emptyCopy.title}
+              emptyDescription={emptyCopy.description}
+              emptyAction={{
+                label: 'New Job',
+                onClick: () => router.push('/jobs/new'),
+              }}
+              page={listPage}
+              totalPages={listQuery.data?.meta?.total_pages}
+              onPageChange={setListPage}
+              totalCount={listQuery.data?.meta?.count}
+            />
+          </div>
         )}
       </div>
     </div>
