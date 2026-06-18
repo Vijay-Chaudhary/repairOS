@@ -317,7 +317,7 @@ class OverviewStatusCountSerializer(serializers.Serializer):
 class OverviewNeedsAttentionSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     job_number = serializers.CharField()
-    customer_name = serializers.CharField(source="customer.name")
+    customer_name = serializers.CharField(source="customer.name", read_only=True)
     device_type = serializers.CharField()
     status = serializers.CharField()
     expected_delivery_date = serializers.DateField(allow_null=True)
