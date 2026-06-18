@@ -295,3 +295,20 @@ class ReviewSparePartSerializer(serializers.Serializer):
         choices=["approved", "rejected", "ordered", "received"]
     )
     po_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class SparePartRequestListSerializer(serializers.ModelSerializer):
+    requested_by_name = serializers.CharField(source="requested_by.full_name", read_only=True)
+    job_id = serializers.UUIDField(source="job.id", read_only=True)
+    job_number = serializers.CharField(source="job.job_number", read_only=True)
+    customer_name = serializers.CharField(source="job.customer.name", read_only=True)
+    device_type = serializers.CharField(source="job.device_type", read_only=True)
+
+    class Meta:
+        model = JobSparePartRequest
+        fields = [
+            "id", "job_id", "job_number", "customer_name", "device_type",
+            "variant_id", "custom_part_name", "quantity", "is_urgent", "status",
+            "requested_by", "requested_by_name", "reviewed_by", "po_id", "created_at",
+        ]
+        read_only_fields = fields

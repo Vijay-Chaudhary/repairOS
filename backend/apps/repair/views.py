@@ -34,6 +34,7 @@ from .serializers import (
     JobTicketSerializer,
     ReviewSparePartSerializer,
     SetStagesSerializer,
+    SparePartRequestListSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -309,33 +310,59 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-class SparePartRequestViewSet(GenericViewSet):
+class SparePartRequestViewSet(ShopScopedMixin, GenericViewSet):
     """
-    PATCH /spare-parts/{id}/  — review a spare-part request
+    GET    /spare-parts/        — cross-job worklist (shop-scoped; filters: status, shop_id, date_from, date_to)
+    PATCH  /spare-parts/{id}/   — review a spare-part request
     """
 
-    serializer_class = ReviewSparePartSerializer
-    http_method_names = ["patch", "head", "options"]
+    pagination_class = RepairOSPageNumberPagination
+    http_method_names = ["get", "patch", "head", "options"]
 
     def get_permissions(self):
-        return [require_permission("repair.spare_parts.approve")()]
+        if self.action == "partial_update" and "status" in self.request.data:
+            return [require_permission("repair.spare_parts.approve")()]
+        return [require_permission("repair.spare_parts.request")()]
+
+    def _scoped_qs(self):
+        qs = JobSparePartRequest.objects.select_related("job", "job__customer", "requested_by")
+        token = getattr(self.request, "auth", None)
+        if token and not (token.get("is_tenant_wide") or token.get("is_platform_admin")):
+            shop_ids = token.get("shop_ids", [])
+            qs = qs.filter(job__shop_id__in=shop_ids) if shop_ids else qs.none()
+        return qs
 
     def get_queryset(self):
-        return JobSparePartRequest.objects.all()
+        return self._scoped_qs()
+
+    def list(self, request):
+        qs = self._scoped_qs()
+        qp = request.query_params
+        if s := qp.get("status"):
+            qs = qs.filter(status=s)
+        if shop_id := qp.get("shop_id"):
+            qs = qs.filter(job__shop_id=shop_id)
+        if df := qp.get("date_from"):
+            qs = qs.filter(created_at__date__gte=df)
+        if dt := qp.get("date_to"):
+            qs = qs.filter(created_at__date__lte=dt)
+        qs = qs.order_by("-created_at")
+        page = self.paginate_queryset(qs)
+        serializer = SparePartRequestListSerializer(page if page is not None else qs, many=True)
+        return self.get_paginated_response(serializer.data) if page is not None else Response(serializer.data)
 
     def partial_update(self, request, pk=None):
+        from rest_framework.exceptions import NotFound
         try:
             req = self.get_queryset().get(pk=pk)
         except JobSparePartRequest.DoesNotExist:
-            from rest_framework.exceptions import NotFound
             raise NotFound("Spare part request not found.")
 
         serializer = ReviewSparePartSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         vd = serializer.validated_data
-
         req = services.review_spare_part(req, vd["status"], request.user, vd.get("po_id"))
-        return Response(JobSparePartRequestSerializer(req).data)
+        return Response(SparePartRequestListSerializer(req).data)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
