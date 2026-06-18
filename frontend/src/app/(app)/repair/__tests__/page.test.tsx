@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import RepairOverviewPage from '../page';
 
@@ -73,5 +74,21 @@ describe('RepairOverviewPage', () => {
     });
     renderPage();
     expect(await screen.findByText(/no jobs yet/i)).toBeInTheDocument();
+  });
+
+  it('shows an error state with a working Retry button', async () => {
+    const user = userEvent.setup();
+    getOverview.mockRejectedValueOnce(new Error('boom'));
+    renderPage();
+    expect(await screen.findByText(/couldn’t load the repair overview/i)).toBeInTheDocument();
+
+    // After clicking Retry the query refetches → getOverview is called again.
+    getOverview.mockResolvedValueOnce({
+      kpis: { open_jobs: 1, overdue: 0, awaiting_parts: 0, ready_for_pickup: 0 },
+      by_status: [{ status: 'open', count: 1 }],
+      needs_attention: [],
+    });
+    await user.click(screen.getByRole('button', { name: /retry/i }));
+    expect(getOverview).toHaveBeenCalledTimes(2);
   });
 });

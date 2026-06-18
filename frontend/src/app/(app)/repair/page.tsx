@@ -64,6 +64,9 @@ export default function RepairOverviewPage() {
 
   if (!data) return null;
 
+  // NOTE: by_status only includes active + delivered statuses (not closed/cancelled),
+  // so a shop whose jobs are ALL closed/cancelled will show the "No jobs yet" state.
+  // Acceptable for Phase 1; revisit with a total-jobs count if it becomes a problem.
   const isEmpty =
     data.by_status.every((r) => r.count === 0) &&
     data.needs_attention.length === 0 &&
@@ -113,7 +116,7 @@ export default function RepairOverviewPage() {
           <h2 className="text-h2 text-[var(--text)] mb-3">Jobs by status</h2>
           <div className="space-y-2">
             {data.by_status.map((row) => (
-              <Link key={row.status} href="/jobs" className="flex items-center gap-3 group">
+              <Link key={row.status} href="/jobs" className="flex items-center gap-3 min-h-[44px] py-1 -mx-2 px-2 rounded-md hover:bg-[var(--surface-2)] transition-colors">
                 <span className="w-32 shrink-0 text-body-sm text-[var(--text-muted)] truncate">
                   {STATUS_LABEL[row.status] ?? row.status}
                 </span>
