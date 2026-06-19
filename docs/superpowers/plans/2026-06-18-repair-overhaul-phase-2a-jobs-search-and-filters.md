@@ -578,7 +578,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 Context: shadcn primitives exist — `Popover`/`PopoverTrigger`/`PopoverContent` (`@/components/ui/popover`), `Select…` (`@/components/ui/select`), `Input` (`@/components/ui/input`), `Button` (`@/components/ui/button`), `Badge` (`@/components/ui/badge`). Icons from `lucide-react`. The component is **controlled**: it receives `filters` and an `onChange(next)` callback plus a `technicians` list for the technician select. It owns no filter state itself.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/components/repair/__tests__/JobFilterBar.test.tsx`:
 
@@ -634,14 +634,14 @@ describe('JobFilterBar', () => {
 
 Note on the Radix Select interaction: Radix Select options render in a portal and may not behave under jsdom exactly as a native `<select>`. If the `option` query proves flaky in this environment, make the panel's selects **native `<select>` elements** styled with the existing input classes instead of the Radix `Select` (simpler and fully testable). Decide based on how the existing `jobs/page.tsx` Select behaves in tests; native `<select>` is an acceptable, accessible choice here. Keep the test asserting `onChange` with `{ priority: 'urgent' }` regardless of which control you use (adjust the query to match).
 
-- [ ] **Step 2: Run, confirm it fails**
+- [x] **Step 2: Run, confirm it fails**
 
 ```bash
 npx vitest run src/components/repair/__tests__/JobFilterBar.test.tsx 2>&1 | tail -20
 ```
 Expected: FAIL (module not found).
 
-- [ ] **Step 3: Implement `JobFilterBar`**
+- [x] **Step 3: Implement `JobFilterBar`**
 
 Create `frontend/src/components/repair/JobFilterBar.tsx`:
 
@@ -838,21 +838,21 @@ export function JobFilterBar({ filters, onChange, technicians, ctx }: JobFilterB
 }
 ```
 
-- [ ] **Step 4: Run, confirm pass**
+- [x] **Step 4: Run, confirm pass**
 
 ```bash
 npx vitest run src/components/repair/__tests__/JobFilterBar.test.tsx 2>&1 | tail -20
 ```
 Expected: 4 tests PASS. (If the priority-select test is flaky due to portal/jsdom, the component already uses native `<select>` with `aria-label="Priority"`; query it with `screen.getByLabelText(/priority/i)` and fire a `change` event to `'urgent'` via `fireEvent.change`.)
 
-- [ ] **Step 5: Typecheck**
+- [x] **Step 5: Typecheck**
 
 ```bash
 npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK no errors"
 ```
 Expected: `OK no errors`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS
