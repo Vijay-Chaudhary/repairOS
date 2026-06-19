@@ -1149,7 +1149,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ## Task 7: Verification
 
-- [ ] **Step 1: Backend repair suite**
+- [x] **Step 1: Backend repair suite**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/backend
@@ -1157,7 +1157,7 @@ python -m pytest apps/repair/tests/ --no-cov 2>&1 | tail -8
 ```
 Expected: all PASS.
 
-- [ ] **Step 2: Frontend Vitest + typecheck**
+- [x] **Step 2: Frontend Vitest + typecheck**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
