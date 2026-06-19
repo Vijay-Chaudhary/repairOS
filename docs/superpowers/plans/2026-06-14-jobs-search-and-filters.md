@@ -1,5 +1,12 @@
 # Jobs Search Fix + Advanced Filters Implementation Plan
 
+> ⚠️ **SUPERSEDED (2026-06-19).** This is an early draft. Its frontend approach
+> (list-only filter row, no chips) was replaced by the unified panel in
+> `2026-06-18-repair-overhaul-phase-2a-jobs-search-and-filters.md`, which is the
+> plan that was actually implemented (filters apply to both kanban and list,
+> with a popover panel + removable chips + quick presets, plus `overdue`/`due_on`
+> backend params). Kept for history only — do not implement from this file.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Fix the broken Jobs search (backend ignores `search` param) and add four new list-view-only filters: Status, Device Type, Payment Status, and Date Range.
