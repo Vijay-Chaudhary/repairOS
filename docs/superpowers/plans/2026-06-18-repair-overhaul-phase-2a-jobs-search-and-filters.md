@@ -56,7 +56,7 @@
 
 Context: `get_queryset()` already handles `status`, `shop_id`, `technician_id`, `customer_id`, `priority`, `date_from`, `date_to`. `Q` is already imported at the top of `views.py`. The fixtures `admin_client`, `shop`, `customer`, `admin_user` exist at the top of `test_jobs.py`. The job model statuses include `open`, `delivered`, `closed`, `cancelled`; terminal = delivered/closed/cancelled.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to the bottom of `backend/apps/repair/tests/test_jobs.py`:
 
@@ -152,7 +152,7 @@ class TestJobListFilters:
 
 Note: the list endpoint uses `RepairOSPageNumberPagination`, which returns `{"items": [...], "meta": {"count", "total_pages", "page", "page_size"}}` (confirmed in `backend/apps/core/pagination.py`). Items are under `res.data["items"]`; the total is under `res.data["meta"]["count"]`.
 
-- [ ] **Step 2: Run tests to confirm they fail**
+- [x] **Step 2: Run tests to confirm they fail**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/backend
@@ -160,7 +160,7 @@ python -m pytest apps/repair/tests/test_jobs.py::TestJobListFilters -v --no-cov 
 ```
 Expected: failures (filters not implemented yet — search/device/payment/overdue/due_on are ignored so counts won't match).
 
-- [ ] **Step 3: Implement the filters**
+- [x] **Step 3: Implement the filters**
 
 In `backend/apps/repair/views.py`, inside `get_queryset()`, immediately **after** the existing `if date_to := qp.get("date_to"):` block and **before** `return qs`, insert:
 
@@ -211,7 +211,7 @@ In `backend/apps/repair/views.py`, inside `get_queryset()`, immediately **after*
         return qs
 ```
 
-- [ ] **Step 4: Run tests to confirm they pass**
+- [x] **Step 4: Run tests to confirm they pass**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/backend
@@ -219,14 +219,14 @@ python -m pytest apps/repair/tests/test_jobs.py::TestJobListFilters -v --no-cov 
 ```
 Expected: 7 tests PASS.
 
-- [ ] **Step 5: Regression run**
+- [x] **Step 5: Regression run**
 
 ```bash
 python -m pytest apps/repair/tests/ --no-cov 2>&1 | tail -8
 ```
 Expected: all PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS

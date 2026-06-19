@@ -158,6 +158,17 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
                 elif payment_status == "partial":
                     qs = qs.filter(advance_paid__gt=0, _balance__gt=0)
 
+        # Overdue: expected delivery in the past and not in a terminal state
+        if qp.get("overdue", "").strip().lower() == "true":
+            from django.utils import timezone
+            qs = qs.filter(expected_delivery_date__lt=timezone.localdate()).exclude(
+                status__in=["delivered", "closed", "cancelled"]
+            )
+
+        # Due on a specific date (expected delivery date)
+        if due_on := qp.get("due_on", "").strip():
+            qs = qs.filter(expected_delivery_date=due_on)
+
         return qs
 
     def get_serializer_class(self):

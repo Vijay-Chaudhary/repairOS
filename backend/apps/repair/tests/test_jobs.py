@@ -744,12 +744,12 @@ class TestRepairStockDeduction:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# List filters
+# List / kanban query filters (Phase 2)
 # ──────────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.django_db
 class TestJobListFilters:
-    """GET /repair/jobs/ filter params."""
+    """GET /api/v1/repair/jobs/ filter params (apply to list + kanban)."""
 
     def _make_job(self, shop, customer, admin_user, **kwargs):
         from repair.services import create_job
@@ -778,34 +778,55 @@ class TestJobListFilters:
         assert res.status_code == 200
         assert res.data["meta"]["count"] == 0
 
-    def test_filter_device_type(self, admin_client, shop, customer, admin_user):
+    def test_filter_device_type_case_insensitive(self, admin_client, shop, customer, admin_user):
         self._make_job(shop, customer, admin_user, device_type="Laptop")
         self._make_job(shop, customer, admin_user, device_type="Smartphone")
-        res = admin_client.get("/api/v1/repair/jobs/", {"device_type": "Laptop"})
+        res = admin_client.get("/api/v1/repair/jobs/", {"device_type": "laptop"})
         assert res.status_code == 200
-        for item in res.data["items"]:
-            assert item["device_type"].lower() == "laptop"
+        assert res.data["meta"]["count"] == 1
+        assert res.data["items"][0]["device_type"].lower() == "laptop"
 
-    def test_filter_payment_status_unpaid(self, admin_client, shop, customer, admin_user):
+    def test_filter_payment_status(self, admin_client, shop, customer, admin_user):
         from repair.models import JobTicket
-        job = self._make_job(shop, customer, admin_user)
-        JobTicket.objects.filter(pk=job.pk).update(service_charge=500, advance_paid=0)
-        res = admin_client.get("/api/v1/repair/jobs/", {"payment_status": "unpaid"})
-        assert res.status_code == 200
-        assert any(r["job_number"] == job.job_number for r in res.data["items"])
+        unpaid = self._make_job(shop, customer, admin_user)
+        JobTicket.objects.filter(pk=unpaid.pk).update(service_charge=500, advance_paid=0)
+        partial = self._make_job(shop, customer, admin_user)
+        JobTicket.objects.filter(pk=partial.pk).update(service_charge=500, advance_paid=200)
+        paid = self._make_job(shop, customer, admin_user)
+        JobTicket.objects.filter(pk=paid.pk).update(service_charge=500, advance_paid=500)
 
-    def test_filter_payment_status_paid(self, admin_client, shop, customer, admin_user):
-        from repair.models import JobTicket
-        job = self._make_job(shop, customer, admin_user)
-        JobTicket.objects.filter(pk=job.pk).update(service_charge=500, advance_paid=500)
-        res = admin_client.get("/api/v1/repair/jobs/", {"payment_status": "paid"})
-        assert res.status_code == 200
-        assert any(r["job_number"] == job.job_number for r in res.data["items"])
+        r_unpaid = admin_client.get("/api/v1/repair/jobs/", {"payment_status": "unpaid"})
+        assert {r["job_number"] for r in r_unpaid.data["items"]} == {unpaid.job_number}
+        r_partial = admin_client.get("/api/v1/repair/jobs/", {"payment_status": "partial"})
+        assert {r["job_number"] for r in r_partial.data["items"]} == {partial.job_number}
+        r_paid = admin_client.get("/api/v1/repair/jobs/", {"payment_status": "paid"})
+        assert paid.job_number in {r["job_number"] for r in r_paid.data["items"]}
 
-    def test_filter_payment_status_partial(self, admin_client, shop, customer, admin_user):
+    def test_filter_overdue_excludes_terminal(self, admin_client, shop, customer, admin_user):
+        import datetime
         from repair.models import JobTicket
-        job = self._make_job(shop, customer, admin_user)
-        JobTicket.objects.filter(pk=job.pk).update(service_charge=500, advance_paid=200)
-        res = admin_client.get("/api/v1/repair/jobs/", {"payment_status": "partial"})
+        yesterday = datetime.date.today() - datetime.timedelta(days=1)
+        od = self._make_job(shop, customer, admin_user)
+        JobTicket.objects.filter(pk=od.pk).update(status="open", expected_delivery_date=yesterday)
+        done = self._make_job(shop, customer, admin_user)
+        JobTicket.objects.filter(pk=done.pk).update(status="delivered", expected_delivery_date=yesterday)
+
+        res = admin_client.get("/api/v1/repair/jobs/", {"overdue": "true"})
         assert res.status_code == 200
-        assert any(r["job_number"] == job.job_number for r in res.data["items"])
+        nums = {r["job_number"] for r in res.data["items"]}
+        assert od.job_number in nums
+        assert done.job_number not in nums
+
+    def test_filter_due_on(self, admin_client, shop, customer, admin_user):
+        import datetime
+        from repair.models import JobTicket
+        today = datetime.date.today()
+        due = self._make_job(shop, customer, admin_user)
+        JobTicket.objects.filter(pk=due.pk).update(status="open", expected_delivery_date=today)
+        other = self._make_job(shop, customer, admin_user)
+        JobTicket.objects.filter(pk=other.pk).update(
+            status="open", expected_delivery_date=today + datetime.timedelta(days=3)
+        )
+        res = admin_client.get("/api/v1/repair/jobs/", {"due_on": today.isoformat()})
+        assert res.status_code == 200
+        assert {r["job_number"] for r in res.data["items"]} == {due.job_number}
