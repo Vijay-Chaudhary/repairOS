@@ -177,6 +177,8 @@ export interface JobFilters {
   date_to?: string;
   search?: string;
   page?: number;
+  device_type?: string;
+  payment_status?: 'paid' | 'partial' | 'unpaid';
 }
 
 export interface JobListResponse {
