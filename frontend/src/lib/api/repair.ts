@@ -93,6 +93,37 @@ export interface SparePartRequest {
   created_at: string;
 }
 
+export interface SparePartListItem {
+  id: string;
+  job_id: string;
+  job_number: string;
+  customer_name: string;
+  device_type: string;
+  variant_id?: string | null;
+  custom_part_name: string;
+  quantity: number;
+  is_urgent: boolean;
+  status: SparePartStatus;
+  requested_by: string;
+  requested_by_name?: string;
+  reviewed_by?: string | null;
+  po_id?: string | null;
+  created_at: string;
+}
+
+export interface SparePartFilters {
+  status?: SparePartStatus;
+  shop_id?: string;
+  date_from?: string;
+  date_to?: string;
+  page?: number;
+}
+
+export interface SparePartListResponse {
+  items: SparePartListItem[];
+  meta: PageMeta;
+}
+
 export interface JobDetail extends JobListItem {
   serial_number?: string | null;
   imei?: string | null;
@@ -237,6 +268,15 @@ export const repairApi = {
 
   reviewSparePart: (partId: string, body: { status: SparePartStatus; po_id?: string }) =>
     apiPatch<SparePartRequest>(`/repair/spare-parts/${partId}/`, body),
+
+  listSpareParts: (filters: SparePartFilters = {}) =>
+    apiGet<SparePartListResponse>('/repair/spare-parts/', filters as Record<string, string | number | boolean | undefined>),
+
+  createSparePart: (body: { job_id: string; custom_part_name?: string; variant_id?: string; quantity: number; is_urgent?: boolean }) =>
+    apiPost<SparePartListItem>('/repair/spare-parts/', body),
+
+  updateSparePart: (id: string, body: Partial<{ custom_part_name: string; quantity: number; is_urgent: boolean }>) =>
+    apiPatch<SparePartListItem>(`/repair/spare-parts/${id}/`, body),
 
   warrantyClaim: (jobId: string) =>
     apiPost<JobDetail>(`/repair/jobs/${jobId}/warranty-claim/`, {}),
