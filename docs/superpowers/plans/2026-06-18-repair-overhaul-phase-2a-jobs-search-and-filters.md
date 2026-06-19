@@ -293,7 +293,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 This file holds all filter logic with no React, so it is unit-tested directly.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/lib/repair/__tests__/jobFilters.test.ts`:
 
@@ -392,7 +392,7 @@ describe('presets', () => {
 });
 ```
 
-- [ ] **Step 2: Run, confirm it fails**
+- [x] **Step 2: Run, confirm it fails**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -400,7 +400,7 @@ npx vitest run src/lib/repair/__tests__/jobFilters.test.ts 2>&1 | tail -15
 ```
 Expected: FAIL (module not found).
 
-- [ ] **Step 3: Implement the helpers**
+- [x] **Step 3: Implement the helpers**
 
 Create `frontend/src/lib/repair/jobFilters.ts`:
 
@@ -544,21 +544,21 @@ export const QUICK_PRESETS: Array<{ id: QuickPreset; label: string }> = [
 ];
 ```
 
-- [ ] **Step 4: Run, confirm pass**
+- [x] **Step 4: Run, confirm pass**
 
 ```bash
 npx vitest run src/lib/repair/__tests__/jobFilters.test.ts 2>&1 | tail -15
 ```
 Expected: all tests PASS.
 
-- [ ] **Step 5: Typecheck**
+- [x] **Step 5: Typecheck**
 
 ```bash
 npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK no errors"
 ```
 Expected: `OK no errors`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS
