@@ -741,3 +741,71 @@ class TestRepairStockDeduction:
         _drive_to_closed(job, admin_user)
         job.refresh_from_db()
         assert job.status == "closed"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# List filters
+# ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+class TestJobListFilters:
+    """GET /repair/jobs/ filter params."""
+
+    def _make_job(self, shop, customer, admin_user, **kwargs):
+        from repair.services import create_job
+        defaults = {"device_type": "Smartphone", "problem_description": "Test.", "priority": "normal"}
+        defaults.update(kwargs)
+        return create_job(shop, customer, defaults, admin_user)
+
+    def test_search_by_customer_name(self, admin_client, shop, customer, admin_user):
+        self._make_job(shop, customer, admin_user)
+        res = admin_client.get("/api/v1/repair/jobs/", {"search": customer.name[:4]})
+        assert res.status_code == 200
+        assert res.data["meta"]["count"] >= 1
+        for item in res.data["items"]:
+            assert customer.name[:4].lower() in item["customer_name"].lower()
+
+    def test_search_by_job_number(self, admin_client, shop, customer, admin_user):
+        job = self._make_job(shop, customer, admin_user)
+        res = admin_client.get("/api/v1/repair/jobs/", {"search": job.job_number})
+        assert res.status_code == 200
+        assert res.data["meta"]["count"] == 1
+        assert res.data["items"][0]["job_number"] == job.job_number
+
+    def test_search_no_match_returns_empty(self, admin_client, shop, customer, admin_user):
+        self._make_job(shop, customer, admin_user)
+        res = admin_client.get("/api/v1/repair/jobs/", {"search": "ZZZNOMATCH999"})
+        assert res.status_code == 200
+        assert res.data["meta"]["count"] == 0
+
+    def test_filter_device_type(self, admin_client, shop, customer, admin_user):
+        self._make_job(shop, customer, admin_user, device_type="Laptop")
+        self._make_job(shop, customer, admin_user, device_type="Smartphone")
+        res = admin_client.get("/api/v1/repair/jobs/", {"device_type": "Laptop"})
+        assert res.status_code == 200
+        for item in res.data["items"]:
+            assert item["device_type"].lower() == "laptop"
+
+    def test_filter_payment_status_unpaid(self, admin_client, shop, customer, admin_user):
+        from repair.models import JobTicket
+        job = self._make_job(shop, customer, admin_user)
+        JobTicket.objects.filter(pk=job.pk).update(service_charge=500, advance_paid=0)
+        res = admin_client.get("/api/v1/repair/jobs/", {"payment_status": "unpaid"})
+        assert res.status_code == 200
+        assert any(r["job_number"] == job.job_number for r in res.data["items"])
+
+    def test_filter_payment_status_paid(self, admin_client, shop, customer, admin_user):
+        from repair.models import JobTicket
+        job = self._make_job(shop, customer, admin_user)
+        JobTicket.objects.filter(pk=job.pk).update(service_charge=500, advance_paid=500)
+        res = admin_client.get("/api/v1/repair/jobs/", {"payment_status": "paid"})
+        assert res.status_code == 200
+        assert any(r["job_number"] == job.job_number for r in res.data["items"])
+
+    def test_filter_payment_status_partial(self, admin_client, shop, customer, admin_user):
+        from repair.models import JobTicket
+        job = self._make_job(shop, customer, admin_user)
+        JobTicket.objects.filter(pk=job.pk).update(service_charge=500, advance_paid=200)
+        res = admin_client.get("/api/v1/repair/jobs/", {"payment_status": "partial"})
+        assert res.status_code == 200
+        assert any(r["job_number"] == job.job_number for r in res.data["items"])

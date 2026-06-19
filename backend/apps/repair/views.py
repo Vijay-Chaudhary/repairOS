@@ -126,6 +126,38 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
         if date_to := qp.get("date_to"):
             qs = qs.filter(intake_date__date__lte=date_to)
 
+        # Search across key fields
+        if search := qp.get("search", "").strip():
+            qs = qs.filter(
+                Q(job_number__icontains=search)
+                | Q(customer__name__icontains=search)
+                | Q(customer__phone__icontains=search)
+                | Q(imei__icontains=search)
+                | Q(serial_number__icontains=search)
+                | Q(problem_description__icontains=search)
+            ).distinct()
+
+        # Device type
+        if device_type := qp.get("device_type", "").strip():
+            qs = qs.filter(device_type__iexact=device_type)
+
+        # Payment status
+        if payment_status := qp.get("payment_status", "").strip():
+            if payment_status in ("paid", "partial", "unpaid"):
+                from django.db.models import DecimalField, ExpressionWrapper, F
+                qs = qs.annotate(
+                    _balance=ExpressionWrapper(
+                        F("service_charge") - F("advance_paid"),
+                        output_field=DecimalField(),
+                    )
+                )
+                if payment_status == "paid":
+                    qs = qs.filter(_balance__lte=0)
+                elif payment_status == "unpaid":
+                    qs = qs.filter(advance_paid=0, service_charge__gt=0)
+                elif payment_status == "partial":
+                    qs = qs.filter(advance_paid__gt=0, _balance__gt=0)
+
         return qs
 
     def get_serializer_class(self):
