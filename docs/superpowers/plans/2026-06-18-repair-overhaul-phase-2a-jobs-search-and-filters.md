@@ -994,7 +994,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 Context: the current page has separate `search`, `priority`, `technicianId` state, a `baseFilters` memo, kanban `useQueries` (one per `KANBAN_COLUMNS` status), a list `useQuery` (page-number paginated via `listPage`), and an always-visible Priority `Select` + Technician `Select` in the top bar. This task replaces the priority/technician selects with the unified `JobFilterBar` + `JobQuickFilters`, consolidates state into one `JobFilterState`, and feeds it to **both** views.
 
-- [ ] **Step 1: Replace imports, state, and filter memos**
+- [x] **Step 1: Replace imports, state, and filter memos**
 
 At the top of `jobs/page.tsx`, add the new imports (keep existing ones; remove `Filter` from lucide and the `PRIORITY_OPTIONS` constant + the Priority/Technician `Select` blocks in later steps):
 
@@ -1061,7 +1061,7 @@ with:
 
 > `usersData` is the existing `useQuery` for technicians; it is declared above `baseFilters` in the current file, so `filterCtx` can reference it. If the declaration order causes a use-before-declare, move the `usersData` query above `filterCtx`.
 
-- [ ] **Step 2: Apply status to the list query**
+- [x] **Step 2: Apply status to the list query**
 
 The kanban `useQueries` already spreads `baseFilters` and adds `status` per column — it needs no change (the new filters flow through `baseFilters`). For the **list** query, add the chosen status filter. Replace the list `useQuery` block:
 
@@ -1089,7 +1089,7 @@ with:
   });
 ```
 
-- [ ] **Step 3: Update the search input and remove the old Priority/Technician selects**
+- [x] **Step 3: Update the search input and remove the old Priority/Technician selects**
 
 In the top-bar JSX: keep the search `Input` but bind it to the consolidated state — change `value={search}` / `onChange={(e) => setSearch(e.target.value)}` to:
 
@@ -1111,7 +1111,7 @@ Delete the entire Priority `Select` block (the `<Select value={priority} …>…
 
 Also remove the now-unused `PRIORITY_OPTIONS` constant and the `Filter` icon import, and drop `JobPriority` from imports if it is no longer referenced (the list columns may still use it — only remove if `tsc` reports it unused).
 
-- [ ] **Step 4: Add the quick-filter row above the board/list**
+- [x] **Step 4: Add the quick-filter row above the board/list**
 
 Between the top bar `</div>` and the `{/* Board / List */}` content div, insert:
 
@@ -1122,11 +1122,11 @@ Between the top bar `</div>` and the `{/* Board / List */}` content div, insert:
       </div>
 ```
 
-- [ ] **Step 5: Make the kanban `onCardMove` invalidation use the active filters**
+- [x] **Step 5: Make the kanban `onCardMove` invalidation use the active filters**
 
 The existing `handleCardMove` invalidates `qk.jobs({ ...baseFilters, status: fromStatus })` and `toStatus`. Because `baseFilters` now includes the unified filters, this still composes correctly — no change needed. Verify it still references `baseFilters` (not the removed `priority`/`technicianId`).
 
-- [ ] **Step 6: Typecheck and run the jobs-related tests**
+- [x] **Step 6: Typecheck and run the jobs-related tests**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -1135,7 +1135,7 @@ npx vitest run src/lib/repair src/components/repair/__tests__/JobFilterBar.test.
 ```
 Expected: `OK no errors`; filter tests still PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS

@@ -5,19 +5,27 @@ import { useRouter } from 'next/navigation';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { differenceInCalendarDays } from 'date-fns';
-import { Plus, Search, LayoutGrid, List, WifiOff, Filter, Phone, AlertTriangle, Star, CalendarClock, SlidersHorizontal } from 'lucide-react';
+import { Plus, Search, LayoutGrid, List, WifiOff, Phone, AlertTriangle, Star, CalendarClock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DataTable, type Column } from '@/components/shared/DataTable';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Money } from '@/components/shared/Money';
 import { Can } from '@/components/shared/Can';
 import { JobBoard, type KanbanColumnData } from '@/components/repair/JobBoard';
+import { JobFilterBar } from '@/components/repair/JobFilterBar';
+import { JobQuickFilters } from '@/components/repair/JobQuickFilters';
+import {
+  EMPTY_JOB_FILTERS,
+  toBaseApiFilters,
+  type JobFilterState,
+  type JobFilterCtx,
+} from '@/lib/repair/jobFilters';
 import { repairApi, KANBAN_COLUMNS, type JobListItem, type JobStatus, type JobPriority } from '@/lib/api/repair';
 import { settingsApi } from '@/lib/api/settings';
 import { qk } from '@/lib/query/keys';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
+import { useAuthStore } from '@/lib/stores/authStore';
 import { useOfflineQueueStore } from '@/lib/stores/offlineQueueStore';
 import { useDebounce } from '@/lib/hooks/useDebounce';
 import { formatDate } from '@/lib/format/date';
@@ -26,13 +34,6 @@ import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 
 type ViewMode = 'kanban' | 'list';
-
-const PRIORITY_OPTIONS: Array<{ label: string; value: JobPriority | 'all' }> = [
-  { label: 'All priorities', value: 'all' },
-  { label: 'Normal', value: 'normal' },
-  { label: 'Urgent', value: 'urgent' },
-  { label: 'VIP', value: 'vip' },
-];
 
 const TERMINAL_STATUSES_SET = new Set<JobStatus>(['delivered', 'closed', 'cancelled']);
 
@@ -152,23 +153,15 @@ export default function JobsPage() {
   const { isOnline } = useOfflineQueueStore();
 
   const [view, setView] = useState<ViewMode>('kanban');
-  const [search, setSearch] = useState('');
-  const [priority, setPriority] = useState<JobPriority | 'all'>('all');
-  const [technicianId, setTechnicianId] = useState<string | 'all'>('all');
+  const [filters, setFilters] = useState<JobFilterState>(EMPTY_JOB_FILTERS);
   const [listPage, setListPage] = useState(1);
 
-  // List-view-only filters
-  const [filterOpen, setFilterOpen]       = useState(false);
-  const [statusFilter, setStatusFilter]   = useState<JobStatus | 'all'>('all');
-  const [deviceType, setDeviceType]       = useState<string>('all');
-  const [paymentStatus, setPaymentStatus] = useState<'all' | 'paid' | 'partial' | 'unpaid'>('all');
-  const [dateFrom, setDateFrom]           = useState('');
-  const [dateTo, setDateTo]               = useState('');
+  const { user } = useAuthStore();
+  const debouncedSearch = useDebounce(filters.search, 350);
 
-  const debouncedSearch = useDebounce(search, 350);
-  React.useEffect(() => {
-    setListPage(1);
-  }, [debouncedSearch, priority, technicianId, statusFilter, deviceType, paymentStatus, dateFrom, dateTo]);
+  // Reset to page 1 whenever any filter changes (search is debounced separately)
+  const filterSignature = JSON.stringify({ ...filters, search: debouncedSearch });
+  React.useEffect(() => { setListPage(1); }, [filterSignature]);
 
   const { data: usersData } = useQuery({
     queryKey: ['settings', 'users', activeShopId],
@@ -176,29 +169,18 @@ export default function JobsPage() {
     staleTime: 300_000,
   });
 
+  const filterCtx: JobFilterCtx = useMemo(() => ({
+    todayIso: new Date().toISOString().slice(0, 10),
+    currentUserId: user?.id ?? '',
+    technicianName: (id) => usersData?.items.find((u) => u.id === id)?.full_name ?? id,
+  }), [user?.id, usersData]);
+
+  // Shared filters for every view (status excluded — applied per column / per list).
   const baseFilters = useMemo(() => ({
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
     search: debouncedSearch || undefined,
-    priority: priority === 'all' ? undefined : priority,
-    technician_id: technicianId === 'all' ? undefined : technicianId,
-  }), [isAllShops, activeShopId, debouncedSearch, priority, technicianId]);
-
-  const listFilters = useMemo(() => ({
-    ...baseFilters,
-    status:         statusFilter   === 'all' ? undefined : statusFilter,
-    device_type:    deviceType     === 'all' ? undefined : deviceType,
-    payment_status: paymentStatus  === 'all' ? undefined : paymentStatus as 'paid' | 'partial' | 'unpaid' | undefined,
-    date_from:      dateFrom || undefined,
-    date_to:        dateTo   || undefined,
-  }), [baseFilters, statusFilter, deviceType, paymentStatus, dateFrom, dateTo]);
-
-  const activeListFilterCount = [
-    statusFilter  !== 'all',
-    deviceType    !== 'all',
-    paymentStatus !== 'all',
-    !!dateFrom,
-    !!dateTo,
-  ].filter(Boolean).length;
+    ...toBaseApiFilters({ ...filters, search: debouncedSearch }, filterCtx),
+  }), [isAllShops, activeShopId, debouncedSearch, filters, filterCtx]);
 
   // Kanban: one query per column
   const columnQueries = useQueries({
@@ -217,10 +199,14 @@ export default function JobsPage() {
     count: columnQueries[i]?.data?.meta?.count ?? (columnQueries[i]?.data?.items?.length ?? 0),
   }));
 
-  // List view: page-number paginated
+  // List view: page-number paginated (status applied here; kanban applies it per column)
+  const listFilters = useMemo(
+    () => ({ ...baseFilters, status: filters.status === 'all' ? undefined : filters.status, page: listPage }),
+    [baseFilters, filters.status, listPage],
+  );
   const listQuery = useQuery({
-    queryKey: qk.jobs({ ...listFilters, page: listPage }),
-    queryFn: () => repairApi.listJobs({ ...listFilters, page: listPage }),
+    queryKey: qk.jobs(listFilters),
+    queryFn: () => repairApi.listJobs(listFilters),
     staleTime: 30_000,
     enabled: view === 'list',
   });
@@ -264,59 +250,18 @@ export default function JobsPage() {
           <Input
             placeholder="Search job #, customer, IMEI…"
             className="pl-9 h-9"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={filters.search}
+            onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
           />
         </div>
 
-        {/* Priority filter */}
-        <Select value={priority} onValueChange={(v) => setPriority(v as JobPriority | 'all')}>
-          <SelectTrigger className="h-9 w-[140px]">
-            <Filter className="h-3.5 w-3.5 text-[var(--text-muted)]" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PRIORITY_OPTIONS.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Technician filter */}
-        {usersData?.items && usersData.items.length > 0 && (
-          <Select value={technicianId} onValueChange={setTechnicianId}>
-            <SelectTrigger className="h-9 w-[150px]">
-              <SelectValue placeholder="All technicians" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All technicians</SelectItem>
-              {usersData.items.map((u) => (
-                <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-
-        {/* Filters toggle — list view only */}
-        {view === 'list' && (
-          <button
-            onClick={() => setFilterOpen((v) => !v)}
-            className={cn(
-              'h-9 px-3 flex items-center gap-1.5 text-body-sm rounded-md border transition-colors',
-              filterOpen || activeListFilterCount > 0
-                ? 'border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/5'
-                : 'border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-2)]',
-            )}
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Filters</span>
-            {activeListFilterCount > 0 && (
-              <span className="h-4 w-4 rounded-full bg-[var(--accent)] text-white text-[10px] flex items-center justify-center leading-none">
-                {activeListFilterCount}
-              </span>
-            )}
-          </button>
-        )}
+        {/* Unified filter panel + active chips (applies to both views) */}
+        <JobFilterBar
+          filters={filters}
+          onChange={setFilters}
+          technicians={(usersData?.items ?? []).map((u) => ({ id: u.id, name: u.full_name }))}
+          ctx={filterCtx}
+        />
 
         <div className="flex items-center gap-1 ml-auto">
           {/* View toggle */}
@@ -365,98 +310,10 @@ export default function JobsPage() {
         </div>
       </div>
 
-      {/* Expandable filter row — list view only */}
-      {view === 'list' && (
-        <div className={cn(
-          'overflow-hidden transition-all duration-200 ease-in-out',
-          filterOpen ? 'max-h-[60px]' : 'max-h-0',
-        )}>
-          <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--border)] bg-[var(--surface-2)] flex-wrap">
-            {/* Status */}
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as JobStatus | 'all')}>
-              <SelectTrigger className="h-8 w-[150px] text-xs">
-                <SelectValue placeholder="All statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="open">Open</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="on_hold">On Hold</SelectItem>
-                <SelectItem value="ready_for_qc">Ready for QC</SelectItem>
-                <SelectItem value="ready_for_pickup">Ready for Pickup</SelectItem>
-                <SelectItem value="delivered">Delivered</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-                <SelectItem value="closed">Closed</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Device type */}
-            <Select value={deviceType} onValueChange={setDeviceType}>
-              <SelectTrigger className="h-8 w-[140px] text-xs">
-                <SelectValue placeholder="All devices" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All devices</SelectItem>
-                <SelectItem value="Smartphone">Smartphone</SelectItem>
-                <SelectItem value="Feature Phone">Feature Phone</SelectItem>
-                <SelectItem value="Tablet">Tablet</SelectItem>
-                <SelectItem value="Laptop">Laptop</SelectItem>
-                <SelectItem value="Desktop">Desktop</SelectItem>
-                <SelectItem value="Smartwatch">Smartwatch</SelectItem>
-                <SelectItem value="Earbuds">Earbuds</SelectItem>
-                <SelectItem value="Other">Other</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Payment status */}
-            <Select value={paymentStatus} onValueChange={(v) => setPaymentStatus(v as 'all' | 'paid' | 'partial' | 'unpaid')}>
-              <SelectTrigger className="h-8 w-[130px] text-xs">
-                <SelectValue placeholder="Payment" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All payments</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
-                <SelectItem value="partial">Partial</SelectItem>
-                <SelectItem value="unpaid">Unpaid</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Date from */}
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="h-8 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-xs text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
-              placeholder="From"
-            />
-            <span className="text-xs text-[var(--text-muted)]">—</span>
-            {/* Date to */}
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="h-8 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-xs text-[var(--text)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
-              placeholder="To"
-            />
-
-            {/* Clear all */}
-            {activeListFilterCount > 0 && (
-              <button
-                onClick={() => {
-                  setStatusFilter('all');
-                  setDeviceType('all');
-                  setPaymentStatus('all');
-                  setDateFrom('');
-                  setDateTo('');
-                }}
-                className="h-8 px-2 text-xs text-[var(--danger)] hover:bg-[var(--danger)]/10 rounded-md transition-colors ml-auto"
-              >
-                Clear all
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Quick filters */}
+      <div className="px-4 py-2 border-b border-[var(--border)] bg-[var(--surface)]">
+        <JobQuickFilters filters={filters} onChange={setFilters} ctx={filterCtx} />
+      </div>
 
       {/* Board / List */}
       <div className="flex-1 overflow-auto p-4 md:p-6">
