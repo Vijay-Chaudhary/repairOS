@@ -34,6 +34,7 @@ from .serializers import (
     JobTicketSerializer,
     ReviewSparePartSerializer,
     SetStagesSerializer,
+    SparePartCreateSerializer,
     SparePartRequestListSerializer,
 )
 
@@ -313,11 +314,12 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
 class SparePartRequestViewSet(ShopScopedMixin, GenericViewSet):
     """
     GET    /spare-parts/        — cross-job worklist (shop-scoped; filters: status, shop_id, date_from, date_to)
-    PATCH  /spare-parts/{id}/   — review a spare-part request
+    POST   /spare-parts/        — create a job-linked spare-part request
+    PATCH  /spare-parts/{id}/   — review (with `status`) or edit a still-'requested' item
     """
 
     pagination_class = RepairOSPageNumberPagination
-    http_method_names = ["get", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_permissions(self):
         if self.action == "partial_update" and "status" in self.request.data:
@@ -351,17 +353,45 @@ class SparePartRequestViewSet(ShopScopedMixin, GenericViewSet):
         serializer = SparePartRequestListSerializer(page if page is not None else qs, many=True)
         return self.get_paginated_response(serializer.data) if page is not None else Response(serializer.data)
 
-    def partial_update(self, request, pk=None):
+    def create(self, request):
         from rest_framework.exceptions import NotFound
+        serializer = SparePartCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        vd = dict(serializer.validated_data)
+        job_id = vd.pop("job_id")
+        try:
+            job = JobTicket.objects.filter(self._shop_filter()).get(pk=job_id)
+        except JobTicket.DoesNotExist:
+            raise NotFound("Job not found in your shops.")
+        req = services.request_spare_part(job, vd, request.user)
+        return Response(
+            SparePartRequestListSerializer(req).data, status=status.HTTP_201_CREATED
+        )
+
+    def partial_update(self, request, pk=None):
+        from rest_framework.exceptions import NotFound, ValidationError
         try:
             req = self.get_queryset().get(pk=pk)
         except JobSparePartRequest.DoesNotExist:
             raise NotFound("Spare part request not found.")
 
-        serializer = ReviewSparePartSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        vd = serializer.validated_data
-        req = services.review_spare_part(req, vd["status"], request.user, vd.get("po_id"))
+        # Review (status transition)
+        if "status" in request.data:
+            serializer = ReviewSparePartSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            vd = serializer.validated_data
+            req = services.review_spare_part(req, vd["status"], request.user, vd.get("po_id"))
+            return Response(SparePartRequestListSerializer(req).data)
+
+        # Edit a still-'requested' item's fields
+        if req.status != JobSparePartRequest.RequestStatus.REQUESTED:
+            raise ValidationError("Only requested items can be edited.")
+        editor = JobSparePartRequestSerializer(req, data=request.data, partial=True)
+        editor.is_valid(raise_exception=True)
+        for field in ("variant_id", "custom_part_name", "quantity", "is_urgent"):
+            if field in editor.validated_data:
+                setattr(req, field, editor.validated_data[field])
+        req.save(update_fields=["variant_id", "custom_part_name", "quantity", "is_urgent", "updated_at"])
         return Response(SparePartRequestListSerializer(req).data)
 
 

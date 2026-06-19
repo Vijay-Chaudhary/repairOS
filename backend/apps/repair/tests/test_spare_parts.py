@@ -127,3 +127,86 @@ class TestSparePartList:
         client = _client(api_client, noperm)
         res = client.get("/api/v1/repair/spare-parts/")
         assert res.status_code == 403
+
+
+@pytest.mark.django_db
+class TestSparePartCreate:
+    def test_create_job_linked_request(self, admin_client, shop, customer, admin_user):
+        job = _make_job(shop, customer, admin_user)
+        res = admin_client.post("/api/v1/repair/spare-parts/", {
+            "job_id": str(job.id), "custom_part_name": "Battery", "quantity": 2, "is_urgent": True,
+        }, format="json")
+        assert res.status_code == 201
+        assert res.data["job_number"] == job.job_number
+        assert res.data["custom_part_name"] == "Battery"
+        assert res.data["status"] == "requested"
+
+    def test_create_requires_job_id(self, admin_client, shop, customer, admin_user):
+        res = admin_client.post("/api/v1/repair/spare-parts/", {
+            "custom_part_name": "Battery", "quantity": 1,
+        }, format="json")
+        assert res.status_code == 400
+        assert "job_id" in res.data["fields"]
+
+    def test_create_rejects_job_outside_shop_scope(self, api_client, shop, shop_b, customer, admin_user):
+        job = _make_job(shop, customer, admin_user)
+        scoped = _user_with_perms("scoped2@sp.test", "+919000000023", "ShopBStaff2", ["repair.spare_parts.request"])
+        from authentication.models import Role, UserRole
+        UserRole.objects.filter(user=scoped).delete()
+        UserRole.objects.create(user=scoped, role=Role.objects.get(name="ShopBStaff2"), shop=shop_b)
+        client = _client(api_client, scoped)
+        res = client.post("/api/v1/repair/spare-parts/", {
+            "job_id": str(job.id), "custom_part_name": "X", "quantity": 1,
+        }, format="json")
+        assert res.status_code in (400, 404)
+
+    def test_create_requires_request_permission(self, api_client, shop, customer, admin_user):
+        job = _make_job(shop, customer, admin_user)
+        noperm = _user_with_perms("no2@sp.test", "+919000000024", "NoPerm2", ["crm.customers.view"])
+        client = _client(api_client, noperm)
+        res = client.post("/api/v1/repair/spare-parts/", {
+            "job_id": str(job.id), "custom_part_name": "X", "quantity": 1,
+        }, format="json")
+        assert res.status_code == 403
+
+
+@pytest.mark.django_db
+class TestSparePartEdit:
+    def test_edit_pending_fields(self, admin_client, shop, customer, admin_user):
+        job = _make_job(shop, customer, admin_user)
+        req = _make_request(job, admin_user, custom_part_name="Old", quantity=1)
+        res = admin_client.patch(f"/api/v1/repair/spare-parts/{req.id}/", {
+            "custom_part_name": "New", "quantity": 3,
+        }, format="json")
+        assert res.status_code == 200
+        assert res.data["custom_part_name"] == "New"
+        assert res.data["quantity"] == 3
+
+    def test_edit_blocked_once_not_requested(self, admin_client, shop, customer, admin_user):
+        job = _make_job(shop, customer, admin_user)
+        req = _make_request(job, admin_user)
+        from repair.models import JobSparePartRequest
+        JobSparePartRequest.objects.filter(pk=req.pk).update(status="approved")
+        res = admin_client.patch(f"/api/v1/repair/spare-parts/{req.id}/", {
+            "quantity": 5,
+        }, format="json")
+        assert res.status_code == 400
+
+    def test_review_still_works(self, admin_client, shop, customer, admin_user):
+        job = _make_job(shop, customer, admin_user)
+        req = _make_request(job, admin_user)
+        res = admin_client.patch(f"/api/v1/repair/spare-parts/{req.id}/", {
+            "status": "approved",
+        }, format="json")
+        assert res.status_code == 200
+        assert res.data["status"] == "approved"
+
+    def test_edit_requires_request_permission(self, api_client, shop, customer, admin_user):
+        job = _make_job(shop, customer, admin_user)
+        req = _make_request(job, admin_user)
+        approver_only = _user_with_perms("appr@sp.test", "+919000000025", "ApproverOnly", ["repair.spare_parts.approve"])
+        client = _client(api_client, approver_only)
+        res = client.patch(f"/api/v1/repair/spare-parts/{req.id}/", {
+            "quantity": 9,
+        }, format="json")
+        assert res.status_code == 403

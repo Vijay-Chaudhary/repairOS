@@ -297,6 +297,19 @@ class ReviewSparePartSerializer(serializers.Serializer):
     po_id = serializers.UUIDField(required=False, allow_null=True)
 
 
+class SparePartCreateSerializer(serializers.Serializer):
+    job_id = serializers.UUIDField()
+    variant_id = serializers.UUIDField(required=False, allow_null=True)
+    custom_part_name = serializers.CharField(required=False, allow_blank=True, default="")
+    quantity = serializers.IntegerField(min_value=1)
+    is_urgent = serializers.BooleanField(default=False)
+
+    def validate(self, attrs):
+        if not attrs.get("variant_id") and not attrs.get("custom_part_name"):
+            raise serializers.ValidationError("Provide either variant_id or custom_part_name.")
+        return attrs
+
+
 class SparePartRequestListSerializer(serializers.ModelSerializer):
     requested_by_name = serializers.CharField(source="requested_by.full_name", read_only=True)
     job_id = serializers.UUIDField(source="job.id", read_only=True)
