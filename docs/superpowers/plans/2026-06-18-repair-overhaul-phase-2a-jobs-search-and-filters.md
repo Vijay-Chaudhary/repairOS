@@ -243,7 +243,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 **Files:**
 - Modify: `frontend/src/lib/api/repair.ts`
 
-- [ ] **Step 1: Add the new optional fields**
+- [x] **Step 1: Add the new optional fields**
 
 In `frontend/src/lib/api/repair.ts`, replace the `JobFilters` interface (currently fields `shop_id, status, technician_id, customer_id, priority, date_from, date_to, search, page`) with:
 
@@ -265,7 +265,7 @@ export interface JobFilters {
 }
 ```
 
-- [ ] **Step 2: Verify TypeScript compiles**
+- [x] **Step 2: Verify TypeScript compiles**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -273,7 +273,7 @@ npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK no 
 ```
 Expected: `OK no errors`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS
