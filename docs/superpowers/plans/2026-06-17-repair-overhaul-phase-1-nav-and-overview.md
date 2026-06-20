@@ -226,7 +226,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Modify: `backend/apps/repair/urls.py`
 - Test: `backend/apps/repair/tests/test_jobs.py` (append class)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to the bottom of `backend/apps/repair/tests/test_jobs.py`:
 
@@ -283,7 +283,7 @@ class TestRepairOverviewEndpoint:
         assert res.status_code == 403
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/backend
@@ -291,7 +291,7 @@ python -m pytest apps/repair/tests/test_jobs.py::TestRepairOverviewEndpoint -v 2
 ```
 Expected: FAIL — 404 (URL not registered).
 
-- [ ] **Step 3: Add the serializers**
+- [x] **Step 3: Add the serializers**
 
 Add to `backend/apps/repair/serializers.py` (bottom of file; ensure `from rest_framework import serializers` is already imported at top — it is):
 
@@ -325,7 +325,7 @@ class RepairOverviewSerializer(serializers.Serializer):
     needs_attention = OverviewNeedsAttentionSerializer(many=True)
 ```
 
-- [ ] **Step 4: Add the view**
+- [x] **Step 4: Add the view**
 
 In `backend/apps/repair/views.py`:
 
@@ -377,7 +377,7 @@ class RepairOverviewView(ShopScopedMixin, APIView):
         return Response(RepairOverviewSerializer(data).data)
 ```
 
-- [ ] **Step 5: Register the URL**
+- [x] **Step 5: Register the URL**
 
 In `backend/apps/repair/urls.py`, import the view and add the path **before** the router include:
 
@@ -403,7 +403,7 @@ urlpatterns = [
 ]
 ```
 
-- [ ] **Step 6: Run test to verify it passes**
+- [x] **Step 6: Run test to verify it passes**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/backend
@@ -411,7 +411,7 @@ python -m pytest apps/repair/tests/test_jobs.py::TestRepairOverviewEndpoint -v 2
 ```
 Expected: 2 tests PASS.
 
-- [ ] **Step 7: Run the full repair suite for regressions**
+- [x] **Step 7: Run the full repair suite for regressions**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/backend
@@ -419,7 +419,7 @@ python -m pytest apps/repair/tests/ 2>&1 | tail -15
 ```
 Expected: all PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS
