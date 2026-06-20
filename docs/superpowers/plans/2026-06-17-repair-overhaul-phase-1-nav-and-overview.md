@@ -906,7 +906,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ## Task 6: Full verification
 
-- [ ] **Step 1: Backend — full repair suite**
+- [x] **Step 1: Backend — full repair suite**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/backend
@@ -914,7 +914,7 @@ python -m pytest apps/repair/tests/ 2>&1 | tail -15
 ```
 Expected: all PASS.
 
-- [ ] **Step 2: Frontend — full Vitest run + typecheck**
+- [x] **Step 2: Frontend — full Vitest run + typecheck**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
