@@ -45,7 +45,7 @@
 - Modify: `backend/apps/repair/services.py`
 - Test: `backend/apps/repair/tests/test_jobs.py` (append class)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to the bottom of `backend/apps/repair/tests/test_jobs.py`:
 
@@ -132,7 +132,7 @@ class TestRepairOverviewService:
         assert data["needs_attention"][0]["customer"].name == customer.name
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/backend
@@ -140,7 +140,7 @@ python -m pytest apps/repair/tests/test_jobs.py::TestRepairOverviewService -v 2>
 ```
 Expected: FAIL — `cannot import name 'get_repair_overview'`.
 
-- [ ] **Step 3: Implement the service**
+- [x] **Step 3: Implement the service**
 
 Add to `backend/apps/repair/services.py` (bottom of file):
 
@@ -198,7 +198,7 @@ def get_repair_overview(shop_filter, shop_id=None):
     }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/backend
@@ -206,7 +206,7 @@ python -m pytest apps/repair/tests/test_jobs.py::TestRepairOverviewService -v 2>
 ```
 Expected: 4 tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS

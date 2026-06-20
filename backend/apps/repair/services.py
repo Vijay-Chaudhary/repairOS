@@ -727,3 +727,56 @@ def _log_crm_comm(job: JobTicket, comm_type: str, summary: str, user) -> None:
 
 # Import F here to avoid circular at module level
 from django.db import models
+
+
+def get_repair_overview(shop_filter, shop_id=None):
+    """Aggregate KPIs, status breakdown, and a needs-attention list for the Repair Overview.
+
+    Shop-wide summary: applies `shop_filter` (a Q from ShopScopedMixin) and an optional
+    explicit `shop_id`. A handful of aggregate queries — no N+1.
+    """
+    from django.db.models import Count, Q
+    from django.utils import timezone
+
+    from .models import JobTicket
+
+    TERMINAL = ["delivered", "closed", "cancelled"]
+    AWAITING_PARTS = ["requested", "approved", "ordered"]
+    STATUS_ORDER = ["open", "in_progress", "on_hold", "ready_for_qc", "ready_for_pickup", "delivered"]
+    today = timezone.localdate()
+
+    base = JobTicket.objects.filter(shop_filter)
+    if shop_id:
+        base = base.filter(shop_id=shop_id)
+
+    status_counts = {row["status"]: row["count"] for row in base.values("status").annotate(count=Count("id"))}
+
+    open_jobs = base.exclude(status__in=TERMINAL).count()
+    overdue = base.exclude(status__in=TERMINAL).filter(expected_delivery_date__lt=today).count()
+    ready_for_pickup = status_counts.get("ready_for_pickup", 0)
+    awaiting_parts = (
+        base.filter(spare_part_requests__status__in=AWAITING_PARTS).distinct().count()
+    )
+
+    needs_attention = list(
+        base.exclude(status__in=TERMINAL)
+        .filter(
+            Q(expected_delivery_date__lt=today)
+            | Q(advance_paid=0, service_charge__gt=0)
+            | Q(spare_part_requests__status__in=AWAITING_PARTS)
+        )
+        .select_related("customer")
+        .distinct()
+        .order_by("expected_delivery_date", "intake_date")[:8]
+    )
+
+    return {
+        "kpis": {
+            "open_jobs": open_jobs,
+            "overdue": overdue,
+            "awaiting_parts": awaiting_parts,
+            "ready_for_pickup": ready_for_pickup,
+        },
+        "by_status": [{"status": s, "count": status_counts.get(s, 0)} for s in STATUS_ORDER],
+        "needs_attention": needs_attention,
+    }

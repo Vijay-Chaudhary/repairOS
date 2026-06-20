@@ -830,3 +830,85 @@ class TestJobListFilters:
         res = admin_client.get("/api/v1/repair/jobs/", {"due_on": today.isoformat()})
         assert res.status_code == 200
         assert {r["job_number"] for r in res.data["items"]} == {due.job_number}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Repair overview
+# ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+class TestRepairOverviewService:
+    """services.get_repair_overview aggregation."""
+
+    def _make_job(self, shop, customer, admin_user, **kwargs):
+        from repair.services import create_job
+        defaults = {"device_type": "Smartphone", "problem_description": "Test.", "priority": "normal"}
+        defaults.update(kwargs)
+        return create_job(shop, customer, defaults, admin_user)
+
+    def test_counts_by_status_and_kpis(self, shop, customer, admin_user):
+        from django.db.models import Q
+        from repair.models import JobTicket
+        from repair.services import get_repair_overview
+
+        # one open, one ready_for_pickup, one delivered (terminal)
+        j_open = self._make_job(shop, customer, admin_user)
+        JobTicket.objects.filter(pk=j_open.pk).update(status="open")
+        j_pickup = self._make_job(shop, customer, admin_user)
+        JobTicket.objects.filter(pk=j_pickup.pk).update(status="ready_for_pickup")
+        j_done = self._make_job(shop, customer, admin_user)
+        JobTicket.objects.filter(pk=j_done.pk).update(status="delivered")
+
+        data = get_repair_overview(Q(), None)
+
+        assert data["kpis"]["open_jobs"] == 2          # open + ready_for_pickup (non-terminal)
+        assert data["kpis"]["ready_for_pickup"] == 1
+        by_status = {row["status"]: row["count"] for row in data["by_status"]}
+        assert by_status["open"] == 1
+        assert by_status["ready_for_pickup"] == 1
+        assert by_status["delivered"] == 1
+
+    def test_overdue_excludes_terminal(self, shop, customer, admin_user):
+        import datetime
+        from django.db.models import Q
+        from repair.models import JobTicket
+        from repair.services import get_repair_overview
+
+        yesterday = datetime.date.today() - datetime.timedelta(days=1)
+        j1 = self._make_job(shop, customer, admin_user)
+        JobTicket.objects.filter(pk=j1.pk).update(status="open", expected_delivery_date=yesterday)
+        j2 = self._make_job(shop, customer, admin_user)  # overdue date but delivered → not counted
+        JobTicket.objects.filter(pk=j2.pk).update(status="delivered", expected_delivery_date=yesterday)
+
+        data = get_repair_overview(Q(), None)
+        assert data["kpis"]["overdue"] == 1
+
+    def test_awaiting_parts_counts_distinct_jobs(self, shop, customer, admin_user):
+        from django.db.models import Q
+        from repair.models import JobSparePartRequest, JobTicket
+        from repair.services import get_repair_overview
+
+        j = self._make_job(shop, customer, admin_user)
+        JobTicket.objects.filter(pk=j.pk).update(status="in_progress")
+        # two requests on the SAME job → distinct job count = 1
+        JobSparePartRequest.objects.create(
+            job=j, requested_by=admin_user, custom_part_name="Screen", quantity=1, status="requested",
+        )
+        JobSparePartRequest.objects.create(
+            job=j, requested_by=admin_user, custom_part_name="Battery", quantity=1, status="ordered",
+        )
+        data = get_repair_overview(Q(), None)
+        assert data["kpis"]["awaiting_parts"] == 1
+
+    def test_needs_attention_includes_unpaid_and_caps_at_eight(self, shop, customer, admin_user):
+        from django.db.models import Q
+        from repair.models import JobTicket
+        from repair.services import get_repair_overview
+
+        for _ in range(10):
+            j = self._make_job(shop, customer, admin_user)
+            JobTicket.objects.filter(pk=j.pk).update(status="open", service_charge=500, advance_paid=0)
+
+        data = get_repair_overview(Q(), None)
+        assert len(data["needs_attention"]) == 8
+        assert data["needs_attention"][0].customer.name == customer.name
