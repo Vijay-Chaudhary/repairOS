@@ -188,9 +188,32 @@ export interface JobListResponse {
   meta: PageMeta;
 }
 
+export interface RepairOverview {
+  kpis: {
+    open_jobs: number;
+    overdue: number;
+    awaiting_parts: number;
+    ready_for_pickup: number;
+  };
+  by_status: Array<{ status: JobStatus; count: number }>;
+  needs_attention: Array<{
+    id: string;
+    job_number: string;
+    customer_name: string;
+    device_type: string;
+    status: JobStatus;
+    expected_delivery_date: string | null;
+    service_charge: number;
+    advance_paid: number;
+  }>;
+}
+
 export const repairApi = {
   listJobs: (filters: JobFilters = {}) =>
     apiGet<JobListResponse>('/repair/jobs/', filters as Record<string, string | number | boolean | undefined>),
+
+  getOverview: (shopId?: string) =>
+    apiGet<RepairOverview>('/repair/overview/', shopId ? { shop_id: shopId } : {}),
 
   getJob: (id: string) =>
     apiGet<JobDetail>(`/repair/jobs/${id}/`),

@@ -437,7 +437,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Modify: `frontend/src/lib/api/repair.ts`
 - Modify: `frontend/src/lib/query/keys.ts`
 
-- [ ] **Step 1: Add the `RepairOverview` type and API method**
+- [x] **Step 1: Add the `RepairOverview` type and API method**
 
 In `frontend/src/lib/api/repair.ts`, add the type just above `export const repairApi = {`:
 
@@ -470,7 +470,7 @@ Inside the `repairApi` object, add this method right after the `listJobs` entry:
     apiGet<RepairOverview>('/repair/overview/', shopId ? { shop_id: shopId } : {}),
 ```
 
-- [ ] **Step 2: Add the query key**
+- [x] **Step 2: Add the query key**
 
 In `frontend/src/lib/query/keys.ts`, inside the `qk` object next to the other repair keys (after `repairTemplates`), add:
 
@@ -478,7 +478,7 @@ In `frontend/src/lib/query/keys.ts`, inside the `qk` object next to the other re
   repairOverview:  (shopId: string | null) => ['repair-overview', shopId] as const,
 ```
 
-- [ ] **Step 3: Verify TypeScript compiles**
+- [x] **Step 3: Verify TypeScript compiles**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -486,7 +486,7 @@ npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK no 
 ```
 Expected: `OK no errors`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS
