@@ -804,7 +804,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Modify: `frontend/src/components/shared/AppShell.tsx`
 - Create: `frontend/src/components/shared/__tests__/navItems.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/components/shared/__tests__/navItems.test.ts`:
 
@@ -837,7 +837,7 @@ describe('NAV_ITEMS — Repair group', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -845,7 +845,7 @@ npx vitest run src/components/shared/__tests__/navItems.test.ts 2>&1 | tail -20
 ```
 Expected: FAIL — `NAV_ITEMS` is not exported.
 
-- [ ] **Step 3: Export NAV_ITEMS and add the Overview leaf**
+- [x] **Step 3: Export NAV_ITEMS and add the Overview leaf**
 
 In `frontend/src/components/shared/AppShell.tsx`:
 
@@ -876,7 +876,7 @@ with:
 
 > Active-state highlighting: `NavLink`/`NavGroupItem` already mark a child active when `pathname === href || pathname.startsWith(href + '/')`. Because `/repair` is a prefix of nothing else in this group (Jobs is `/jobs`), the Overview leaf highlights only on `/repair`. No change needed.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -884,7 +884,7 @@ npx vitest run src/components/shared/__tests__/navItems.test.ts 2>&1 | tail -15
 ```
 Expected: 3 tests PASS.
 
-- [ ] **Step 5: Verify TypeScript compiles**
+- [x] **Step 5: Verify TypeScript compiles**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -892,7 +892,7 @@ npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK no 
 ```
 Expected: `OK no errors`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS

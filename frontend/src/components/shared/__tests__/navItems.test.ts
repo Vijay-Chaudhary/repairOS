@@ -14,6 +14,13 @@ describe('NAV_ITEMS — Repair group', () => {
     expect(repairGroup().children.length).toBeGreaterThan(0);
   });
 
+  it('has the Overview leaf first, at /repair, gated on repair.jobs.view', () => {
+    const children = repairGroup().children;
+    expect(children[0].href).toBe('/repair');
+    expect(children[0].label).toBe('Overview');
+    expect(children[0].permission).toBe('repair.jobs.view');
+  });
+
   it('keeps the Jobs leaf gated on repair.jobs.view', () => {
     const jobs = repairGroup().children.find((c) => c.href === '/jobs');
     expect(jobs).toBeDefined();

@@ -54,6 +54,7 @@ export const NAV_ITEMS: NavEntry[] = [
   { type: 'section', label: 'Operations' },
   { type: 'leaf', label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { type: 'group', label: 'Repair', icon: Wrench, children: [
+    { type: 'leaf', label: 'Overview', href: '/repair', icon: LayoutDashboard, permission: 'repair.jobs.view' },
     { type: 'leaf', label: 'Jobs', href: '/jobs', icon: Wrench, permission: 'repair.jobs.view' },
     { type: 'leaf', label: 'Spare Parts', href: '/repair/spare-parts', icon: Package, permission: 'repair.spare_parts.request' },
   ]},
