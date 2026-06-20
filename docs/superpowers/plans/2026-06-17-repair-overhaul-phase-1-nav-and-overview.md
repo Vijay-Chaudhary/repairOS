@@ -504,7 +504,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Create: `frontend/src/app/(app)/repair/page.tsx`
 - Create: `frontend/src/app/(app)/repair/__tests__/page.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/app/(app)/repair/__tests__/page.test.tsx`:
 
@@ -581,7 +581,7 @@ describe('RepairOverviewPage', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -589,7 +589,7 @@ npx vitest run src/app/\(app\)/repair/__tests__/page.test.tsx 2>&1 | tail -20
 ```
 Expected: FAIL — cannot resolve `../page`.
 
-- [ ] **Step 3: Implement the page**
+- [x] **Step 3: Implement the page**
 
 Create `frontend/src/app/(app)/repair/page.tsx`:
 
@@ -770,7 +770,7 @@ export default function RepairOverviewPage() {
 
 > Note: `Money` lives at `frontend/src/components/shared/Money.tsx` (used by the Jobs list). Verify the import path resolves; if `Money` does not accept a `className`, drop it.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -778,7 +778,7 @@ npx vitest run src/app/\(app\)/repair/__tests__/page.test.tsx 2>&1 | tail -20
 ```
 Expected: 3 tests PASS.
 
-- [ ] **Step 5: Verify TypeScript compiles**
+- [x] **Step 5: Verify TypeScript compiles**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -786,7 +786,7 @@ npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK no 
 ```
 Expected: `OK no errors`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS
