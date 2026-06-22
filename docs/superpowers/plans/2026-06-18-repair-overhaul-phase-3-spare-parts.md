@@ -1196,7 +1196,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ## Task 7: Verification
 
-- [ ] **Step 1: Backend**
+- [x] **Step 1: Backend**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/backend
@@ -1204,7 +1204,7 @@ python -m pytest apps/repair/tests/ --no-cov 2>&1 | tail -8
 ```
 Expected: all PASS (including the new `test_spare_parts.py`).
 
-- [ ] **Step 2: Frontend**
+- [x] **Step 2: Frontend**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
