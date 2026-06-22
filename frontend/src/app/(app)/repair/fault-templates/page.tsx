@@ -6,18 +6,20 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Plus, Pencil, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
+import { Plus, Pencil, ToggleLeft, ToggleRight, Trash2, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { DataTable, type Column } from '@/components/shared/DataTable';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { MoneyInput } from '@/components/shared/MoneyInput';
 import { Money } from '@/components/shared/Money';
 import { Can } from '@/components/shared/Can';
 import { repairApi, type FaultTemplate } from '@/lib/api/repair';
 import { qk } from '@/lib/query/keys';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 import { ApiError } from '@/lib/api/client';
 import { cn } from '@/lib/utils';
 
@@ -44,10 +46,13 @@ export default function FaultTemplatesPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<FaultTemplate | null>(null);
+  const [search, setSearch] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<FaultTemplate | null>(null);
+  const debouncedSearch = useDebounce(search, 300);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: qk.repairTemplates(),
-    queryFn: () => repairApi.listTemplates(activeShopId ?? ''),
+    queryKey: qk.repairTemplates({ search: debouncedSearch || undefined }),
+    queryFn: () => repairApi.listTemplates(activeShopId ?? '', { search: debouncedSearch || undefined }),
     enabled: !!activeShopId,
     staleTime: 60_000,
   });
@@ -56,10 +61,20 @@ export default function FaultTemplatesPage() {
     mutationFn: ({ id, is_active }: { id: string; is_active: boolean }) =>
       repairApi.updateTemplate(id, { is_active }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: qk.repairTemplates() });
+      queryClient.invalidateQueries({ queryKey: ['repair-templates'] });
       toast.success('Template updated');
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Failed to update'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => repairApi.deleteTemplate(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['repair-templates'] });
+      toast.success('Template deleted');
+      setDeleteTarget(null);
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Delete failed'),
   });
 
   const columns: Column<FaultTemplate>[] = [
@@ -143,6 +158,15 @@ export default function FaultTemplatesPage() {
                 : <ToggleLeft className="h-4 w-4 text-[var(--text-muted)]" />
               }
             </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 w-8 p-0 ml-1 text-[var(--danger)] hover:bg-[var(--danger)]/10"
+              onClick={(e) => { e.stopPropagation(); setDeleteTarget(t); }}
+              aria-label="Delete template"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
           </div>
         </Can>
       ),
@@ -158,12 +182,24 @@ export default function FaultTemplatesPage() {
             Pre-built problem descriptions and service charges to speed up job creation.
           </p>
         </div>
-        <Can permission="repair.templates.manage">
-          <Button onClick={() => { setEditing(null); setDialogOpen(true); }}>
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">New template</span>
-          </Button>
-        </Can>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-muted)]" />
+            <Input
+              className="pl-9 h-9 w-[160px] sm:w-[220px]"
+              placeholder="Search templates…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search templates"
+            />
+          </div>
+          <Can permission="repair.templates.manage">
+            <Button onClick={() => { setEditing(null); setDialogOpen(true); }}>
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">New template</span>
+            </Button>
+          </Can>
+        </div>
       </div>
 
       <DataTable
@@ -172,12 +208,17 @@ export default function FaultTemplatesPage() {
         loading={isLoading}
         error={error as Error | null}
         keyExtractor={(t) => t.id}
-        emptyTitle="No templates yet"
-        emptyDescription="Create a template to speed up job intake."
-        emptyAction={{
-          label: 'New template',
-          onClick: () => { setEditing(null); setDialogOpen(true); },
-        }}
+        emptyTitle={debouncedSearch ? 'No templates match' : 'No templates yet'}
+        emptyDescription={
+          debouncedSearch
+            ? `No templates match “${debouncedSearch}”.`
+            : 'Create a template to speed up job intake.'
+        }
+        emptyAction={
+          debouncedSearch
+            ? { label: 'Clear search', onClick: () => setSearch('') }
+            : { label: 'New template', onClick: () => { setEditing(null); setDialogOpen(true); } }
+        }
       />
 
       <TemplateDialog
@@ -186,10 +227,24 @@ export default function FaultTemplatesPage() {
         editing={editing}
         shopId={activeShopId ?? ''}
         onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: qk.repairTemplates() });
+          queryClient.invalidateQueries({ queryKey: ['repair-templates'] });
           setDialogOpen(false);
           setEditing(null);
         }}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}
+        title="Delete this template?"
+        description={
+          deleteTarget
+            ? `“${deleteTarget.name}” will be removed from the list. Existing jobs are unaffected.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        loading={deleteMutation.isPending}
+        onConfirm={() => { if (deleteTarget) deleteMutation.mutate(deleteTarget.id); }}
       />
     </div>
   );
