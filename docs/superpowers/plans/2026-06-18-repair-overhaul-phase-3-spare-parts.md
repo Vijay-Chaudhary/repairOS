@@ -1213,7 +1213,7 @@ npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK no 
 ```
 Expected: Phase 3 tests pass; `tsc` clean. (Pre-existing unrelated `crm.test.ts` failure may remain — don't fix here.)
 
-- [ ] **Step 3: Manual smoke**
+- [x] **Step 3: Manual smoke** (2026-06-22 — API end-to-end on demo tenant: list/create/edit/approve→order→receive, edit-after-received guarded 400, status filter; permission gating verified (viewer 403, technician/receptionist list-only, approve 403); Playwright UI walk 10/10 — nav leaf, worklist, status filter, create sheet w/ job picker, edit sheet pre-filled. Known wart: variant-based requests render the raw `variant_id` UUID as the part name.)
 
 1. Sidebar → Repair → **Spare Parts** (visible only with `repair.spare_parts.request`). `/repair/spare-parts` lists requests across jobs, shop-scoped; clicking a row's customer/job opens the job.
 2. Filter by status → list narrows; empty filter shows "No spare-part requests".
