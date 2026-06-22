@@ -395,8 +395,23 @@ class SparePartRequestViewSet(ShopScopedMixin, GenericViewSet):
             qs = qs.filter(created_at__date__lte=dt)
         qs = qs.order_by("-created_at")
         page = self.paginate_queryset(qs)
-        serializer = SparePartRequestListSerializer(page if page is not None else qs, many=True)
+        rows = page if page is not None else list(qs)
+        serializer = SparePartRequestListSerializer(
+            rows, many=True, context={"variant_labels": self._variant_labels(rows)}
+        )
         return self.get_paginated_response(serializer.data) if page is not None else Response(serializer.data)
+
+    @staticmethod
+    def _variant_labels(rows):
+        """Resolve {variant_id: display name} for variant-backed rows in one query."""
+        variant_ids = [r.variant_id for r in rows if r.variant_id and not r.custom_part_name]
+        if not variant_ids:
+            return {}
+        from inventory.models import ProductVariant
+        return {
+            v.id: str(v)
+            for v in ProductVariant.objects.filter(id__in=variant_ids).select_related("product")
+        }
 
     def create(self, request):
         from rest_framework.exceptions import NotFound

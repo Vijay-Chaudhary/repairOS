@@ -101,6 +101,8 @@ export interface SparePartListItem {
   device_type: string;
   variant_id?: string | null;
   custom_part_name: string;
+  /** Friendly part label resolved server-side (custom name, else variant display name). */
+  part_name?: string;
   quantity: number;
   is_urgent: boolean;
   status: SparePartStatus;

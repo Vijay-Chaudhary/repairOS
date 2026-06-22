@@ -316,15 +316,35 @@ class SparePartRequestListSerializer(serializers.ModelSerializer):
     job_number = serializers.CharField(source="job.job_number", read_only=True)
     customer_name = serializers.CharField(source="job.customer.name", read_only=True)
     device_type = serializers.CharField(source="job.device_type", read_only=True)
+    # Friendly part label: custom name, else the resolved variant's display name.
+    # The view's list() passes a batched `variant_labels` map via context to avoid
+    # N+1; single-object responses (create/edit) fall back to a one-row lookup.
+    part_name = serializers.SerializerMethodField()
 
     class Meta:
         model = JobSparePartRequest
         fields = [
             "id", "job_id", "job_number", "customer_name", "device_type",
-            "variant_id", "custom_part_name", "quantity", "is_urgent", "status",
+            "variant_id", "custom_part_name", "part_name", "quantity", "is_urgent", "status",
             "requested_by", "requested_by_name", "reviewed_by", "po_id", "created_at",
         ]
         read_only_fields = fields
+
+    def get_part_name(self, obj) -> str:
+        if obj.custom_part_name:
+            return obj.custom_part_name
+        if not obj.variant_id:
+            return ""
+        labels = self.context.get("variant_labels")
+        if labels is not None:
+            return labels.get(obj.variant_id, "")
+        from inventory.models import ProductVariant
+        variant = (
+            ProductVariant.objects.filter(id=obj.variant_id)
+            .select_related("product")
+            .first()
+        )
+        return str(variant) if variant else ""
 
 
 class OverviewKpisSerializer(serializers.Serializer):

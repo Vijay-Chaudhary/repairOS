@@ -128,6 +128,30 @@ class TestSparePartList:
         res = client.get("/api/v1/repair/spare-parts/")
         assert res.status_code == 403
 
+    def test_list_resolves_variant_display_name(self, admin_client, shop, customer, admin_user):
+        from inventory.models import Product, ProductVariant
+        product = Product.objects.create(name="iPhone 14 Screen", sku="SCR-IP14")
+        variant = ProductVariant.objects.create(product=product, variant_name="OLED Black")
+        job = _make_job(shop, customer, admin_user)
+        _make_request(job, admin_user, custom_part_name="", variant_id=variant.id)
+        res = admin_client.get("/api/v1/repair/spare-parts/")
+        item = res.data["items"][0]
+        assert item["custom_part_name"] == ""
+        assert item["part_name"] == str(variant) == "iPhone 14 Screen — OLED Black"
+
+    def test_list_part_name_blank_for_unknown_variant(self, admin_client, shop, customer, admin_user):
+        import uuid
+        job = _make_job(shop, customer, admin_user)
+        _make_request(job, admin_user, custom_part_name="", variant_id=uuid.uuid4())
+        res = admin_client.get("/api/v1/repair/spare-parts/")
+        assert res.data["items"][0]["part_name"] == ""
+
+    def test_list_part_name_uses_custom_name(self, admin_client, shop, customer, admin_user):
+        job = _make_job(shop, customer, admin_user)
+        _make_request(job, admin_user, custom_part_name="Generic Battery")
+        res = admin_client.get("/api/v1/repair/spare-parts/")
+        assert res.data["items"][0]["part_name"] == "Generic Battery"
+
 
 @pytest.mark.django_db
 class TestSparePartCreate:

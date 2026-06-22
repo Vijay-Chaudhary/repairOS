@@ -88,7 +88,7 @@ export default function SparePartsPage() {
       cell: (r) => (
         <span className="inline-flex items-center gap-1.5 text-body-sm text-[var(--text)]">
           {r.is_urgent && <AlertTriangle className="h-3.5 w-3.5 text-[var(--warning)] shrink-0" />}
-          {r.custom_part_name || r.variant_id}
+          {r.part_name || r.custom_part_name || '—'}
         </span>
       ),
     },
