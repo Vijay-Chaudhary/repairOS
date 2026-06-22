@@ -8,6 +8,7 @@ from django.db.models import Q
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from authentication.permissions import require_permission
@@ -32,8 +33,11 @@ from .serializers import (
     JobTicketDetailSerializer,
     JobTicketListSerializer,
     JobTicketSerializer,
+    RepairOverviewSerializer,
     ReviewSparePartSerializer,
     SetStagesSerializer,
+    SparePartCreateSerializer,
+    SparePartRequestListSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -123,6 +127,49 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
             qs = qs.filter(intake_date__date__gte=date_from)
         if date_to := qp.get("date_to"):
             qs = qs.filter(intake_date__date__lte=date_to)
+
+        # Search across key fields
+        if search := qp.get("search", "").strip():
+            qs = qs.filter(
+                Q(job_number__icontains=search)
+                | Q(customer__name__icontains=search)
+                | Q(customer__phone__icontains=search)
+                | Q(imei__icontains=search)
+                | Q(serial_number__icontains=search)
+                | Q(problem_description__icontains=search)
+            ).distinct()
+
+        # Device type
+        if device_type := qp.get("device_type", "").strip():
+            qs = qs.filter(device_type__iexact=device_type)
+
+        # Payment status
+        if payment_status := qp.get("payment_status", "").strip():
+            if payment_status in ("paid", "partial", "unpaid"):
+                from django.db.models import DecimalField, ExpressionWrapper, F
+                qs = qs.annotate(
+                    _balance=ExpressionWrapper(
+                        F("service_charge") - F("advance_paid"),
+                        output_field=DecimalField(),
+                    )
+                )
+                if payment_status == "paid":
+                    qs = qs.filter(_balance__lte=0)
+                elif payment_status == "unpaid":
+                    qs = qs.filter(advance_paid=0, service_charge__gt=0)
+                elif payment_status == "partial":
+                    qs = qs.filter(advance_paid__gt=0, _balance__gt=0)
+
+        # Overdue: expected delivery in the past and not in a terminal state
+        if qp.get("overdue", "").strip().lower() == "true":
+            from django.utils import timezone
+            qs = qs.filter(expected_delivery_date__lt=timezone.localdate()).exclude(
+                status__in=["delivered", "closed", "cancelled"]
+            )
+
+        # Due on a specific date (expected delivery date)
+        if due_on := qp.get("due_on", "").strip():
+            qs = qs.filter(expected_delivery_date=due_on)
 
         return qs
 
@@ -309,33 +356,103 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-class SparePartRequestViewSet(GenericViewSet):
+class SparePartRequestViewSet(ShopScopedMixin, GenericViewSet):
     """
-    PATCH /spare-parts/{id}/  — review a spare-part request
+    GET    /spare-parts/        — cross-job worklist (shop-scoped; filters: status, shop_id, date_from, date_to)
+    POST   /spare-parts/        — create a job-linked spare-part request
+    PATCH  /spare-parts/{id}/   — review (with `status`) or edit a still-'requested' item
     """
 
-    serializer_class = ReviewSparePartSerializer
-    http_method_names = ["patch", "head", "options"]
+    pagination_class = RepairOSPageNumberPagination
+    http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_permissions(self):
-        return [require_permission("repair.spare_parts.approve")()]
+        if self.action == "partial_update" and "status" in self.request.data:
+            return [require_permission("repair.spare_parts.approve")()]
+        return [require_permission("repair.spare_parts.request")()]
+
+    def _scoped_qs(self):
+        qs = JobSparePartRequest.objects.select_related("job", "job__customer", "requested_by")
+        token = getattr(self.request, "auth", None)
+        if token and not (token.get("is_tenant_wide") or token.get("is_platform_admin")):
+            shop_ids = token.get("shop_ids", [])
+            qs = qs.filter(job__shop_id__in=shop_ids) if shop_ids else qs.none()
+        return qs
 
     def get_queryset(self):
-        return JobSparePartRequest.objects.all()
+        return self._scoped_qs()
+
+    def list(self, request):
+        qs = self._scoped_qs()
+        qp = request.query_params
+        if s := qp.get("status"):
+            qs = qs.filter(status=s)
+        if shop_id := qp.get("shop_id"):
+            qs = qs.filter(job__shop_id=shop_id)
+        if df := qp.get("date_from"):
+            qs = qs.filter(created_at__date__gte=df)
+        if dt := qp.get("date_to"):
+            qs = qs.filter(created_at__date__lte=dt)
+        qs = qs.order_by("-created_at")
+        page = self.paginate_queryset(qs)
+        rows = page if page is not None else list(qs)
+        serializer = SparePartRequestListSerializer(
+            rows, many=True, context={"variant_labels": self._variant_labels(rows)}
+        )
+        return self.get_paginated_response(serializer.data) if page is not None else Response(serializer.data)
+
+    @staticmethod
+    def _variant_labels(rows):
+        """Resolve {variant_id: display name} for variant-backed rows in one query."""
+        variant_ids = [r.variant_id for r in rows if r.variant_id and not r.custom_part_name]
+        if not variant_ids:
+            return {}
+        from inventory.models import ProductVariant
+        return {
+            v.id: str(v)
+            for v in ProductVariant.objects.filter(id__in=variant_ids).select_related("product")
+        }
+
+    def create(self, request):
+        from rest_framework.exceptions import NotFound
+        serializer = SparePartCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        vd = dict(serializer.validated_data)
+        job_id = vd.pop("job_id")
+        try:
+            job = JobTicket.objects.filter(self._shop_filter()).get(pk=job_id)
+        except JobTicket.DoesNotExist:
+            raise NotFound("Job not found in your shops.")
+        req = services.request_spare_part(job, vd, request.user)
+        return Response(
+            SparePartRequestListSerializer(req).data, status=status.HTTP_201_CREATED
+        )
 
     def partial_update(self, request, pk=None):
+        from rest_framework.exceptions import NotFound, ValidationError
         try:
             req = self.get_queryset().get(pk=pk)
         except JobSparePartRequest.DoesNotExist:
-            from rest_framework.exceptions import NotFound
             raise NotFound("Spare part request not found.")
 
-        serializer = ReviewSparePartSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        vd = serializer.validated_data
+        # Review (status transition)
+        if "status" in request.data:
+            serializer = ReviewSparePartSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            vd = serializer.validated_data
+            req = services.review_spare_part(req, vd["status"], request.user, vd.get("po_id"))
+            return Response(SparePartRequestListSerializer(req).data)
 
-        req = services.review_spare_part(req, vd["status"], request.user, vd.get("po_id"))
-        return Response(JobSparePartRequestSerializer(req).data)
+        # Edit a still-'requested' item's fields
+        if req.status != JobSparePartRequest.RequestStatus.REQUESTED:
+            raise ValidationError("Only requested items can be edited.")
+        editor = JobSparePartRequestSerializer(req, data=request.data, partial=True)
+        editor.is_valid(raise_exception=True)
+        for field in ("variant_id", "custom_part_name", "quantity", "is_urgent"):
+            if field in editor.validated_data:
+                setattr(req, field, editor.validated_data[field])
+        req.save(update_fields=["variant_id", "custom_part_name", "quantity", "is_urgent", "updated_at"])
+        return Response(SparePartRequestListSerializer(req).data)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -409,3 +526,20 @@ class FaultTemplateViewSet(ShopScopedMixin, GenericViewSet):
 
 # Import inside action to avoid circular import at module level
 from .models import JobEstimate
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Repair overview  (read-only dashboard hub)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class RepairOverviewView(ShopScopedMixin, APIView):
+    """GET /repair/overview/ — KPI counts, jobs-by-status, and a needs-attention list."""
+
+    def get_permissions(self):
+        return [require_permission("repair.jobs.view")()]
+
+    def get(self, request):
+        shop_id = request.query_params.get("shop_id")
+        data = services.get_repair_overview(self._shop_filter(), shop_id)
+        return Response(RepairOverviewSerializer(data).data)

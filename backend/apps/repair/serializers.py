@@ -295,3 +295,82 @@ class ReviewSparePartSerializer(serializers.Serializer):
         choices=["approved", "rejected", "ordered", "received"]
     )
     po_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class SparePartCreateSerializer(serializers.Serializer):
+    job_id = serializers.UUIDField()
+    variant_id = serializers.UUIDField(required=False, allow_null=True)
+    custom_part_name = serializers.CharField(required=False, allow_blank=True, default="")
+    quantity = serializers.IntegerField(min_value=1)
+    is_urgent = serializers.BooleanField(default=False)
+
+    def validate(self, attrs):
+        if not attrs.get("variant_id") and not attrs.get("custom_part_name"):
+            raise serializers.ValidationError("Provide either variant_id or custom_part_name.")
+        return attrs
+
+
+class SparePartRequestListSerializer(serializers.ModelSerializer):
+    requested_by_name = serializers.CharField(source="requested_by.full_name", read_only=True)
+    job_id = serializers.UUIDField(source="job.id", read_only=True)
+    job_number = serializers.CharField(source="job.job_number", read_only=True)
+    customer_name = serializers.CharField(source="job.customer.name", read_only=True)
+    device_type = serializers.CharField(source="job.device_type", read_only=True)
+    # Friendly part label: custom name, else the resolved variant's display name.
+    # The view's list() passes a batched `variant_labels` map via context to avoid
+    # N+1; single-object responses (create/edit) fall back to a one-row lookup.
+    part_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = JobSparePartRequest
+        fields = [
+            "id", "job_id", "job_number", "customer_name", "device_type",
+            "variant_id", "custom_part_name", "part_name", "quantity", "is_urgent", "status",
+            "requested_by", "requested_by_name", "reviewed_by", "po_id", "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_part_name(self, obj) -> str:
+        if obj.custom_part_name:
+            return obj.custom_part_name
+        if not obj.variant_id:
+            return ""
+        labels = self.context.get("variant_labels")
+        if labels is not None:
+            return labels.get(obj.variant_id, "")
+        from inventory.models import ProductVariant
+        variant = (
+            ProductVariant.objects.filter(id=obj.variant_id)
+            .select_related("product")
+            .first()
+        )
+        return str(variant) if variant else ""
+
+
+class OverviewKpisSerializer(serializers.Serializer):
+    open_jobs = serializers.IntegerField()
+    overdue = serializers.IntegerField()
+    awaiting_parts = serializers.IntegerField()
+    ready_for_pickup = serializers.IntegerField()
+
+
+class OverviewStatusCountSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    count = serializers.IntegerField()
+
+
+class OverviewNeedsAttentionSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    job_number = serializers.CharField()
+    customer_name = serializers.CharField(source="customer.name")
+    device_type = serializers.CharField()
+    status = serializers.CharField()
+    expected_delivery_date = serializers.DateField(allow_null=True)
+    service_charge = serializers.DecimalField(max_digits=10, decimal_places=2)
+    advance_paid = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
+class RepairOverviewSerializer(serializers.Serializer):
+    kpis = OverviewKpisSerializer()
+    by_status = OverviewStatusCountSerializer(many=True)
+    needs_attention = OverviewNeedsAttentionSerializer(many=True)
