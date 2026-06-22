@@ -57,7 +57,7 @@
 
 Context: `SparePartRequestViewSet` currently is `GenericViewSet` with `http_method_names = ["patch", "head", "options"]`, `get_permissions` returning `repair.spare_parts.approve`, `get_queryset` returning `JobSparePartRequest.objects.all()` (unscoped), and a `partial_update` that reviews via `services.review_spare_part`. `ShopScopedMixin` (from `crm.views`) provides `_shop_filter()` (a `Q` on `shop_id`, suitable for `JobTicket`). `RepairOSPageNumberPagination` (from `core.pagination`) returns `{items, meta}`. The list endpoint path is `/api/v1/repair/spare-parts/` (router basename `spare-parts`). Test fixtures `shop`, `customer`, `admin_user`, `admin_client`, `tech_user`, `tech_client`, `api_client`, `job` live in `apps/repair/tests/test_jobs.py` — a new test file must redefine the ones it needs or import them; to follow the repo pattern, this plan's new test file **defines its own minimal fixtures** (shown below).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/apps/repair/tests/test_spare_parts.py`:
 
@@ -196,7 +196,7 @@ class TestSparePartList:
 
 > The `test_list_is_shop_scoped` UserRole wiring is intentionally explicit. If the `UserRole`/`Role` relation lookup proves awkward in this codebase, simplify by fetching the role with `Role.objects.get(name="ShopBStaff")` and `UserRole.objects.create(user=scoped, role=role, shop=shop_b)` — the goal is a token whose `shop_ids` claim contains only `shop_b`. Verify `_build_token_claims` derives `shop_ids` from the user's `UserRole` rows before finalizing; adjust the fixture so the scoped user's claim includes only `shop_b.id`.
 
-- [ ] **Step 2: Run, confirm fail**
+- [x] **Step 2: Run, confirm fail**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/backend
@@ -204,7 +204,7 @@ python -m pytest apps/repair/tests/test_spare_parts.py::TestSparePartList -v --n
 ```
 Expected: failures (no `list` action / 405 or wrong shape).
 
-- [ ] **Step 3: Add the list serializer**
+- [x] **Step 3: Add the list serializer**
 
 Append to `backend/apps/repair/serializers.py`:
 
@@ -226,7 +226,7 @@ class SparePartRequestListSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 ```
 
-- [ ] **Step 4: Rewrite the viewset for list + scoping**
+- [x] **Step 4: Rewrite the viewset for list + scoping**
 
 In `backend/apps/repair/views.py`, update the imports: add `SparePartRequestListSerializer` to the `.serializers` import block, add `RepairOSPageNumberPagination` if not already imported (it is imported at the top — verify), and ensure `ShopScopedMixin` is imported (it is). Replace the `SparePartRequestViewSet` class header + `get_permissions`/`get_queryset` and add `list`:
 
@@ -288,7 +288,7 @@ class SparePartRequestViewSet(ShopScopedMixin, GenericViewSet):
 
 > Note: `partial_update` now returns the richer list serializer (with job context) instead of `JobSparePartRequestSerializer`. The create + edit branches are added in Task 2; for now `partial_update` keeps doing review only. The previous `get_queryset` returning `.all()` is replaced by the shop-scoped version.
 
-- [ ] **Step 5: Run, confirm pass**
+- [x] **Step 5: Run, confirm pass**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/backend
@@ -296,14 +296,14 @@ python -m pytest apps/repair/tests/test_spare_parts.py::TestSparePartList -v --n
 ```
 Expected: 4 PASS.
 
-- [ ] **Step 6: Regression**
+- [x] **Step 6: Regression**
 
 ```bash
 python -m pytest apps/repair/tests/ --no-cov 2>&1 | tail -8
 ```
 Expected: all PASS (existing review tests still green; they may assert the response shape — if a pre-existing test asserted `JobSparePartRequestSerializer`-only fields on the PATCH response, update that assertion since the response now also includes job context fields, which is a superset).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS
@@ -322,7 +322,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Modify: `backend/apps/repair/views.py`
 - Test: `backend/apps/repair/tests/test_spare_parts.py` (append)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `backend/apps/repair/tests/test_spare_parts.py`:
 
@@ -410,7 +410,7 @@ class TestSparePartEdit:
         assert res.status_code == 403
 ```
 
-- [ ] **Step 2: Run, confirm fail**
+- [x] **Step 2: Run, confirm fail**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/backend
@@ -418,7 +418,7 @@ python -m pytest apps/repair/tests/test_spare_parts.py::TestSparePartCreate apps
 ```
 Expected: failures (no `create`; PATCH without `status` currently 400s on the review serializer; edit-permission not yet branched).
 
-- [ ] **Step 3: Add the create serializer**
+- [x] **Step 3: Add the create serializer**
 
 Append to `backend/apps/repair/serializers.py`:
 
@@ -436,7 +436,7 @@ class SparePartCreateSerializer(serializers.Serializer):
         return attrs
 ```
 
-- [ ] **Step 4: Add `create` + edit branch to the viewset**
+- [x] **Step 4: Add `create` + edit branch to the viewset**
 
 In `backend/apps/repair/views.py`: add `"post"` to `http_method_names` and `SparePartCreateSerializer` to the serializers import. Add a `create` method and rework `partial_update` to branch on `status`:
 
@@ -487,7 +487,7 @@ In `backend/apps/repair/views.py`: add `"post"` to `http_method_names` and `Spar
 
 `JobTicket` is already imported in `views.py` (used by `JobTicketViewSet`). `status` (the DRF module) is imported at the top.
 
-- [ ] **Step 5: Run, confirm pass**
+- [x] **Step 5: Run, confirm pass**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/backend
@@ -495,14 +495,14 @@ python -m pytest apps/repair/tests/test_spare_parts.py -v --no-cov 2>&1 | tail -
 ```
 Expected: all classes PASS.
 
-- [ ] **Step 6: Regression**
+- [x] **Step 6: Regression**
 
 ```bash
 python -m pytest apps/repair/tests/ --no-cov 2>&1 | tail -8
 ```
 Expected: all PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS
@@ -520,7 +520,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Modify: `frontend/src/lib/api/repair.ts`
 - Modify: `frontend/src/lib/query/keys.ts`
 
-- [ ] **Step 1: Add types + client methods**
+- [x] **Step 1: Add types + client methods**
 
 In `frontend/src/lib/api/repair.ts`, add the worklist item type and filters near the other interfaces (above `export const repairApi`):
 
@@ -572,7 +572,7 @@ Inside `repairApi`, add (after the existing `reviewSparePart`):
 
 > `reviewSparePart` already exists and returns `SparePartRequest`; the backend now returns the richer list shape, but the existing callers only read `status`, so leave `reviewSparePart`'s return type as-is to avoid churn.
 
-- [ ] **Step 2: Add the query key**
+- [x] **Step 2: Add the query key**
 
 In `frontend/src/lib/query/keys.ts`, add next to `repairOverview`:
 
@@ -581,7 +581,7 @@ In `frontend/src/lib/query/keys.ts`, add next to `repairOverview`:
 ```
 (`listKey` is the existing factory used by `jobs`, `customers`, etc.)
 
-- [ ] **Step 3: Typecheck + commit**
+- [x] **Step 3: Typecheck + commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -607,7 +607,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 Context: reuse `DataTable` (`@/components/shared/DataTable`), `StatusBadge`, `Money` not needed here, `Can`, `Button`, `Select*`, `useActiveShopStore`, `qk`, `repairApi`, `formatDate`. Status transitions per row come from a small map. Actions call `repairApi.reviewSparePart(id, { status })` and invalidate `qk.spareParts()`. The page owns filter state (status + date range) and page number.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/app/(app)/repair/spare-parts/__tests__/page.test.tsx`:
 
@@ -664,7 +664,7 @@ describe('SparePartsPage', () => {
 });
 ```
 
-- [ ] **Step 2: Run, confirm fail**
+- [x] **Step 2: Run, confirm fail**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -672,7 +672,7 @@ npx vitest run "src/app/(app)/repair/spare-parts/__tests__/page.test.tsx" 2>&1 |
 ```
 Expected: FAIL (module not found).
 
-- [ ] **Step 3: Implement the page**
+- [x] **Step 3: Implement the page**
 
 Create `frontend/src/app/(app)/repair/spare-parts/page.tsx`:
 
@@ -845,7 +845,7 @@ export default function SparePartsPage() {
 }
 ```
 
-- [ ] **Step 4: Run, confirm pass** (this depends on `SparePartFormSheet` from Task 5; if running before Task 5, create a minimal stub first — but the recommended order is Task 5 before Task 4's test run. If executing in order, run Task 4's test after Task 5 is implemented.)
+- [x] **Step 4: Run, confirm pass** (this depends on `SparePartFormSheet` from Task 5; if running before Task 5, create a minimal stub first — but the recommended order is Task 5 before Task 4's test run. If executing in order, run Task 4's test after Task 5 is implemented.)
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -855,7 +855,7 @@ Expected (after Task 5 exists): 2 PASS. The page test mocks `listSpareParts`; `S
 
 > Execution note: Task 5 creates `SparePartFormSheet`. Because Task 4's page imports it, implement Task 5 immediately after Task 4's code step and before running Task 4's test — or temporarily import a stub. The two tasks are committed separately but their tests pass once both exist.
 
-- [ ] **Step 5: Typecheck + commit**
+- [x] **Step 5: Typecheck + commit**
 
 ```bash
 npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK no errors"
@@ -879,7 +879,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 Context: a `Sheet` (`@/components/ui/sheet`) with a react-hook-form + zod form (the repo uses `@hookform/resolvers/zod`, see `SparePartRequestSheet.tsx` for the exact import pattern). Two modes: **create** (job picker + part fields → `repairApi.createSparePart`) and **edit** (part fields only, job fixed → `repairApi.updateSparePart`). Job picker: a search input that queries `repairApi.listJobs({ search })` (debounced via the existing `useDebounce` hook) and lists results to pick. On success, invalidate `qk.spareParts()`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/components/repair/__tests__/SparePartFormSheet.test.tsx`:
 
@@ -945,7 +945,7 @@ describe('SparePartFormSheet', () => {
 });
 ```
 
-- [ ] **Step 2: Run, confirm fail**
+- [x] **Step 2: Run, confirm fail**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -953,7 +953,7 @@ npx vitest run src/components/repair/__tests__/SparePartFormSheet.test.tsx 2>&1 
 ```
 Expected: FAIL (module not found).
 
-- [ ] **Step 3: Implement the sheet**
+- [x] **Step 3: Implement the sheet**
 
 Create `frontend/src/components/repair/SparePartFormSheet.tsx`:
 
@@ -1122,14 +1122,14 @@ export function SparePartFormSheet({ open, onOpenChange, editTarget }: SparePart
 
 > `qk.jobs(...)` accepts an arbitrary filters object; the `_picker: true` marker just keeps the picker's cache key distinct from the jobs page. If `JobListItem` lacks `device_type`/`customer_name` it does have them (confirmed in `repair.ts`).
 
-- [ ] **Step 4: Run, confirm pass**
+- [x] **Step 4: Run, confirm pass**
 
 ```bash
 npx vitest run src/components/repair/__tests__/SparePartFormSheet.test.tsx 2>&1 | tail -20
 ```
 Expected: 2 PASS.
 
-- [ ] **Step 5: Typecheck + commit**
+- [x] **Step 5: Typecheck + commit**
 
 ```bash
 npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK no errors"
@@ -1153,7 +1153,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 Context: the Repair group currently (after Phase 1) has children Overview (`/repair`) + Jobs (`/jobs`). Add a Spare Parts leaf. If Phase 1 hasn't merged into this branch's `master` base, the Repair group may still have only Jobs — adapt to whatever is present, appending the Spare Parts child either way. A `Boxes`/`PackageSearch` icon from lucide fits; `Package` is already imported in `AppShell.tsx`.
 
-- [ ] **Step 1: Add the leaf**
+- [x] **Step 1: Add the leaf**
 
 In `frontend/src/components/shared/AppShell.tsx`, in the `Repair` group's `children` array, append:
 ```typescript
@@ -1161,7 +1161,7 @@ In `frontend/src/components/shared/AppShell.tsx`, in the `Repair` group's `child
 ```
 (`Package` is already imported. If it isn't in the current file, add it to the lucide import.)
 
-- [ ] **Step 2: Extend the nav test (if `navItems.test.ts` exists from Phase 1)**
+- [x] **Step 2: Extend the nav test (if `navItems.test.ts` exists from Phase 1)**
 
 If `frontend/src/components/shared/__tests__/navItems.test.ts` exists (it does once Phase 1 is in the base), add a case to the existing `describe('NAV_ITEMS — Repair group')`:
 ```ts
@@ -1173,7 +1173,7 @@ If `frontend/src/components/shared/__tests__/navItems.test.ts` exists (it does o
 ```
 If the file does NOT exist on this branch's base (Phase 1 not merged), create it with the Phase-1 nav-shape test plus this case (use the same structure as the Phase 1 `navItems.test.ts`). `NAV_ITEMS` is exported from `AppShell.tsx` (Phase 1 exported it; if not exported on this base, add `export`).
 
-- [ ] **Step 3: Run + typecheck**
+- [x] **Step 3: Run + typecheck**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -1182,7 +1182,7 @@ npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK no 
 ```
 Expected: nav tests pass; `OK no errors`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS
@@ -1221,7 +1221,7 @@ Expected: Phase 3 tests pass; `tsc` clean. (Pre-existing unrelated `crm.test.ts`
 4. On a `requested` row, **Edit** (qty/part/urgent) saves; **Approve** then **Mark ordered** then **Mark received** advance the status (each only when valid; only for `repair.spare_parts.approve` users).
 5. A user without `repair.spare_parts.approve` sees no status-action buttons; a user without `repair.spare_parts.request` doesn't see the nav leaf or page actions.
 
-- [ ] **Step 4: Push**
+- [x] **Step 4: Push**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS
