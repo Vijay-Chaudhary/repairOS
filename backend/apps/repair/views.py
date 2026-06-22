@@ -481,9 +481,15 @@ class FaultTemplateViewSet(ShopScopedMixin, GenericViewSet):
         return FaultTemplateSerializer
 
     def list(self, request, *args, **kwargs):
-        qs = self.get_queryset()
+        qs = self.get_queryset().prefetch_related("parts")
         if active := request.query_params.get("is_active"):
             qs = qs.filter(is_active=active.lower() == "true")
+        if search := request.query_params.get("search"):
+            qs = qs.filter(
+                Q(name__icontains=search)
+                | Q(device_type__icontains=search)
+                | Q(device_brand__icontains=search)
+            )
         page = self.paginate_queryset(qs)
         data = FaultTemplateSerializer(page if page is not None else qs, many=True).data
         if page is not None:
@@ -519,8 +525,7 @@ class FaultTemplateViewSet(ShopScopedMixin, GenericViewSet):
         except FaultTemplate.DoesNotExist:
             from rest_framework.exceptions import NotFound
             raise NotFound("Fault template not found.")
-        template.is_active = False
-        template.save(update_fields=["is_active"])
+        template.soft_delete(user_id=request.user.id)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

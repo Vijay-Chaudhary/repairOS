@@ -33,4 +33,11 @@ describe('NAV_ITEMS — Repair group', () => {
     expect(sp!.label).toBe('Spare Parts');
     expect(sp!.permission).toBe('repair.spare_parts.request');
   });
+
+  it('includes the Fault Templates leaf gated on repair.templates.manage', () => {
+    const ft = repairGroup().children.find((c) => c.href === '/repair/fault-templates');
+    expect(ft).toBeDefined();
+    expect(ft!.label).toBe('Fault Templates');
+    expect(ft!.permission).toBe('repair.templates.manage');
+  });
 });

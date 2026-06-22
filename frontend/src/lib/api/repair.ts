@@ -310,8 +310,8 @@ export const repairApi = {
   warrantyClaim: (jobId: string) =>
     apiPost<JobDetail>(`/repair/jobs/${jobId}/warranty-claim/`, {}),
 
-  listTemplates: (shopId: string) =>
-    apiGet<{ items: FaultTemplate[] }>('/repair/fault-templates/', { shop_id: shopId }),
+  listTemplates: (shopId: string, params?: { search?: string }) =>
+    apiGet<{ items: FaultTemplate[] }>('/repair/fault-templates/', { shop_id: shopId, ...params }),
 
   createTemplate: (body: {
     shop_id: string;

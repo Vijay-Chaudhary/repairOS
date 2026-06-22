@@ -282,3 +282,88 @@ class TestJobAutoPopulateParts:
         assert res.status_code == status.HTTP_201_CREATED
         job_id = res.data["id"]
         assert JobSparePartRequest.objects.filter(job_id=job_id).count() == 0
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Phase 4: search filter + real soft-delete + permission on delete
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _noperm_client(api_client, db):
+    """A client whose token lacks repair.templates.manage."""
+    from authentication.models import Permission, Role, RolePermission, User, UserRole
+    from authentication.tokens import _build_token_claims
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    user = User.objects.create_user(
+        email="noperm@tmpl.test", phone="+919000000098",
+        full_name="No Perm", password="NoPerm@1",
+    )
+    role, _ = Role.objects.get_or_create(name="ViewerOnly", defaults={"is_system_role": False})
+    perm, _ = Permission.objects.get_or_create(
+        codename="crm.customers.view", defaults={"module": "crm", "label": "crm.customers.view"}
+    )
+    RolePermission.objects.get_or_create(role=role, permission=perm)
+    UserRole.objects.create(user=user, role=role, shop=None)
+    access = RefreshToken.for_user(user).access_token
+    for k, v in _build_token_claims(user, "test").items():
+        access[k] = v
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {str(access)}")
+    return api_client
+
+
+@pytest.mark.django_db
+class TestFaultTemplateSearchAndDelete:
+    def _create(self, admin_client, shop, name, device_type="Smartphone", brand=""):
+        res = admin_client.post(TEMPLATE_URL, {
+            "shop_id": str(shop.id), "name": name, "device_type": device_type,
+            "device_brand": brand, "problem_description": "x" * 12, "default_sc": "500",
+        }, format="json")
+        assert res.status_code == status.HTTP_201_CREATED
+        return res.data["id"]
+
+    def test_search_filters_by_name(self, admin_client, shop):
+        self._create(admin_client, shop, "iPhone screen swap")
+        self._create(admin_client, shop, "Samsung battery")
+        res = admin_client.get(TEMPLATE_URL, {"search": "iphone"})
+        assert [t["name"] for t in res.data["items"]] == ["iPhone screen swap"]
+
+    def test_search_matches_brand_and_device(self, admin_client, shop):
+        self._create(admin_client, shop, "Generic", device_type="Laptop", brand="Dell")
+        self._create(admin_client, shop, "Other", device_type="Smartphone", brand="Apple")
+        res = admin_client.get(TEMPLATE_URL, {"search": "dell"})
+        assert len(res.data["items"]) == 1
+        res2 = admin_client.get(TEMPLATE_URL, {"search": "laptop"})
+        assert len(res2.data["items"]) == 1
+
+    def test_delete_soft_deletes_and_removes_from_list(self, admin_client, shop):
+        tid = self._create(admin_client, shop, "To Delete")
+        d = admin_client.delete(f"{TEMPLATE_URL}{tid}/")
+        assert d.status_code == status.HTTP_204_NO_CONTENT
+        res = admin_client.get(TEMPLATE_URL)
+        assert tid not in [t["id"] for t in res.data["items"]]
+        from repair.models import FaultTemplate
+        assert FaultTemplate.all_objects.get(pk=tid).deleted_at is not None
+
+    def test_delete_requires_manage_permission(self, api_client, admin_client, shop, db):
+        tid = self._create(admin_client, shop, "Guarded")
+        client = _noperm_client(api_client, db)
+        res = client.delete(f"{TEMPLATE_URL}{tid}/")
+        assert res.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_list_does_not_scale_queries_with_parts(self, admin_client, shop, django_assert_max_num_queries):
+        # Two templates each with parts; prefetch keeps the query count flat.
+        for n in ("A", "B"):
+            res = admin_client.post(TEMPLATE_URL, {
+                "shop_id": str(shop.id), "name": f"Tmpl {n}", "device_type": "Smartphone",
+                "problem_description": "x" * 12, "default_sc": "500",
+                "parts": [
+                    {"custom_part_name": "Screen", "quantity": 1},
+                    {"custom_part_name": "Battery", "quantity": 2},
+                ],
+            }, format="json")
+            assert res.status_code == status.HTTP_201_CREATED
+        with django_assert_max_num_queries(8):
+            r = admin_client.get(TEMPLATE_URL)
+        assert len(r.data["items"]) == 2
+        assert all(len(t["parts"]) == 2 for t in r.data["items"])

@@ -21,7 +21,7 @@ export const qk = {
   jobTimeline:    (id: string) => ['job', id, 'timeline'] as const,
   jobEstimates:   (id: string) => ['job', id, 'estimates'] as const,
   jobStages:      (id: string) => ['job', id, 'stages'] as const,
-  repairTemplates: () => ['repair-templates'] as const,
+  repairTemplates: (filters?: { search?: string }) => ['repair-templates', filters ?? {}] as const,
   repairOverview:  (shopId: string | null) => ['repair-overview', shopId] as const,
   spareParts:     listKey('spare-parts'),
 

@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Wrench, Users, ShoppingCart, FileText,
   Package, ShoppingBag, CreditCard, TrendingUp, Settings,
   Building, BarChart3, DollarSign, Menu, X, ChevronDown,
-  Bell, Search, LogOut, User, UserCheck, Boxes, Receipt,
+  Bell, Search, LogOut, User, UserCheck, Boxes, Receipt, ClipboardList,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
@@ -57,6 +57,7 @@ export const NAV_ITEMS: NavEntry[] = [
     { type: 'leaf', label: 'Overview', href: '/repair', icon: LayoutDashboard, permission: 'repair.jobs.view' },
     { type: 'leaf', label: 'Jobs', href: '/jobs', icon: Wrench, permission: 'repair.jobs.view' },
     { type: 'leaf', label: 'Spare Parts', href: '/repair/spare-parts', icon: Package, permission: 'repair.spare_parts.request' },
+    { type: 'leaf', label: 'Fault Templates', href: '/repair/fault-templates', icon: ClipboardList, permission: 'repair.templates.manage' },
   ]},
   { type: 'group', label: 'CRM', icon: UserCheck, children: [
     { type: 'leaf', label: 'Customers', href: '/customers', icon: Users, permission: 'crm.customers.view' },
