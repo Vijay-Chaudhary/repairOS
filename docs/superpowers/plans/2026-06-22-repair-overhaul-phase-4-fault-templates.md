@@ -60,7 +60,7 @@
 
 Context: `FaultTemplateViewSet` (`views.py:463`) is `ShopScopedMixin, GenericViewSet`, perms `repair.templates.manage`, `get_queryset` = `FaultTemplate.objects.filter(self._shop_filter())`, `list` supports only `is_active`, `destroy` sets `is_active=False`. `SoftDeleteModel.soft_delete(user_id)` (`core/models.py:59`) sets `deleted_at`+`deleted_by`; the default `objects` manager filters `deleted_at__isnull=True`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `backend/apps/repair/tests/test_fault_templates.py` (reuses existing `admin_client`, `shop`, `template` fixtures; add an `_make_template` helper if not present, or use the existing `template` fixture + extra creates via the API):
 
@@ -105,7 +105,7 @@ class TestFaultTemplateSearchAndDelete:
 
 > Use whatever no-permission client pattern this test module already establishes (see the existing classes / conftest). If none exists, build one the way `test_spare_parts.py` does (`_user_with_perms` + token). The query-count/no-N+1 assertion is optional but recommended: wrap the `list` GET in `django_assert_max_num_queries` (pytest-django) and assert it does not scale with template count after adding `prefetch_related`.
 
-- [ ] **Step 2: Run, confirm fail**
+- [x] **Step 2: Run, confirm fail**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/backend
@@ -113,7 +113,7 @@ python -m pytest apps/repair/tests/test_fault_templates.py::TestFaultTemplateSea
 ```
 Expected: failures (no `search`; delete sets `is_active` not `deleted_at` so row still in list).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `backend/apps/repair/views.py`, update `list` and `destroy`:
 
@@ -149,14 +149,14 @@ In `backend/apps/repair/views.py`, update `list` and `destroy`:
 
 Ensure `from django.db.models import Q` is imported in `views.py` (it almost certainly is — `JobTicketViewSet` search uses it; verify).
 
-- [ ] **Step 4: Run, confirm pass**
+- [x] **Step 4: Run, confirm pass**
 
 ```bash
 python -m pytest apps/repair/tests/test_fault_templates.py -v --no-cov 2>&1 | tail -25
 ```
 Expected: all (existing 11 + new) PASS.
 
-- [ ] **Step 5: Regression + commit**
+- [x] **Step 5: Regression + commit**
 
 ```bash
 python -m pytest apps/repair/tests/ --no-cov 2>&1 | tail -8
@@ -177,7 +177,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Modify: `frontend/src/lib/query/keys.ts`
 - Modify: `frontend/src/lib/api/repair.ts`
 
-- [ ] **Step 1: Extend the query key**
+- [x] **Step 1: Extend the query key**
 
 In `keys.ts`, change `repairTemplates` (line 24) to accept filters so search results cache/invalidate distinctly:
 ```typescript
@@ -185,7 +185,7 @@ In `keys.ts`, change `repairTemplates` (line 24) to accept filters so search res
 ```
 `qk.repairTemplates()` (no arg) still works for blanket invalidation (it produces `['repair-templates', {}]`; mutations should invalidate with the `['repair-templates']` prefix — use `queryClient.invalidateQueries({ queryKey: ['repair-templates'] })` or `qk.repairTemplates()` consistently; pick prefix-invalidation so it catches all search variants).
 
-- [ ] **Step 2: Add `search` to the client**
+- [x] **Step 2: Add `search` to the client**
 
 In `repair.ts`, update `listTemplates`:
 ```typescript
@@ -193,7 +193,7 @@ In `repair.ts`, update `listTemplates`:
     apiGet<{ items: FaultTemplate[] }>('/repair/fault-templates/', { shop_id: shopId, ...params }),
 ```
 
-- [ ] **Step 3: Typecheck + commit**
+- [x] **Step 3: Typecheck + commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -215,7 +215,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Create: `frontend/src/app/(app)/repair/fault-templates/page.tsx` (moved from settings, then extended)
 - Create: `frontend/src/app/(app)/repair/fault-templates/__tests__/page.test.tsx`
 
-- [ ] **Step 1: Move the existing page**
+- [x] **Step 1: Move the existing page**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS
@@ -224,7 +224,7 @@ git mv "frontend/src/app/(app)/settings/fault-templates/page.tsx" "frontend/src/
 ```
 (The component is self-contained — `TemplateDialog` lives in the same file. No import path changes needed; all imports are `@/`-absolute.)
 
-- [ ] **Step 2: Add search input + wire the query**
+- [x] **Step 2: Add search input + wire the query**
 
 In the moved `page.tsx`:
 - Add `const [search, setSearch] = useState('')` and `const debouncedSearch = useDebounce(search, 300)` (`@/lib/hooks/useDebounce`).
@@ -236,7 +236,7 @@ In the moved `page.tsx`:
 - Add a search `Input` (with a `Search` lucide icon) in the header, left of the New button. Reserve layout space; keep ≥44px.
 - Empty state: when `search` is non-empty and zero results, show "No templates match" + a "Clear search" action (`onClick={() => setSearch('')}`); otherwise keep the existing "No templates yet" + "New template" empty state. Pass the conditional strings to `DataTable`'s `emptyTitle`/`emptyDescription`/`emptyAction`.
 
-- [ ] **Step 3: Add Delete-with-confirm**
+- [x] **Step 3: Add Delete-with-confirm**
 
 - Import an `AlertDialog` (confirm) — use the repo's existing confirm primitive (`@/components/ui/alert-dialog` if present; otherwise reuse the same confirm pattern Spare Parts/Jobs use for destructive actions — check `components/ui` before introducing anything).
 - Add a `Trash2` ghost button in the row actions (inside the existing `<Can permission="repair.templates.manage">`), separated from Edit/toggle, danger-colored.
@@ -250,7 +250,7 @@ In the moved `page.tsx`:
   ```
 - Keep the existing active/inactive `toggleMutation` as-is (separate control, separate meaning).
 
-- [ ] **Step 4: Write/port the page test**
+- [x] **Step 4: Write/port the page test**
 
 Create `frontend/src/app/(app)/repair/fault-templates/__tests__/page.test.tsx`. Port any existing settings test for this page (if one exists, `git mv` it) and add:
 - renders rows from a mocked `listTemplates` (name, parts count);
@@ -260,7 +260,7 @@ Create `frontend/src/app/(app)/repair/fault-templates/__tests__/page.test.tsx`. 
 
 Mock pattern: mirror `spare-parts/__tests__/page.test.tsx` (mock `@/lib/api/repair`, `activeShopStore`, `authStore`, `next/navigation`).
 
-- [ ] **Step 5: Run + typecheck**
+- [x] **Step 5: Run + typecheck**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -268,7 +268,7 @@ npx vitest run "src/app/(app)/repair/fault-templates/__tests__/page.test.tsx" 2>
 npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK no errors"
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS
@@ -287,7 +287,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Modify: `frontend/src/app/(app)/settings/layout.tsx`
 - Modify: `frontend/src/app/(app)/settings/page.tsx`
 
-- [ ] **Step 1: Redirect stub at the old URL**
+- [x] **Step 1: Redirect stub at the old URL**
 
 Recreate `frontend/src/app/(app)/settings/fault-templates/page.tsx` as a server redirect (mirrors `app/(app)/hr/page.tsx`):
 ```tsx
@@ -298,12 +298,12 @@ export default function FaultTemplatesSettingsRedirect() {
 }
 ```
 
-- [ ] **Step 2: Remove the Settings nav entries**
+- [x] **Step 2: Remove the Settings nav entries**
 
 - `settings/layout.tsx` line ~20 — remove the `{ label: 'Fault Templates', href: '/settings/fault-templates', ... }` item.
 - `settings/page.tsx` line ~13 — remove the `{ href: '/settings/fault-templates', ... }` card entry.
 
-- [ ] **Step 3: Typecheck + commit**
+- [x] **Step 3: Typecheck + commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -327,14 +327,14 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 Context: the Repair group (`AppShell.tsx:56`) currently has Overview / Jobs / Spare Parts. Add Fault Templates as the 4th leaf. Pick a lucide icon distinct from `Wrench`/`Package`/`LayoutDashboard` — `ClipboardList` fits; add it to the lucide import if not present.
 
-- [ ] **Step 1: Add the leaf**
+- [x] **Step 1: Add the leaf**
 
 In the Repair group's `children`, after the Spare Parts leaf:
 ```typescript
     { type: 'leaf', label: 'Fault Templates', href: '/repair/fault-templates', icon: ClipboardList, permission: 'repair.templates.manage' },
 ```
 
-- [ ] **Step 2: Extend the nav test**
+- [x] **Step 2: Extend the nav test**
 
 In `navItems.test.ts`, add to the Repair-group describe:
 ```ts
@@ -345,7 +345,7 @@ In `navItems.test.ts`, add to the Repair-group describe:
   });
 ```
 
-- [ ] **Step 3: Run + typecheck + commit**
+- [x] **Step 3: Run + typecheck + commit**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -364,7 +364,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ## Task 6: Verification
 
-- [ ] **Step 1: Backend**
+- [x] **Step 1: Backend**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/backend
@@ -372,7 +372,7 @@ python -m pytest apps/repair/tests/ --no-cov 2>&1 | tail -8
 ```
 Expected: all PASS (existing + new fault-template tests).
 
-- [ ] **Step 2: Frontend**
+- [x] **Step 2: Frontend**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS/frontend
@@ -381,7 +381,7 @@ npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK no 
 ```
 Expected: Phase 4 tests pass; `tsc` clean. (Any pre-existing unrelated failure noted in earlier phases may remain — don't fix here.)
 
-- [ ] **Step 3: Manual smoke** (demo tenant; see Phase 3 log for env setup — `docker compose up -d`, pgbouncer/backend healthy, `admin@demo.com` / `Demo@1234!`, `X-Tenant-Slug: demo`)
+- [x] **Step 3: Manual smoke** (demo tenant; see Phase 3 log for env setup — `docker compose up -d`, pgbouncer/backend healthy, `admin@demo.com` / `Demo@1234!`, `X-Tenant-Slug: demo`)
 
 1. Sidebar → Repair → **Fault Templates** (visible only with `repair.templates.manage`). Lands on `/repair/fault-templates`.
 2. List shows seeded templates with parts count; **search** by name/brand narrows; clearing search restores; no-match shows "No templates match" + Clear search.
@@ -390,7 +390,7 @@ Expected: Phase 4 tests pass; `tsc` clean. (Any pre-existing unrelated failure n
 5. Visit `/settings/fault-templates` → redirects to `/repair/fault-templates`. Settings nav no longer lists Fault Templates.
 6. A user without `repair.templates.manage` sees no Repair→Fault Templates leaf and no create/edit/delete actions.
 
-- [ ] **Step 4: Push + PR**
+- [x] **Step 4: Push + PR**
 
 ```bash
 cd /home/appuser/workspace/projects/repairOS
