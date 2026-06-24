@@ -71,16 +71,25 @@ export default function SparePartsPage() {
     {
       key: 'job', header: 'Job / Customer',
       cell: (r) => (
-        <button
-          className="text-left"
-          onClick={(e) => { e.stopPropagation(); router.push(`/jobs/${r.job_id}`); }}
-        >
-          <span className="block text-body-sm font-medium text-[var(--accent)] hover:underline">{r.customer_name}</span>
-          <span className="block text-xs font-mono text-[var(--text-muted)]">
-            {r.job_number}
-            <span className="font-sans"> · {r.device_type}</span>
-          </span>
-        </button>
+        r.job_id ? (
+          <button
+            className="text-left"
+            onClick={(e) => { e.stopPropagation(); router.push(`/jobs/${r.job_id}`); }}
+          >
+            <span className="block text-body-sm font-medium text-[var(--accent)] hover:underline">{r.customer_name}</span>
+            <span className="block text-xs font-mono text-[var(--text-muted)]">
+              {r.job_number}
+              <span className="font-sans"> · {r.device_type}</span>
+            </span>
+          </button>
+        ) : (
+          <div className="text-left">
+            <span className="inline-flex items-center rounded-full border border-[var(--border)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
+              Stock request
+            </span>
+            <span className="block text-xs text-[var(--text-muted)] mt-0.5">{r.shop_name ?? '—'}</span>
+          </div>
+        )
       ),
     },
     {

@@ -298,7 +298,10 @@ class ReviewSparePartSerializer(serializers.Serializer):
 
 
 class SparePartCreateSerializer(serializers.Serializer):
-    job_id = serializers.UUIDField()
+    # job_id OR shop_id: a job-linked request derives its shop from the job;
+    # a job-less (stock) request must name the shop directly.
+    job_id = serializers.UUIDField(required=False, allow_null=True)
+    shop_id = serializers.UUIDField(required=False, allow_null=True)
     variant_id = serializers.UUIDField(required=False, allow_null=True)
     custom_part_name = serializers.CharField(required=False, allow_blank=True, default="")
     quantity = serializers.IntegerField(min_value=1)
@@ -307,15 +310,20 @@ class SparePartCreateSerializer(serializers.Serializer):
     def validate(self, attrs):
         if not attrs.get("variant_id") and not attrs.get("custom_part_name"):
             raise serializers.ValidationError("Provide either variant_id or custom_part_name.")
+        if not attrs.get("job_id") and not attrs.get("shop_id"):
+            raise serializers.ValidationError("Provide either job_id or shop_id.")
         return attrs
 
 
 class SparePartRequestListSerializer(serializers.ModelSerializer):
     requested_by_name = serializers.CharField(source="requested_by.full_name", read_only=True)
-    job_id = serializers.UUIDField(source="job.id", read_only=True)
-    job_number = serializers.CharField(source="job.job_number", read_only=True)
-    customer_name = serializers.CharField(source="job.customer.name", read_only=True)
-    device_type = serializers.CharField(source="job.device_type", read_only=True)
+    shop_id = serializers.UUIDField(source="shop.id", read_only=True)
+    shop_name = serializers.CharField(source="shop.name", read_only=True)
+    # Job fields are null for job-less (stock) requests.
+    job_id = serializers.UUIDField(source="job.id", read_only=True, allow_null=True)
+    job_number = serializers.CharField(source="job.job_number", read_only=True, allow_null=True)
+    customer_name = serializers.CharField(source="job.customer.name", read_only=True, allow_null=True)
+    device_type = serializers.CharField(source="job.device_type", read_only=True, allow_null=True)
     # Friendly part label: custom name, else the resolved variant's display name.
     # The view's list() passes a batched `variant_labels` map via context to avoid
     # N+1; single-object responses (create/edit) fall back to a one-row lookup.
@@ -324,7 +332,7 @@ class SparePartRequestListSerializer(serializers.ModelSerializer):
     class Meta:
         model = JobSparePartRequest
         fields = [
-            "id", "job_id", "job_number", "customer_name", "device_type",
+            "id", "shop_id", "shop_name", "job_id", "job_number", "customer_name", "device_type",
             "variant_id", "custom_part_name", "part_name", "quantity", "is_urgent", "status",
             "requested_by", "requested_by_name", "reviewed_by", "po_id", "created_at",
         ]

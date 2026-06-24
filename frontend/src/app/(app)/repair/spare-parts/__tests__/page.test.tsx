@@ -47,4 +47,22 @@ describe('SparePartsPage', () => {
     renderPage();
     expect(await screen.findByText(/no spare-part requests/i)).toBeInTheDocument();
   });
+
+  it('renders a job-less (stock) request as a "Stock request" tag with shop name', async () => {
+    listSpareParts.mockResolvedValue({
+      items: [{
+        id: 'r2', shop_id: 'shop-1', shop_name: 'Main Shop',
+        job_id: null, job_number: null, customer_name: null, device_type: null,
+        custom_part_name: 'Bulk screens', quantity: 10, is_urgent: false,
+        status: 'requested', requested_by: 'u1', requested_by_name: 'Asha', created_at: '2026-06-10',
+      }],
+      meta: { count: 1, total_pages: 1, page: 1, page_size: 20 },
+    });
+    renderPage();
+    expect(await screen.findByText('Bulk screens')).toBeInTheDocument();
+    expect(screen.getByText(/stock request/i)).toBeInTheDocument();
+    expect(screen.getByText('Main Shop')).toBeInTheDocument();
+    // No broken job link / customer rendered
+    expect(screen.queryByText('Ravi Kumar')).not.toBeInTheDocument();
+  });
 });

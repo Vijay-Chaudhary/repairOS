@@ -963,11 +963,11 @@ class Command(BaseCommand):
             rep_svc.start_stage(stages[0], tech1)
 
             # Spare-part request by tech1
-            rep_svc.request_spare_part(j2, {
+            rep_svc.request_spare_part(j2.shop, {
                 "variant_id": str(v_sa54.id),
                 "quantity": 1,
                 "is_urgent": False,
-            }, tech1)
+            }, tech1, job=j2)
 
             spr = j2.spare_part_requests.first()
             if spr and spr.status == "requested":

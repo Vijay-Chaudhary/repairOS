@@ -95,10 +95,13 @@ export interface SparePartRequest {
 
 export interface SparePartListItem {
   id: string;
-  job_id: string;
-  job_number: string;
-  customer_name: string;
-  device_type: string;
+  shop_id: string;
+  shop_name?: string;
+  /** Null for job-less (stock) requests. */
+  job_id: string | null;
+  job_number: string | null;
+  customer_name: string | null;
+  device_type: string | null;
   variant_id?: string | null;
   custom_part_name: string;
   /** Friendly part label resolved server-side (custom name, else variant display name). */
@@ -301,7 +304,7 @@ export const repairApi = {
   listSpareParts: (filters: SparePartFilters = {}) =>
     apiGet<SparePartListResponse>('/repair/spare-parts/', filters as Record<string, string | number | boolean | undefined>),
 
-  createSparePart: (body: { job_id: string; custom_part_name?: string; variant_id?: string; quantity: number; is_urgent?: boolean }) =>
+  createSparePart: (body: { job_id?: string; shop_id?: string; custom_part_name?: string; variant_id?: string; quantity: number; is_urgent?: boolean }) =>
     apiPost<SparePartListItem>('/repair/spare-parts/', body),
 
   updateSparePart: (id: string, body: Partial<{ custom_part_name: string; quantity: number; is_urgent: boolean }>) =>

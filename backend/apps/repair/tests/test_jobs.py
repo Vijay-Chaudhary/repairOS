@@ -548,7 +548,8 @@ class TestSparePartRequests:
         from repair.services import request_spare_part
 
         req = request_spare_part(
-            job, {"custom_part_name": "SSD 512GB", "quantity": 1, "is_urgent": False}, admin_user
+            job.shop, {"custom_part_name": "SSD 512GB", "quantity": 1, "is_urgent": False},
+            admin_user, job=job,
         )
         res = admin_client.patch(
             f"/api/v1/repair/spare-parts/{req.id}/",
@@ -659,6 +660,7 @@ class TestRepairStockDeduction:
 
         # Mark spare part as received (qty=3)
         JobSparePartRequest.objects.create(
+            shop=job.shop,
             job=job,
             variant_id=variant.id,
             quantity=3,
@@ -686,12 +688,12 @@ class TestRepairStockDeduction:
 
         # One received (should deduct) + one still requested (must not deduct)
         JobSparePartRequest.objects.create(
-            job=job, variant_id=variant.id, quantity=2,
+            shop=job.shop, job=job, variant_id=variant.id, quantity=2,
             status=JobSparePartRequest.RequestStatus.RECEIVED,
             requested_by=admin_user,
         )
         JobSparePartRequest.objects.create(
-            job=job, variant_id=variant.id, quantity=5,
+            shop=job.shop, job=job, variant_id=variant.id, quantity=5,
             status=JobSparePartRequest.RequestStatus.REQUESTED,
             requested_by=admin_user,
         )
@@ -730,6 +732,7 @@ class TestRepairStockDeduction:
 
         # variant_id points to a non-existent variant
         JobSparePartRequest.objects.create(
+            shop=job.shop,
             job=job,
             variant_id=uuid.uuid4(),
             quantity=1,
@@ -892,10 +895,10 @@ class TestRepairOverviewService:
         JobTicket.objects.filter(pk=j.pk).update(status="in_progress")
         # two requests on the SAME job → distinct job count = 1
         JobSparePartRequest.objects.create(
-            job=j, requested_by=admin_user, custom_part_name="Screen", quantity=1, status="requested",
+            shop=j.shop, job=j, requested_by=admin_user, custom_part_name="Screen", quantity=1, status="requested",
         )
         JobSparePartRequest.objects.create(
-            job=j, requested_by=admin_user, custom_part_name="Battery", quantity=1, status="ordered",
+            shop=j.shop, job=j, requested_by=admin_user, custom_part_name="Battery", quantity=1, status="ordered",
         )
         data = get_repair_overview(Q(), None)
         assert data["kpis"]["awaiting_parts"] == 1
