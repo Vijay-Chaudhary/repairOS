@@ -1,7 +1,7 @@
 # Plan — Standalone (job-less) Spare-Part Requests
 
 **Date:** 2026-06-24
-**Status:** PR open (#6 → master; committed `d498b31`, all tasks complete & verified)
+**Status:** Merged (PR #6 squashed to master as `ca5db34`; all tasks complete & verified)
 **Origin:** Deferred follow-up from Repair Overhaul Phase 3
 (`2026-06-18-repair-overhaul-phase-3-spare-parts.md`), which scoped create to job-linked only
 because `JobSparePartRequest.job` is a non-nullable FK.
