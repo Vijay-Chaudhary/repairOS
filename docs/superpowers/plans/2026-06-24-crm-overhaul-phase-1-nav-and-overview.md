@@ -226,24 +226,38 @@ def api_client():
     return APIClient()
 
 
-@pytest.fixture
-def overview_client(api_client, shop, staff_user):
-    """Authed client whose JWT carries crm.customers.view for `shop`."""
-    from authentication.models import Permission, Role, RolePermission, UserRole
-    from authentication.services import issue_tokens_for_user
+def _authenticate(api_client, user):
+    """Attach a Bearer token carrying `user`'s permission claims.
 
-    role, _ = Role.objects.get_or_create(name="CRM Viewer", defaults={"is_system_role": False})
-    perm, _ = Permission.objects.get_or_create(code="crm.customers.view", defaults={"name": "View customers"})
-    RolePermission.objects.get_or_create(role=role, permission=perm)
-    UserRole.objects.get_or_create(user=staff_user, role=role, shop=shop)
+    Mirrors the verified pattern in `backend/apps/crm/tests/test_leads.py::admin_client`.
+    """
+    from authentication.tokens import _build_token_claims
+    from rest_framework_simplejwt.tokens import RefreshToken
 
-    tokens = issue_tokens_for_user(staff_user)
-    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {tokens['access']}")
+    refresh = RefreshToken.for_user(user)
+    access = refresh.access_token  # property creates a new instance each call
+    for key, value in _build_token_claims(user, "test").items():
+        access[key] = value
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {str(access)}")
     return api_client
 
 
+@pytest.fixture
+def overview_client(api_client, shop, staff_user):
+    """Authed client whose JWT carries crm.customers.view scoped to `shop`."""
+    from authentication.models import Permission, Role, RolePermission, UserRole
+
+    role, _ = Role.objects.get_or_create(name="CRM Viewer", defaults={"is_system_role": False})
+    perm, _ = Permission.objects.get_or_create(
+        codename="crm.customers.view", defaults={"module": "crm", "label": "crm.customers.view"},
+    )
+    RolePermission.objects.get_or_create(role=role, permission=perm)
+    UserRole.objects.get_or_create(user=staff_user, role=role, shop=shop)
+    return _authenticate(api_client, staff_user)
+
+
 @pytest.mark.django_db
-def test_overview_endpoint_returns_envelope(overview_client, shop, staff_user):
+def test_overview_endpoint_returns_envelope(overview_client, shop):
     Lead.objects.create(shop=shop, name="A", phone="+9111", status="new")
     res = overview_client.get(f"/api/v1/crm/overview/?shop_id={shop.id}")
     assert res.status_code == 200
@@ -254,10 +268,9 @@ def test_overview_endpoint_returns_envelope(overview_client, shop, staff_user):
 
 
 @pytest.mark.django_db
-def test_overview_requires_permission(api_client, shop, staff_user):
-    from authentication.services import issue_tokens_for_user
-    tokens = issue_tokens_for_user(staff_user)  # no CRM perms granted
-    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {tokens['access']}")
+def test_overview_requires_permission(api_client, staff_user):
+    # staff_user has no roles/permissions granted → require_permission denies with 403
+    _authenticate(api_client, staff_user)
     res = api_client.get("/api/v1/crm/overview/")
     assert res.status_code == 403
 
@@ -268,11 +281,10 @@ def test_overview_unauthenticated(api_client):
     assert res.status_code == 401
 ```
 
-> **Note on the auth fixture:** mirror the token-issuing helper the other CRM tests use. If
-> `authentication.services.issue_tokens_for_user` does not exist, copy the exact token-building
-> block from `backend/apps/crm/tests/test_leads.py` (the `admin_client` fixture, lines ~56-66)
-> and grant only `crm.customers.view`. Verify the helper name with
-> `grep -rn "def issue_tokens_for_user\|access_token" backend/apps/authentication/` before writing.
+> **Verified against the codebase:** `Permission` uses `codename` / `module` / `label`;
+> token claims are built with `authentication.tokens._build_token_claims(user, slug)` then set on
+> `RefreshToken.for_user(user).access_token`; the API prefix is `/api/v1/`. No
+> `issue_tokens_for_user` helper exists — use the `_authenticate` helper above.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
