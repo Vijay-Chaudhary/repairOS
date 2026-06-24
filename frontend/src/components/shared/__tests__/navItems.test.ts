@@ -41,3 +41,39 @@ describe('NAV_ITEMS — Repair group', () => {
     expect(ft!.permission).toBe('repair.templates.manage');
   });
 });
+
+function crmGroup() {
+  const entry = NAV_ITEMS.find(
+    (e: NavEntry) => e.type === 'group' && e.label === 'CRM',
+  );
+  if (!entry || entry.type !== 'group') throw new Error('CRM group not found');
+  return entry;
+}
+
+describe('NAV_ITEMS — CRM group', () => {
+  it('has the Overview leaf first, at /crm, gated on crm.customers.view', () => {
+    const children = crmGroup().children;
+    expect(children[0].href).toBe('/crm');
+    expect(children[0].label).toBe('Overview');
+    expect(children[0].permission).toBe('crm.customers.view');
+  });
+
+  it('surfaces Tasks gated on crm.tasks.manage', () => {
+    const t = crmGroup().children.find((c) => c.href === '/tasks');
+    expect(t).toBeDefined();
+    expect(t!.permission).toBe('crm.tasks.manage');
+  });
+
+  it('surfaces Segments gated on crm.segments.manage', () => {
+    const s = crmGroup().children.find((c) => c.href === '/settings/segments');
+    expect(s).toBeDefined();
+    expect(s!.label).toBe('Segments');
+    expect(s!.permission).toBe('crm.segments.manage');
+  });
+
+  it('keeps Customers and Leads', () => {
+    const hrefs = crmGroup().children.map((c) => c.href);
+    expect(hrefs).toContain('/customers');
+    expect(hrefs).toContain('/leads');
+  });
+});
