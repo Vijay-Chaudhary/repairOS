@@ -163,7 +163,7 @@ class LeadViewSet(ShopScopedMixin, ModelViewSet):
             lead,
             serializer.validated_data["to_status"],
             request.user,
-            serializer.validated_data.get("lost_reason", ""),
+            serializer.validated_data.get("reason", ""),
         )
         return Response(LeadSerializer(lead).data)
 
