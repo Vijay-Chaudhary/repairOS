@@ -265,3 +265,39 @@ class CustomerSegmentMemberSerializer(serializers.ModelSerializer):
 class BulkWhatsAppSerializer(serializers.Serializer):
     template_name = serializers.CharField(max_length=100)
     variables = serializers.DictField(child=serializers.CharField(), required=False, default=dict)
+
+
+class CrmOverviewKpisSerializer(serializers.Serializer):
+    new_leads = serializers.IntegerField()
+    tasks_due_today = serializers.IntegerField()
+    tasks_overdue = serializers.IntegerField()
+    conversions_30d = serializers.IntegerField()
+    new_customers_30d = serializers.IntegerField()
+
+
+class CrmPipelineCountSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    count = serializers.IntegerField()
+
+
+class CrmOverdueTaskSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    title = serializers.CharField()
+    due_date = serializers.DateField()
+    assigned_to_name = serializers.CharField(allow_null=True)
+    customer_name = serializers.CharField(allow_null=True, default=None)
+
+
+class CrmUnassignedLeadSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+    phone = serializers.CharField()
+    source = serializers.CharField()
+    created_at = serializers.DateTimeField()
+
+
+class CrmOverviewSerializer(serializers.Serializer):
+    kpis = CrmOverviewKpisSerializer()
+    pipeline = CrmPipelineCountSerializer(many=True)
+    overdue_tasks = CrmOverdueTaskSerializer(many=True)
+    unassigned_leads = CrmUnassignedLeadSerializer(many=True)

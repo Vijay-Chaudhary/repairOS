@@ -15,6 +15,7 @@ from rest_framework.mixins import (
     UpdateModelMixin,
 )
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from authentication.permissions import require_permission
@@ -32,6 +33,7 @@ from .models import (
 from .serializers import (
     BulkWhatsAppSerializer,
     CommunicationLogSerializer,
+    CrmOverviewSerializer,
     CustomerMergeSerializer,
     CustomerSegmentMemberSerializer,
     CustomerSegmentSerializer,
@@ -472,3 +474,20 @@ class CustomerSegmentViewSet(ModelViewSet):
             {"queued": len(customer_ids), "excluded_optout": excluded_count},
             status=status.HTTP_202_ACCEPTED,
         )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CRM overview  (read-only dashboard hub)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class CrmOverviewView(ShopScopedMixin, APIView):
+    """GET /crm/overview/ — KPI counts, lead pipeline, and needs-attention lists."""
+
+    def get_permissions(self):
+        return [require_permission("crm.customers.view")()]
+
+    def get(self, request):
+        shop_id = request.query_params.get("shop_id")
+        data = services.get_crm_overview(self._shop_filter(), shop_id)
+        return Response(CrmOverviewSerializer(data).data)

@@ -72,3 +72,64 @@ def test_get_crm_overview_counts(shop, staff_user):
     # Only the unassigned 'new' lead appears
     assert len(data["unassigned_leads"]) == 1
     assert data["unassigned_leads"][0]["name"] == "A"
+
+
+@pytest.fixture
+def api_client():
+    from rest_framework.test import APIClient
+    return APIClient()
+
+
+def _authenticate(api_client, user):
+    """Attach a Bearer token carrying `user`'s permission claims.
+
+    Mirrors the verified pattern in `backend/apps/crm/tests/test_leads.py::admin_client`.
+    """
+    from authentication.tokens import _build_token_claims
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    refresh = RefreshToken.for_user(user)
+    access = refresh.access_token  # property creates a new instance each call
+    for key, value in _build_token_claims(user, "test").items():
+        access[key] = value
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {str(access)}")
+    return api_client
+
+
+@pytest.fixture
+def overview_client(api_client, shop, staff_user):
+    """Authed client whose JWT carries crm.customers.view scoped to `shop`."""
+    from authentication.models import Permission, Role, RolePermission, UserRole
+
+    role, _ = Role.objects.get_or_create(name="CRM Viewer", defaults={"is_system_role": False})
+    perm, _ = Permission.objects.get_or_create(
+        codename="crm.customers.view", defaults={"module": "crm", "label": "crm.customers.view"},
+    )
+    RolePermission.objects.get_or_create(role=role, permission=perm)
+    UserRole.objects.get_or_create(user=staff_user, role=role, shop=shop)
+    return _authenticate(api_client, staff_user)
+
+
+@pytest.mark.django_db
+def test_overview_endpoint_returns_envelope(overview_client, shop):
+    Lead.objects.create(shop=shop, name="A", phone="+9111", status="new")
+    res = overview_client.get(f"/api/v1/crm/overview/?shop_id={shop.id}")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["success"] is True
+    assert body["data"]["kpis"]["new_leads"] == 1
+    assert any(row["status"] == "new" for row in body["data"]["pipeline"])
+
+
+@pytest.mark.django_db
+def test_overview_requires_permission(api_client, staff_user):
+    # staff_user has no roles/permissions granted → require_permission denies with 403
+    _authenticate(api_client, staff_user)
+    res = api_client.get("/api/v1/crm/overview/")
+    assert res.status_code == 403
+
+
+@pytest.mark.django_db
+def test_overview_unauthenticated(api_client):
+    res = api_client.get("/api/v1/crm/overview/")
+    assert res.status_code == 401

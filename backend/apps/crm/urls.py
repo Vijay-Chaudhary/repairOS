@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     CommunicationLogViewSet,
+    CrmOverviewView,
     CustomerSegmentViewSet,
     CustomerViewSet,
     FollowUpTaskViewSet,
@@ -17,5 +18,6 @@ router.register("tasks", FollowUpTaskViewSet, basename="tasks")
 router.register("segments", CustomerSegmentViewSet, basename="segments")
 
 urlpatterns = [
+    path("overview/", CrmOverviewView.as_view(), name="crm-overview"),
     path("", include(router.urls)),
 ]
