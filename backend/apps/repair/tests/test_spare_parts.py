@@ -75,9 +75,10 @@ def _make_job(shop, customer, user, **kwargs):
 
 def _make_request(job, user, **kwargs):
     from repair.models import JobSparePartRequest
+    shop = kwargs.pop("shop", None) or job.shop
     defaults = {"custom_part_name": "Screen", "quantity": 1, "is_urgent": False}
     defaults.update(kwargs)
-    return JobSparePartRequest.objects.create(job=job, requested_by=user, **defaults)
+    return JobSparePartRequest.objects.create(shop=shop, job=job, requested_by=user, **defaults)
 
 
 @pytest.mark.django_db
@@ -165,12 +166,36 @@ class TestSparePartCreate:
         assert res.data["custom_part_name"] == "Battery"
         assert res.data["status"] == "requested"
 
-    def test_create_requires_job_id(self, admin_client, shop, customer, admin_user):
+    def test_create_requires_job_or_shop(self, admin_client, shop, customer, admin_user):
         res = admin_client.post("/api/v1/repair/spare-parts/", {
             "custom_part_name": "Battery", "quantity": 1,
         }, format="json")
         assert res.status_code == 400
-        assert "job_id" in res.data["fields"]
+        assert "non_field_errors" in res.data["fields"]
+
+    def test_create_standalone_stock_request(self, admin_client, shop, customer, admin_user):
+        """A job-less (stock) request is created against shop_id and has no job."""
+        res = admin_client.post("/api/v1/repair/spare-parts/", {
+            "shop_id": str(shop.id), "custom_part_name": "Bulk screens", "quantity": 10,
+        }, format="json")
+        assert res.status_code == 201
+        assert res.data["job_id"] is None
+        assert res.data["job_number"] is None
+        assert res.data["customer_name"] is None
+        assert res.data["shop_id"] == str(shop.id)
+        assert res.data["shop_name"] == shop.name
+        assert res.data["status"] == "requested"
+
+    def test_create_standalone_rejects_shop_outside_scope(self, api_client, shop, shop_b, admin_user):
+        scoped = _user_with_perms("scoped3@sp.test", "+919000000025", "ShopBStaff3", ["repair.spare_parts.request"])
+        from authentication.models import Role, UserRole
+        UserRole.objects.filter(user=scoped).delete()
+        UserRole.objects.create(user=scoped, role=Role.objects.get(name="ShopBStaff3"), shop=shop_b)
+        client = _client(api_client, scoped)
+        res = client.post("/api/v1/repair/spare-parts/", {
+            "shop_id": str(shop.id), "custom_part_name": "X", "quantity": 1,
+        }, format="json")
+        assert res.status_code == 404
 
     def test_create_rejects_job_outside_shop_scope(self, api_client, shop, shop_b, customer, admin_user):
         job = _make_job(shop, customer, admin_user)
@@ -224,6 +249,22 @@ class TestSparePartEdit:
         }, format="json")
         assert res.status_code == 200
         assert res.data["status"] == "approved"
+
+    def test_review_workflow_on_standalone_request(self, admin_client, shop, admin_user):
+        """A job-less request advances requested→approved→ordered→received cleanly
+        (the 'received' notification must not crash on a missing job)."""
+        from repair.models import JobSparePartRequest
+        req = JobSparePartRequest.objects.create(
+            shop=shop, job=None, requested_by=admin_user,
+            custom_part_name="Bulk batteries", quantity=5,
+        )
+        for nxt in ("approved", "ordered", "received"):
+            res = admin_client.patch(f"/api/v1/repair/spare-parts/{req.id}/", {
+                "status": nxt,
+            }, format="json")
+            assert res.status_code == 200, (nxt, res.data)
+            assert res.data["status"] == nxt
+            assert res.data["job_number"] is None
 
     def test_edit_requires_request_permission(self, api_client, shop, customer, admin_user):
         job = _make_job(shop, customer, admin_user)

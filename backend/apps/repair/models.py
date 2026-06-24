@@ -287,7 +287,14 @@ class JobSparePartRequest(BaseModel):
         ORDERED = "ordered", "Ordered"
         RECEIVED = "received", "Received"
 
-    job = models.ForeignKey(JobTicket, on_delete=models.CASCADE, related_name="spare_part_requests")
+    # shop owns the request for scoping; job is optional (job-less = stock request)
+    shop = models.ForeignKey(
+        "core.Shop", on_delete=models.PROTECT, related_name="spare_part_requests"
+    )
+    job = models.ForeignKey(
+        JobTicket, on_delete=models.CASCADE, related_name="spare_part_requests",
+        null=True, blank=True,
+    )
     requested_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="spare_part_requests"
     )
@@ -311,6 +318,7 @@ class JobSparePartRequest(BaseModel):
     class Meta:
         app_label = "repair"
         db_table = "job_spare_part_requests"
+        indexes = [models.Index(fields=["shop", "status"])]
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(variant_id__isnull=False) | ~models.Q(custom_part_name=""),
@@ -324,4 +332,5 @@ class JobSparePartRequest(BaseModel):
 
     def __str__(self) -> str:
         part = self.custom_part_name or str(self.variant_id)
-        return f"{part} x{self.quantity} for {self.job.job_number}"
+        target = self.job.job_number if self.job_id else "stock"
+        return f"{part} x{self.quantity} for {target}"

@@ -124,6 +124,7 @@ def job_with_parts(db, shop, customer_intra, tech_user):
         status=JobTicket.Status.READY_FOR_PICKUP,
     )
     JobSparePartRequest.objects.create(
+        shop=j.shop,
         job=j,
         requested_by=tech_user,
         custom_part_name="Samsung Battery",

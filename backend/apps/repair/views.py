@@ -311,7 +311,7 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
         serializer.is_valid(raise_exception=True)
         vd = dict(serializer.validated_data)
         vd.pop("requested_by", None)
-        req = services.request_spare_part(job, vd, request.user)
+        req = services.request_spare_part(job.shop, vd, request.user, job=job)
         return Response(JobSparePartRequestSerializer(req).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], url_path="warranty-claim")
@@ -372,12 +372,28 @@ class SparePartRequestViewSet(ShopScopedMixin, GenericViewSet):
         return [require_permission("repair.spare_parts.request")()]
 
     def _scoped_qs(self):
-        qs = JobSparePartRequest.objects.select_related("job", "job__customer", "requested_by")
+        qs = JobSparePartRequest.objects.select_related(
+            "shop", "job", "job__customer", "requested_by"
+        )
         token = getattr(self.request, "auth", None)
         if token and not (token.get("is_tenant_wide") or token.get("is_platform_admin")):
             shop_ids = token.get("shop_ids", [])
-            qs = qs.filter(job__shop_id__in=shop_ids) if shop_ids else qs.none()
+            qs = qs.filter(shop_id__in=shop_ids) if shop_ids else qs.none()
         return qs
+
+    def _resolve_shop(self, shop_id):
+        """Return a Shop the caller may use, or raise 404 if out of scope."""
+        from rest_framework.exceptions import NotFound
+        from core.models import Shop
+        qs = Shop.objects.all()
+        token = getattr(self.request, "auth", None)
+        if token and not (token.get("is_tenant_wide") or token.get("is_platform_admin")):
+            shop_ids = token.get("shop_ids", [])
+            qs = qs.filter(id__in=shop_ids) if shop_ids else qs.none()
+        try:
+            return qs.get(pk=shop_id)
+        except Shop.DoesNotExist:
+            raise NotFound("Shop not found in your shops.")
 
     def get_queryset(self):
         return self._scoped_qs()
@@ -388,7 +404,7 @@ class SparePartRequestViewSet(ShopScopedMixin, GenericViewSet):
         if s := qp.get("status"):
             qs = qs.filter(status=s)
         if shop_id := qp.get("shop_id"):
-            qs = qs.filter(job__shop_id=shop_id)
+            qs = qs.filter(shop_id=shop_id)
         if df := qp.get("date_from"):
             qs = qs.filter(created_at__date__gte=df)
         if dt := qp.get("date_to"):
@@ -418,12 +434,17 @@ class SparePartRequestViewSet(ShopScopedMixin, GenericViewSet):
         serializer = SparePartCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         vd = dict(serializer.validated_data)
-        job_id = vd.pop("job_id")
-        try:
-            job = JobTicket.objects.filter(self._shop_filter()).get(pk=job_id)
-        except JobTicket.DoesNotExist:
-            raise NotFound("Job not found in your shops.")
-        req = services.request_spare_part(job, vd, request.user)
+        job_id = vd.pop("job_id", None)
+        shop_id = vd.pop("shop_id", None)
+        if job_id:
+            try:
+                job = JobTicket.objects.filter(self._shop_filter()).get(pk=job_id)
+            except JobTicket.DoesNotExist:
+                raise NotFound("Job not found in your shops.")
+            req = services.request_spare_part(job.shop, vd, request.user, job=job)
+        else:
+            shop = self._resolve_shop(shop_id)
+            req = services.request_spare_part(shop, vd, request.user)
         return Response(
             SparePartRequestListSerializer(req).data, status=status.HTTP_201_CREATED
         )

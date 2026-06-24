@@ -113,6 +113,7 @@ def create_job(shop, customer, data: dict, user) -> JobTicket:
     if template:
         for part in template.parts.all():
             JobSparePartRequest.objects.create(
+                shop=shop,
                 job=job,
                 requested_by=user,
                 variant_id=part.variant_id,
@@ -507,14 +508,19 @@ def start_stage(stage: JobStage, user) -> JobStage:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-def request_spare_part(job: JobTicket, data: dict, user) -> JobSparePartRequest:
+def request_spare_part(shop, data: dict, user, job: JobTicket | None = None) -> JobSparePartRequest:
+    """Create a spare-part request for ``shop``.
+
+    ``job`` is optional: a job-less request is a stock replenishment request not
+    bound to a repair. When ``job`` is given, it must belong to ``shop``.
+    """
     variant_id = data.get("variant_id")
     if variant_id:
         from inventory.models import InventoryStock
         from core.exceptions import InsufficientStock
         requested_qty = data.get("quantity", 1)
         stock = InventoryStock.objects.filter(
-            shop_id=job.shop_id, variant_id=variant_id
+            shop_id=shop.id, variant_id=variant_id
         ).first()
         available = stock.quantity_in_stock if stock else 0
         if available < requested_qty:
@@ -523,6 +529,7 @@ def request_spare_part(job: JobTicket, data: dict, user) -> JobSparePartRequest:
             )
 
     req = JobSparePartRequest.objects.create(
+        shop=shop,
         job=job,
         requested_by=user,
         **data,
@@ -531,12 +538,12 @@ def request_spare_part(job: JobTicket, data: dict, user) -> JobSparePartRequest:
     if req.is_urgent:
         # Notify shop manager — find any manager user (stub: notify first admin)
         _send_shop_notification(
-            shop_id=job.shop_id,
+            shop_id=shop.id,
             template_name="spare_part_request",
             variables={
                 "manager_name": "Manager",
                 "tech_name": user.full_name,
-                "job_number": job.job_number,
+                "job_number": job.job_number if job else "(stock request)",
                 "part_name": req.custom_part_name or str(req.variant_id),
             },
         )
@@ -575,7 +582,7 @@ def review_spare_part(req: JobSparePartRequest, status: str, reviewer, po_id=Non
             variables={
                 "tech_name": req.requested_by.full_name,
                 "part_name": req.custom_part_name or str(req.variant_id),
-                "job_number": req.job.job_number,
+                "job_number": req.job.job_number if req.job_id else "(stock request)",
             },
         )
     return req

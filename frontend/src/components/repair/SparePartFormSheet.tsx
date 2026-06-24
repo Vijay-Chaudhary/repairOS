@@ -12,7 +12,10 @@ import { repairApi, type SparePartListItem } from '@/lib/api/repair';
 import { qk } from '@/lib/query/keys';
 import { ApiError } from '@/lib/api/client';
 import { useDebounce } from '@/lib/hooks/useDebounce';
+import { useActiveShopStore } from '@/lib/stores/activeShopStore';
 import { cn } from '@/lib/utils';
+
+type RequestMode = 'job' | 'stock';
 
 interface SparePartFormSheetProps {
   open: boolean;
@@ -24,12 +27,16 @@ export function SparePartFormSheet({ open, onOpenChange, editTarget }: SparePart
   const queryClient = useQueryClient();
   const isEdit = editTarget !== null;
 
+  const { shops, activeShopId, isAllShops } = useActiveShopStore();
+
+  const [mode, setMode] = useState<RequestMode>('job');
   const [partName, setPartName] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [isUrgent, setIsUrgent] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobLabel, setJobLabel] = useState('');
   const [jobSearch, setJobSearch] = useState('');
+  const [stockShopId, setStockShopId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   // Reset/prefill on open
@@ -41,25 +48,32 @@ export function SparePartFormSheet({ open, onOpenChange, editTarget }: SparePart
       setQuantity(String(editTarget.quantity));
       setIsUrgent(editTarget.is_urgent);
       setJobId(editTarget.job_id);
-      setJobLabel(`${editTarget.job_number} · ${editTarget.customer_name}`);
+      setJobLabel(editTarget.job_id ? `${editTarget.job_number} · ${editTarget.customer_name}` : '');
     } else {
+      setMode('job');
       setPartName(''); setQuantity('1'); setIsUrgent(false);
       setJobId(null); setJobLabel(''); setJobSearch('');
+      // Default the stock-mode shop to the active shop (null under "All shops").
+      setStockShopId(isAllShops ? null : activeShopId);
     }
-  }, [open, editTarget]);
+  }, [open, editTarget, isAllShops, activeShopId]);
 
   const debouncedSearch = useDebounce(jobSearch, 300);
   const jobResults = useQuery({
     queryKey: qk.jobs({ search: debouncedSearch || undefined, page: 1, _picker: true }),
     queryFn: () => repairApi.listJobs({ search: debouncedSearch || undefined, page: 1 }),
-    enabled: !isEdit && open && debouncedSearch.trim().length > 0,
+    enabled: !isEdit && mode === 'job' && open && debouncedSearch.trim().length > 0,
     staleTime: 15_000,
   });
 
   const qtyNum = parseInt(quantity, 10);
 
   const createMutation = useMutation({
-    mutationFn: () => repairApi.createSparePart({ job_id: jobId!, custom_part_name: partName, quantity: qtyNum, is_urgent: isUrgent }),
+    mutationFn: () => repairApi.createSparePart(
+      mode === 'job'
+        ? { job_id: jobId!, custom_part_name: partName, quantity: qtyNum, is_urgent: isUrgent }
+        : { shop_id: stockShopId!, custom_part_name: partName, quantity: qtyNum, is_urgent: isUrgent }
+    ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: qk.spareParts() });
       toast.success('Request created');
@@ -83,7 +97,11 @@ export function SparePartFormSheet({ open, onOpenChange, editTarget }: SparePart
     if (partName.trim().length < 2) { setError('Part name is required.'); return; }
     if (!Number.isFinite(qtyNum) || qtyNum < 1) { setError('Quantity must be at least 1.'); return; }
     if (isEdit) { updateMutation.mutate(); return; }
-    if (!jobId) { setError('Select a job for this request.'); return; }
+    if (mode === 'job') {
+      if (!jobId) { setError('Select a job for this request.'); return; }
+    } else if (!stockShopId) {
+      setError('Choose a shop before creating a stock request.'); return;
+    }
     createMutation.mutate();
   }
 
@@ -98,6 +116,50 @@ export function SparePartFormSheet({ open, onOpenChange, editTarget }: SparePart
 
         <div className="flex-1 overflow-auto space-y-4 py-4">
           {!isEdit && (
+            <div role="radiogroup" aria-label="Request type" className="grid grid-cols-2 gap-2">
+              {([['job', 'For a job'], ['stock', 'Stock (no job)']] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  role="radio"
+                  aria-checked={mode === value}
+                  onClick={() => { setMode(value); setError(''); }}
+                  className={cn(
+                    'min-h-[44px] rounded-md border px-3 text-body-sm font-medium transition-colors',
+                    mode === value
+                      ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+                      : 'border-[var(--border)] text-[var(--text-muted)]'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {!isEdit && mode === 'stock' && (
+            <div>
+              <label htmlFor="sp-shop" className="text-body-sm font-medium text-[var(--text)] block mb-1">Shop</label>
+              {isAllShops || shops.length > 1 ? (
+                <select
+                  id="sp-shop"
+                  className="h-9 w-full rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 text-body-sm"
+                  value={stockShopId ?? ''}
+                  onChange={(e) => setStockShopId(e.target.value || null)}
+                >
+                  <option value="">Select a shop…</option>
+                  {shops.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <div className="rounded-md border border-[var(--border)] px-3 py-2 text-body-sm text-[var(--text-muted)]">
+                  {shops.find((s) => s.id === stockShopId)?.name ?? 'Current shop'}
+                </div>
+              )}
+            </div>
+          )}
+
+          {!isEdit && mode === 'job' && (
             <div>
               <label className="text-body-sm font-medium text-[var(--text)] block mb-1">Job</label>
               {jobId ? (
