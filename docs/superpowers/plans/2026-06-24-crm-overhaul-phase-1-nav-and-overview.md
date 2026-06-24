@@ -49,7 +49,7 @@
 - Modify: `backend/apps/crm/services.py` (append at end of file)
 - Test: `backend/apps/crm/tests/test_overview.py` (create)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/apps/crm/tests/test_overview.py`:
 
@@ -130,12 +130,12 @@ def test_get_crm_overview_counts(shop, staff_user):
     assert data["unassigned_leads"][0]["name"] == "A"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && python -m pytest apps/crm/tests/test_overview.py::test_get_crm_overview_counts --no-cov -q`
 Expected: FAIL with `AttributeError: module 'crm.services' has no attribute 'get_crm_overview'`.
 
-- [ ] **Step 3: Implement the service**
+- [x] **Step 3: Implement the service**
 
 Append to `backend/apps/crm/services.py`:
 
@@ -193,12 +193,12 @@ def get_crm_overview(shop_filter, shop_id=None):
     }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && python -m pytest apps/crm/tests/test_overview.py::test_get_crm_overview_counts --no-cov -q`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/crm/services.py backend/apps/crm/tests/test_overview.py
@@ -215,7 +215,7 @@ git commit -m "feat(crm): add get_crm_overview aggregation service"
 - Modify: `backend/apps/crm/urls.py` (add `overview/` path)
 - Test: `backend/apps/crm/tests/test_overview.py` (append endpoint tests)
 
-- [ ] **Step 1: Write the failing endpoint tests**
+- [x] **Step 1: Write the failing endpoint tests**
 
 Append to `backend/apps/crm/tests/test_overview.py`:
 
@@ -286,12 +286,12 @@ def test_overview_unauthenticated(api_client):
 > `RefreshToken.for_user(user).access_token`; the API prefix is `/api/v1/`. No
 > `issue_tokens_for_user` helper exists — use the `_authenticate` helper above.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd backend && python -m pytest apps/crm/tests/test_overview.py -k "endpoint or permission or unauthenticated" --no-cov -q`
 Expected: FAIL (404, because the route/view do not exist yet).
 
-- [ ] **Step 3: Add the serializers**
+- [x] **Step 3: Add the serializers**
 
 Append to `backend/apps/crm/serializers.py`:
 
@@ -332,7 +332,7 @@ class CrmOverviewSerializer(serializers.Serializer):
     unassigned_leads = CrmUnassignedLeadSerializer(many=True)
 ```
 
-- [ ] **Step 4: Add the view**
+- [x] **Step 4: Add the view**
 
 Append to `backend/apps/crm/views.py`. First confirm the imports at the top of the file already
 include `APIView`, `Response`, `require_permission`, and `services` (they are used by the
@@ -362,7 +362,7 @@ class CrmOverviewView(ShopScopedMixin, APIView):
 > to that list; if imported as a module (`from . import serializers`), reference
 > `serializers.CrmOverviewSerializer` instead. Mirror exactly what the existing viewsets do.
 
-- [ ] **Step 5: Add the route**
+- [x] **Step 5: Add the route**
 
 In `backend/apps/crm/urls.py`, import the view and add the path **before** the router include:
 
@@ -384,17 +384,17 @@ urlpatterns = [
 ]
 ```
 
-- [ ] **Step 6: Run the overview tests to verify they pass**
+- [x] **Step 6: Run the overview tests to verify they pass**
 
 Run: `cd backend && python -m pytest apps/crm/tests/test_overview.py --no-cov -q`
 Expected: PASS (all 4 tests).
 
-- [ ] **Step 7: Run the full CRM suite (regression)**
+- [x] **Step 7: Run the full CRM suite (regression)**
 
 Run: `cd backend && python -m pytest apps/crm/tests/ --no-cov -q 2>&1 | tail -5`
 Expected: all pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/apps/crm/serializers.py backend/apps/crm/views.py backend/apps/crm/urls.py backend/apps/crm/tests/test_overview.py
@@ -410,7 +410,7 @@ git commit -m "feat(crm): add CRM overview endpoint (serializers, view, route)"
 - Modify: `frontend/src/lib/query/keys.ts` (add `crmOverview`)
 - Test: `frontend/src/lib/api/__tests__/crm.test.ts` (append, if the file asserts request URLs)
 
-- [ ] **Step 1: Add the `CrmOverview` type**
+- [x] **Step 1: Add the `CrmOverview` type**
 
 In `frontend/src/lib/api/crm.ts`, add near the other exported interfaces (after the `Lead`
 types, so `LeadStatus` / `LeadSource` are in scope):
@@ -442,7 +442,7 @@ export interface CrmOverview {
 }
 ```
 
-- [ ] **Step 2: Add the `getOverview` method**
+- [x] **Step 2: Add the `getOverview` method**
 
 Inside the `export const crmApi = { ... }` object, add (place it first, before `listLeads`):
 
@@ -451,7 +451,7 @@ Inside the `export const crmApi = { ... }` object, add (place it first, before `
     apiGet<CrmOverview>('/crm/overview/', shopId ? { shop_id: shopId } : {}),
 ```
 
-- [ ] **Step 3: Add the query key**
+- [x] **Step 3: Add the query key**
 
 In `frontend/src/lib/query/keys.ts`, add to the `qk` object (next to `repairOverview`):
 
@@ -459,12 +459,12 @@ In `frontend/src/lib/query/keys.ts`, add to the `qk` object (next to `repairOver
   crmOverview: (shopId: string | null) => ['crm-overview', shopId] as const,
 ```
 
-- [ ] **Step 4: Type-check**
+- [x] **Step 4: Type-check**
 
 Run: `cd frontend && npx tsc --noEmit 2>&1 | grep "error TS" || echo "OK no errors"`
 Expected: `OK no errors`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/lib/api/crm.ts frontend/src/lib/query/keys.ts
@@ -479,7 +479,7 @@ git commit -m "feat(crm): add crmApi.getOverview client + query key"
 - Modify: `frontend/src/components/shared/AppShell.tsx` (CRM group + icon imports)
 - Test: `frontend/src/components/shared/__tests__/navItems.test.ts` (append CRM assertions)
 
-- [ ] **Step 1: Write the failing nav test**
+- [x] **Step 1: Write the failing nav test**
 
 Append to `frontend/src/components/shared/__tests__/navItems.test.ts`:
 
@@ -521,12 +521,12 @@ describe('NAV_ITEMS — CRM group', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/components/shared/__tests__/navItems.test.ts 2>&1 | tail -8`
 Expected: FAIL (Overview leaf at `/crm` not found).
 
-- [ ] **Step 3: Add the icon imports**
+- [x] **Step 3: Add the icon imports**
 
 In `frontend/src/components/shared/AppShell.tsx`, extend the lucide-react import (line ~9) to
 include `ListChecks` and `Filter`:
@@ -535,7 +535,7 @@ include `ListChecks` and `Filter`:
   Bell, Search, LogOut, User, UserCheck, Boxes, Receipt, ClipboardList, ListChecks, Filter,
 ```
 
-- [ ] **Step 4: Replace the CRM group children**
+- [x] **Step 4: Replace the CRM group children**
 
 Replace the CRM group block (currently Customers + Leads only) with:
 
@@ -549,12 +549,12 @@ Replace the CRM group block (currently Customers + Leads only) with:
   ]},
 ```
 
-- [ ] **Step 5: Run the nav test to verify it passes**
+- [x] **Step 5: Run the nav test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/components/shared/__tests__/navItems.test.ts 2>&1 | tail -8`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/components/shared/AppShell.tsx frontend/src/components/shared/__tests__/navItems.test.ts
@@ -569,7 +569,7 @@ git commit -m "feat(crm): surface Overview, Tasks, Segments in CRM sidebar group
 - Create: `frontend/src/app/(app)/crm/page.tsx`
 - Test: `frontend/src/app/(app)/crm/__tests__/page.test.tsx`
 
-- [ ] **Step 1: Write the failing page test**
+- [x] **Step 1: Write the failing page test**
 
 Create `frontend/src/app/(app)/crm/__tests__/page.test.tsx`:
 
@@ -632,12 +632,12 @@ describe('CrmOverviewPage', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cd frontend && npx vitest run "src/app/(app)/crm/__tests__/page.test.tsx" 2>&1 | tail -8`
 Expected: FAIL (`Cannot find module '../page'`).
 
-- [ ] **Step 3: Implement the page**
+- [x] **Step 3: Implement the page**
 
 Create `frontend/src/app/(app)/crm/page.tsx`:
 
@@ -764,17 +764,17 @@ export default function CrmOverviewPage() {
 }
 ```
 
-- [ ] **Step 4: Run the page test to verify it passes**
+- [x] **Step 4: Run the page test to verify it passes**
 
 Run: `cd frontend && npx vitest run "src/app/(app)/crm/__tests__/page.test.tsx" 2>&1 | tail -8`
 Expected: PASS (both tests).
 
-- [ ] **Step 5: Type-check**
+- [x] **Step 5: Type-check**
 
 Run: `cd frontend && npx tsc --noEmit 2>&1 | grep "error TS" || echo "OK no errors"`
 Expected: `OK no errors` (ignore any pre-existing `Can.test.tsx` errors unrelated to this work).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add "frontend/src/app/(app)/crm/page.tsx" "frontend/src/app/(app)/crm/__tests__/page.test.tsx"
@@ -785,17 +785,17 @@ git commit -m "feat(crm): add CRM Overview page at /crm"
 
 ## Final verification
 
-- [ ] **Backend suite**
+- [x] **Backend suite**
 
 Run: `cd backend && python manage.py makemigrations crm --check --dry-run` → Expected: `No changes detected` (no model changes this phase).
 Run: `cd backend && python -m pytest apps/crm/tests/ --no-cov -q 2>&1 | tail -5` → Expected: all pass.
 
-- [ ] **Frontend suite**
+- [x] **Frontend suite**
 
 Run: `cd frontend && npx vitest run src/components/shared/__tests__/navItems.test.ts "src/app/(app)/crm/__tests__/page.test.tsx" src/lib/api/__tests__/crm.test.ts 2>&1 | tail -10` → Expected: all pass.
 Run: `cd frontend && npx tsc --noEmit 2>&1 | grep "error TS" || echo "OK no errors"` → Expected: only pre-existing unrelated errors, if any.
 
-- [ ] **Manual smoke** (demo tenant, `X-Tenant-Slug: demo`)
+- [x] **Manual smoke** (demo tenant, `X-Tenant-Slug: demo`)
 
 1. Sidebar → CRM now lists **Overview · Customers · Leads · Tasks · Segments**.
 2. CRM → Overview lands on `/crm`; KPI tiles, pipeline chips, and needs-attention lists render.
