@@ -152,7 +152,7 @@ class LeadViewSet(ShopScopedMixin, ModelViewSet):
     def convert(self, request, pk=None):
         lead = self.get_object()
         customer = services.convert_lead(lead, request.user)
-        return Response({"customer_id": str(customer.id)}, status=status.HTTP_200_OK)
+        return Response(CustomerSerializer(customer).data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"], url_path="status")
     def change_status(self, request, pk=None):
