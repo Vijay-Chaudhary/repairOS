@@ -13,11 +13,17 @@ complete, segments members/bulk-whatsapp all exist). This overhaul surfaces hidd
 capabilities in the nav, adds a read-only **Overview hub**, and closes the
 leads / customer-profile / segments / mobile gaps.
 
-**Only one piece of net-new backend work exists** — the CRM Overview aggregation endpoint
-(plus a small leads date-range filter). Everything else reuses existing APIs.
+Net-new backend work is deliberately small and concentrated: the CRM Overview aggregation
+endpoint (Phase 1), a leads date-range filter (Phase 2), a cross-CRM activity list and a
+cross-lead quotes list (Phases 5–6, both thin endpoints over existing data), and one new
+campaign-tracking model (Phase 8). Everything else reuses existing APIs.
 
-Work is split into **five independently-shippable phases**, each its own implementation plan
-and PR, sequenced 1 → 5 — mirroring the proven Repair Overhaul pattern.
+The **target CRM menu** is: **Overview · Customers · Leads · Tasks · Segments · Activity ·
+Quotes · Campaigns** (with a Calendar view toggle on Tasks).
+
+Work is split into **nine independently-shippable phases**, each its own implementation plan
+and PR, sequenced 1 → 9 — mirroring the proven Repair Overhaul pattern. Each phase that adds a
+new page also adds its own nav leaf, so the menu never contains a dead link.
 
 ## Current state (baseline)
 
@@ -120,7 +126,69 @@ and PR, sequenced 1 → 5 — mirroring the proven Repair Overhaul pattern.
 
 ---
 
-## Phase 5 — Mobile affordances
+## Phase 5 — Activity feed (cross-CRM communication timeline)
+
+A CRM-wide chronological feed of every communication (call / WhatsApp / visit / email / SMS /
+note), the read-only companion to per-profile timelines.
+
+### Backend `CommunicationLogViewSet.get_queryset`
+- Add **shop scoping** and a stable `order_by("-logged_at")` (today the list has neither),
+  plus `type` and date-range (`date_from` / `date_to`) filters. Cursor pagination already
+  applied. Add tests for scoping + filters.
+
+### Frontend `/crm/activity`
+- New nav leaf (gate `crm.communications.log`). Chronological list reusing the
+  `EntityTimeline` pattern, filterable by type + date, with skeleton / empty / error states.
+  Rows deep-link to the related customer or lead.
+
+---
+
+## Phase 6 — Quotes worklist
+
+A cross-lead view of quotes sent to prospects (the `LeadQuote` data currently only reachable
+per-lead via `/leads/{id}/quotes/`).
+
+### Backend
+- Add a cross-lead list endpoint `GET /api/crm/quotes/` (shop-scoped, `select_related` lead +
+  `sent_by`, ordered `-created_at`, filter by lead status / date). Reuses `LeadQuoteSerializer`.
+  Tests for scoping + filters.
+
+### Frontend `/crm/quotes`
+- New nav leaf (gate `crm.leads.view`). `DataTable` worklist: lead name, amount, sent date,
+  sent_by, lead status. Row links to the lead. Skeleton / empty / error states.
+
+---
+
+## Phase 7 — Tasks Calendar view
+
+- **Frontend only**, over the existing `/tasks` API. Add a **list ↔ calendar** view toggle on
+  the Tasks page (no new nav leaf). Calendar/agenda renders tasks by `due_date` (+ `due_time`),
+  colored by priority/status; clicking a day or task opens the existing `TaskComposer`.
+- No backend change; `/tasks` already returns due dates and supports filtering.
+
+---
+
+## Phase 8 — Campaigns (bulk-WhatsApp history)
+
+Elevates segment bulk-send into a tracked **Campaigns** feature (today `bulk-whatsapp` is
+fire-and-forget with no record).
+
+### Backend
+- New `Campaign` model (tenant DB, soft-delete): `name`, `segment_id`, `template`, `status`
+  (draft / sending / sent / failed), `recipient_count`, `excluded_optout_count`, `sent_at`,
+  `created_by`. Reversible migration.
+- `POST /api/crm/campaigns/` creates + triggers send via the existing bulk-WhatsApp service;
+  `GET /api/crm/campaigns/` lists history; `GET /api/crm/campaigns/{id}/` detail. Send stays
+  **manual** (no scheduling). Tests for create/list + opt-out exclusion counting.
+
+### Frontend `/crm/campaigns`
+- New nav leaf (gate `crm.segments.manage`). List of past campaigns (name, segment, recipients,
+  excluded opt-outs, status, sent date) + a "New campaign" flow (pick segment → template →
+  preview recipient count with opt-out excluded → send). Skeleton / empty / error states.
+
+---
+
+## Phase 9 — Mobile affordances
 
 - `tel:` (click-to-call) and `wa.me` (click-to-WhatsApp) links on phone numbers across
   `LeadCard`, the customer list, and `CustomerProfileHeader`.
@@ -136,8 +204,9 @@ and PR, sequenced 1 → 5 — mirroring the proven Repair Overhaul pattern.
 - **Permissions:** nav leaves and actions gate on the **real seeded permissions**
   (`crm.tasks.manage`, `crm.segments.manage`, `crm.customers.view`, etc.) — verified against
   the seed, not the spec's wording.
-- **Phasing:** each phase is an independent plan + PR; sequence 1 → 5. Phase 1 is the only one
-  touching the backend beyond Phase 2's small filter addition.
+- **Phasing:** each phase is an independent plan + PR; sequence 1 → 9. Backend work is confined
+  to Phases 1 (overview endpoint), 2 (date filter), 5 (activity scoping), 6 (quotes list), and
+  8 (campaign model); Phases 3, 4, 7, 9 are frontend-only.
 - **No N+1:** Overview and any list changes use `select_related` / `prefetch_related` /
   aggregates.
 
@@ -145,9 +214,10 @@ and PR, sequenced 1 → 5 — mirroring the proven Repair Overhaul pattern.
 
 - No changes to the lead state machine, merge logic, or denormalized counters (backend already
   complete and tested).
-- No new WhatsApp **templates** — bulk send reuses existing templates.
+- No new WhatsApp **templates** — bulk send / campaigns reuse existing templates.
 - GSTIN hard-block vs. soft-warning (OQ-09) stays as-is — out of scope.
-- No segment **scheduling / automation**; bulk send is manual.
+- No campaign **scheduling / automation** or A/B testing — Campaigns (Phase 8) tracks history
+  for **manual** sends only.
 - No changes to the Repair / POS / AMC modules beyond consuming their existing
   `customer_id`-filtered list endpoints.
 
