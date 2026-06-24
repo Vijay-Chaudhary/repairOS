@@ -116,6 +116,31 @@ export interface SegmentMember {
   added_at: string;
 }
 
+export interface CrmOverview {
+  kpis: {
+    new_leads: number;
+    tasks_due_today: number;
+    tasks_overdue: number;
+    conversions_30d: number;
+    new_customers_30d: number;
+  };
+  pipeline: Array<{ status: LeadStatus; count: number }>;
+  overdue_tasks: Array<{
+    id: string;
+    title: string;
+    due_date: string;
+    assigned_to_name: string | null;
+    customer_name: string | null;
+  }>;
+  unassigned_leads: Array<{
+    id: string;
+    name: string;
+    phone: string;
+    source: LeadSource;
+    created_at: string;
+  }>;
+}
+
 // ── Filters ──────────────────────────────────────────────────────────────────
 
 export interface LeadFilters {
@@ -148,6 +173,9 @@ export interface TaskFilters {
 // ── API ───────────────────────────────────────────────────────────────────────
 
 export const crmApi = {
+  getOverview: (shopId?: string) =>
+    apiGet<CrmOverview>('/crm/overview/', shopId ? { shop_id: shopId } : {}),
+
   // Leads
   listLeads: (filters: LeadFilters = {}) =>
     apiGet<{ items: Lead[]; meta: PageMeta }>('/crm/leads/', filters as Record<string, string | undefined>),
