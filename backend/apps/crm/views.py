@@ -128,6 +128,14 @@ class LeadViewSet(ShopScopedMixin, ModelViewSet):
         if shop_id:
             qs = qs.filter(shop_id=shop_id)
 
+        date_from = self.request.query_params.get("date_from")
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+
+        date_to = self.request.query_params.get("date_to")
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
         return qs.order_by("-created_at")
 
     def get_serializer_class(self):
