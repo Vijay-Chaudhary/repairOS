@@ -19,6 +19,8 @@ import { MergeCustomersDialog } from '@/components/crm/MergeCustomersDialog';
 import { CustomerFormDialog } from '@/components/crm/CustomerFormDialog';
 import { crmApi, type CommType } from '@/lib/api/crm';
 import { repairApi, type JobListItem } from '@/lib/api/repair';
+import { posApi, type Sale } from '@/lib/api/pos';
+import { amcApi, type AmcContract } from '@/lib/api/amc';
 import { qk } from '@/lib/query/keys';
 import { formatDate } from '@/lib/format/date';
 import { money } from '@/lib/format/money';
@@ -34,6 +36,12 @@ const TIMELINE_FILTERS: Array<{ value: TimelineFilter; label: string }> = [
   { value: 'note', label: 'Notes' },
 ];
 
+const TAB_LABELS: Record<string, string> = {
+  repairs: 'Repair History',
+  sales: 'Sales',
+  amc: 'AMC',
+};
+
 const JOB_COLUMNS: Column<JobListItem>[] = [
   { key: 'job_number', header: 'Job #', cell: (r) => <span className="font-mono text-xs">{r.job_number}</span> },
   { key: 'device', header: 'Device', cell: (r) => (
@@ -44,6 +52,22 @@ const JOB_COLUMNS: Column<JobListItem>[] = [
   { key: 'date', header: 'Date', cell: (r) => <span className="text-body-sm text-[var(--text-muted)]">{formatDate(r.intake_date)}</span> },
 ];
 
+const SALE_COLUMNS: Column<Sale>[] = [
+  { key: 'sale_number', header: 'Sale #', cell: (r) => <span className="font-mono text-xs">{r.sale_number}</span> },
+  { key: 'type', header: 'Type', cell: (r) => <span className="text-body-sm capitalize">{r.sale_type.replace('_', ' ')}</span> },
+  { key: 'status', header: 'Status', cell: (r) => <StatusBadge status={r.status} /> },
+  { key: 'total', header: 'Total', cell: (r) => <Money amount={r.grand_total} className="text-body-sm" /> },
+  { key: 'date', header: 'Date', cell: (r) => <span className="text-body-sm text-[var(--text-muted)]">{formatDate(r.sale_date)}</span> },
+];
+
+const CONTRACT_COLUMNS: Column<AmcContract>[] = [
+  { key: 'contract_number', header: 'Contract #', cell: (r) => <span className="font-mono text-xs">{r.contract_number}</span> },
+  { key: 'title', header: 'Title', cell: (r) => <span className="text-body-sm">{r.title}</span> },
+  { key: 'status', header: 'Status', cell: (r) => <StatusBadge status={r.status} /> },
+  { key: 'value', header: 'Value', cell: (r) => <Money amount={r.value} className="text-body-sm" /> },
+  { key: 'end', header: 'Ends', cell: (r) => <span className="text-body-sm text-[var(--text-muted)]">{formatDate(r.end_date)}</span> },
+];
+
 export default function CustomerProfilePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -51,6 +75,7 @@ export default function CustomerProfilePage() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('repairs');
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>('all');
   const [timelineCursor, setTimelineCursor] = useState<string | undefined>(undefined);
 
@@ -88,6 +113,26 @@ export default function CustomerProfilePage() {
     queryFn: () => crmApi.listTasks({ customer_id: id }),
     staleTime: 30_000,
     enabled: !!customer,
+  });
+
+  // Lazy: Sales / AMC fetch only once their tab is opened (avoids POS + AMC
+  // requests on every profile view). React Query caches after the first open.
+  const {
+    data: salesData, isLoading: salesLoading, error: salesError, refetch: refetchSales,
+  } = useQuery({
+    queryKey: qk.posSales({ customer_id: id }),
+    queryFn: () => posApi.listSales({ customer_id: id }),
+    staleTime: 60_000,
+    enabled: !!customer && activeTab === 'sales',
+  });
+
+  const {
+    data: contractsData, isLoading: contractsLoading, error: contractsError, refetch: refetchContracts,
+  } = useQuery({
+    queryKey: qk.amcContracts({ customer_id: id }),
+    queryFn: () => amcApi.listContracts({ customer_id: id }),
+    staleTime: 60_000,
+    enabled: !!customer && activeTab === 'amc',
   });
 
   if (isLoading) {
@@ -139,16 +184,16 @@ export default function CustomerProfilePage() {
       <CustomerProfileHeader customer={customer} onEdit={() => setEditOpen(true)} />
 
       {/* Tabs */}
-      <Tabs defaultValue="repairs" className="flex-1 min-h-0">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0">
         <div className="border-b border-[var(--border)] bg-[var(--surface)] sticky top-0 z-10 px-4">
           <TabsList className="h-10 bg-transparent gap-0 -mb-px w-full justify-start overflow-x-auto">
-            {['repairs', 'timeline', 'tasks', 'financial'].map((tab) => (
+            {['repairs', 'sales', 'amc', 'timeline', 'tasks', 'financial'].map((tab) => (
               <TabsTrigger
                 key={tab}
                 value={tab}
                 className="rounded-none border-b-2 border-transparent data-[state=active]:border-[var(--accent)] data-[state=active]:text-[var(--accent)] px-3 py-2 text-body-sm capitalize shrink-0"
               >
-                {tab === 'repairs' ? 'Repair History' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {TAB_LABELS[tab] ?? tab.charAt(0).toUpperCase() + tab.slice(1)}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -168,6 +213,36 @@ export default function CustomerProfilePage() {
               emptyDescription="No repair history for this customer yet."
             />
             {jobsError && <RetryBanner onRetry={() => refetchJobs()} />}
+          </TabsContent>
+
+          {/* Sales */}
+          <TabsContent value="sales" className="p-4 md:p-6 mt-0">
+            <DataTable
+              columns={SALE_COLUMNS}
+              data={salesData?.items}
+              loading={salesLoading}
+              error={salesError instanceof Error ? salesError : null}
+              keyExtractor={(r) => r.id}
+              onRowClick={(r) => router.push(`/sales/${r.id}`)}
+              emptyTitle="No sales"
+              emptyDescription="No POS sales for this customer yet."
+            />
+            {salesError && <RetryBanner onRetry={() => refetchSales()} />}
+          </TabsContent>
+
+          {/* AMC contracts */}
+          <TabsContent value="amc" className="p-4 md:p-6 mt-0">
+            <DataTable
+              columns={CONTRACT_COLUMNS}
+              data={contractsData?.items}
+              loading={contractsLoading}
+              error={contractsError instanceof Error ? contractsError : null}
+              keyExtractor={(r) => r.id}
+              onRowClick={(r) => router.push(`/amc/${r.id}`)}
+              emptyTitle="No AMC contracts"
+              emptyDescription="No annual maintenance contracts for this customer yet."
+            />
+            {contractsError && <RetryBanner onRetry={() => refetchContracts()} />}
           </TabsContent>
 
           {/* Timeline */}

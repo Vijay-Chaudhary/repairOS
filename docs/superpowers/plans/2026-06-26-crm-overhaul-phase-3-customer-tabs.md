@@ -39,7 +39,7 @@
 - Modify: `frontend/src/app/(app)/customers/[id]/page.tsx`
 - Create: `frontend/src/app/(app)/customers/[id]/__tests__/page.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/app/(app)/customers/[id]/__tests__/page.test.tsx`. Mock:
 - `next/navigation` → `useParams` returns `{ id: 'cust-1' }`, `useRouter` returns `{ push: vi.fn(), back: vi.fn() }`.
@@ -84,7 +84,7 @@ it('lazily loads AMC contracts when the AMC tab is opened', async () => {
 
 Run: `cd frontend && npx vitest run "src/app/(app)/customers/[id]/__tests__/page.test.tsx" 2>&1 | tail -10` → FAIL (tabs/queries don't exist yet).
 
-- [ ] **Step 2: Make the tab strip controlled + add the two tab values**
+- [x] **Step 2: Make the tab strip controlled + add the two tab values**
 
 In `page.tsx`:
 1. Add `const [activeTab, setActiveTab] = useState('repairs');`.
@@ -92,7 +92,7 @@ In `page.tsx`:
 3. In the `TabsList` map array, change `['repairs', 'timeline', 'tasks', 'financial']` to `['repairs', 'sales', 'amc', 'timeline', 'tasks', 'financial']`.
 4. In the trigger label expression, render `'sales' → 'Sales'`, `'amc' → 'AMC'` (the `repairs → 'Repair History'` special-case stays; `amc` must be uppercased explicitly, not title-cased).
 
-- [ ] **Step 3: Add the two lazy queries**
+- [x] **Step 3: Add the two lazy queries**
 
 Add imports: `import { posApi, type Sale } from '@/lib/api/pos';` and `import { amcApi, type AmcContract } from '@/lib/api/amc';`.
 
@@ -117,7 +117,7 @@ After the tasks query, add:
   });
 ```
 
-- [ ] **Step 4: Define column sets + render the two `TabsContent` blocks**
+- [x] **Step 4: Define column sets + render the two `TabsContent` blocks**
 
 Add module-level column definitions next to `JOB_COLUMNS`:
 ```typescript
@@ -169,12 +169,12 @@ Insert two `TabsContent` blocks **between** the `repairs` block and the `timelin
 </TabsContent>
 ```
 
-- [ ] **Step 5: Run the test — confirm green; type-check**
+- [x] **Step 5: Run the test — confirm green; type-check**
 
 Run: `cd frontend && npx vitest run "src/app/(app)/customers/[id]/__tests__/page.test.tsx" 2>&1 | tail -8` → PASS.
 Run: `cd frontend && npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK"` → `OK`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add "frontend/src/app/(app)/customers/[id]/page.tsx" "frontend/src/app/(app)/customers/[id]/__tests__/page.test.tsx"
@@ -185,7 +185,7 @@ git commit -m "feat(crm): add Sales + AMC tabs to customer profile"
 
 ## Final verification
 
-- [ ] **Frontend — new test + neighbours green, tsc clean**
+- [x] **Frontend — new test + neighbours green, tsc clean**
 
 Run: `cd frontend && npx vitest run "src/app/(app)/customers/[id]/__tests__/page.test.tsx" src/lib/api/__tests__/crm.test.ts 2>&1 | tail -8` → all pass.
 Run: `cd frontend && npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK"` → `OK`.
