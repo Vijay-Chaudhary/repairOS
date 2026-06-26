@@ -392,14 +392,14 @@ lives on the lost card in `frontend/src/components/crm/LeadBoard.tsx` and calls
   the re-open action most directly; prefer a `LeadBoard` component test if the re-open menu is
   self-contained there.
 
-- [ ] **Step 1: Inspect the re-open action**
+- [x] **Step 1: Inspect the re-open action**
 
 Read `frontend/src/components/crm/LeadBoard.tsx` and find the "Re-open" menu action on lost
 cards. Confirm it calls the transition handler with the lead's `status_before_lost` as the
 target (not a hardcoded stage). If it hardcodes a stage (e.g. always `interested`), FIX it to
 use `lead.status_before_lost`.
 
-- [ ] **Step 2: Write the failing/guarding test**
+- [x] **Step 2: Write the failing/guarding test**
 
 Add a test that renders the board (or the lost card) with a lost lead whose
 `status_before_lost = 'contacted'`, clicks **Re-open**, and asserts the transition callback fires
@@ -415,12 +415,12 @@ expect(onTransition).toHaveBeenCalledWith(expect.objectContaining({ leadId: '<id
 Run it: if the action already targets `status_before_lost`, the test passes immediately
 (guard test). If it was hardcoded and you fixed it in Step 1, confirm red→green.
 
-- [ ] **Step 3: Run the test + type-check**
+- [x] **Step 3: Run the test + type-check**
 
 Run the specific test file with `npx vitest run <path>` → PASS.
 Run: `cd frontend && npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK"` → `OK`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add <the test file you added> [frontend/src/components/crm/LeadBoard.tsx if changed]
@@ -431,13 +431,13 @@ git commit -m "test(crm): verify lead re-open returns to status_before_lost colu
 
 ## Final verification
 
-- [ ] **Backend — full CRM suite green**
+- [x] **Backend — full CRM suite green**
 
 Run: `cd backend && python -m pytest apps/crm/tests/ --no-cov -q 2>&1 | tail -4`
 Expected: **0 failed** (the 11 previously-failing leads tests + the overview tests + the new date-filter test all pass).
 Run: `cd backend && python manage.py makemigrations crm --check --dry-run` → `No changes detected` (no model changes this phase).
 
-- [ ] **Frontend — leads + api tests green, tsc clean**
+- [x] **Frontend — leads + api tests green, tsc clean**
 
 Run: `cd frontend && npx vitest run src/lib/api/__tests__/crm.test.ts "src/app/(app)/leads/__tests__/page.test.tsx" 2>&1 | tail -8` → all pass.
 Run: `cd frontend && npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK"` → `OK`.
