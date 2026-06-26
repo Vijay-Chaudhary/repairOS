@@ -64,7 +64,7 @@ export const NAV_ITEMS: NavEntry[] = [
     { type: 'leaf', label: 'Customers', href: '/customers',         icon: Users,           permission: 'crm.customers.view' },
     { type: 'leaf', label: 'Leads',     href: '/leads',             icon: Users,           permission: 'crm.leads.view' },
     { type: 'leaf', label: 'Tasks',     href: '/tasks',             icon: ListChecks,      permission: 'crm.tasks.manage' },
-    { type: 'leaf', label: 'Segments',  href: '/settings/segments', icon: Filter,          permission: 'crm.segments.manage' },
+    { type: 'leaf', label: 'Segments',  href: '/crm/segments',      icon: Filter,          permission: 'crm.segments.manage' },
   ]},
   { type: 'leaf', label: 'POS',  href: '/pos', icon: ShoppingCart, permission: 'pos.counter_sale.create' },
   { type: 'leaf', label: 'AMC',  href: '/amc', icon: Building,     permission: 'amc.contracts.view' },

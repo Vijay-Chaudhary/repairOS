@@ -447,6 +447,16 @@ class CustomerSegmentViewSet(ModelViewSet):
             return self.get_paginated_response(data)
         return Response(data)
 
+    @action(detail=True, methods=["get"], url_path="recipient-count")
+    def recipient_count(self, request, pk=None):
+        """Pre-send preview: how many members will actually receive the message
+        once WhatsApp opt-outs are excluded."""
+        segment = self.get_object()
+        total, ids = services.segment_recipient_ids(segment)
+        return Response(
+            {"total": total, "recipients": len(ids), "excluded_optout": total - len(ids)}
+        )
+
     @action(detail=True, methods=["post"], url_path="bulk-whatsapp")
     def bulk_whatsapp(self, request, pk=None):
         from .tasks import send_bulk_whatsapp_segment
@@ -455,21 +465,8 @@ class CustomerSegmentViewSet(ModelViewSet):
         serializer = BulkWhatsAppSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        # Get opted-in customers and count excluded
-        if segment.is_dynamic:
-            all_qs = services.evaluate_segment(segment)
-            total = all_qs.count()
-            customer_ids = list(
-                all_qs.filter(whatsapp_optout=False).values_list("id", flat=True)
-            )
-        else:
-            total = CustomerSegmentMember.objects.filter(segment=segment).count()
-            customer_ids = list(
-                CustomerSegmentMember.objects.filter(segment=segment)
-                .filter(customer__whatsapp_optout=False)
-                .values_list("customer_id", flat=True)
-            )
-
+        # Opted-in recipients (opt-out excluded) + how many were dropped.
+        total, customer_ids = services.segment_recipient_ids(segment)
         excluded_count = total - len(customer_ids)
 
         send_bulk_whatsapp_segment.delay(
