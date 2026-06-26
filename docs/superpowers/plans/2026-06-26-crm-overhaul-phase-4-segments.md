@@ -224,8 +224,8 @@ git commit -m "feat(crm): move Segments to /crm, add city/customer_type rules + 
 
 ## Final verification
 
-- [ ] **Backend** — `cd backend && python -m pytest apps/crm/tests/ --no-cov -q 2>&1 | tail -3` → 0 failed; `python manage.py makemigrations crm --check --dry-run` → `No changes detected`.
-- [ ] **Frontend** — `cd frontend && npx vitest run "src/app/(app)/crm/segments/__tests__/filterRules.test.ts" src/components/shared/__tests__/navItems.test.ts src/lib/api/__tests__/crm.test.ts 2>&1 | tail -6` → all pass; `npx tsc --noEmit … || echo OK` → `OK`.
+- [x] **Backend** — `cd backend && python -m pytest apps/crm/tests/ --no-cov -q 2>&1 | tail -3` → 0 failed; `python manage.py makemigrations crm --check --dry-run` → `No changes detected`.
+- [x] **Frontend** — `cd frontend && npx vitest run "src/app/(app)/crm/segments/__tests__/filterRules.test.ts" src/components/shared/__tests__/navItems.test.ts src/lib/api/__tests__/crm.test.ts 2>&1 | tail -6` → all pass; `npx tsc --noEmit … || echo OK` → `OK`.
 - [ ] **Manual smoke — live UI** (recommended; needs Docker): nav **CRM → Segments** lands on `/crm/segments`; visiting `/settings/segments` redirects there; create a dynamic segment filtered by `city`; open **WhatsApp** → recipient count (opt-out excluded) shows before send.
 
 ---
