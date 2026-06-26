@@ -23,6 +23,7 @@ export const qk = {
   jobStages:      (id: string) => ['job', id, 'stages'] as const,
   repairTemplates: (filters?: { search?: string }) => ['repair-templates', filters ?? {}] as const,
   repairOverview:  (shopId: string | null) => ['repair-overview', shopId] as const,
+  crmOverview:     (shopId: string | null) => ['crm-overview', shopId] as const,
   spareParts:     listKey('spare-parts'),
 
   // CRM

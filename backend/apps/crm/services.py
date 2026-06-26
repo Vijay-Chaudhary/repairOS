@@ -350,3 +350,75 @@ def _write_audit(user_id, action, model_name, object_id, new_value=None):
         )
     except Exception:
         logger.exception("Failed to write audit log")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Overview aggregation
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def get_crm_overview(shop_filter, shop_id=None):
+    """Aggregate CRM KPIs, the lead pipeline, and needs-attention lists for the Overview hub.
+
+    Leads and customers are shop-scoped via `shop_filter` (a Q from ShopScopedMixin) plus an
+    optional explicit `shop_id`. Tasks have no shop column and are tenant-wide today, so task
+    metrics are NOT shop-filtered (matches the existing Tasks list behavior). A handful of
+    aggregate queries — no N+1.
+    """
+    from datetime import timedelta
+
+    from django.db.models import Count
+    from django.utils import timezone
+
+    from .models import Customer, FollowUpTask, Lead
+
+    PIPELINE_ORDER = ["new", "contacted", "interested", "quoted", "converted", "lost"]
+    today = timezone.localdate()
+    since = timezone.now() - timedelta(days=30)
+
+    leads = Lead.objects.filter(shop_filter)
+    customers = Customer.objects.filter(shop_filter)
+    if shop_id:
+        leads = leads.filter(shop_id=shop_id)
+        customers = customers.filter(shop_id=shop_id)
+
+    status_counts = {row["status"]: row["count"] for row in leads.values("status").annotate(count=Count("id"))}
+
+    tasks_due_today = FollowUpTask.objects.filter(status="pending", due_date=today).count()
+    tasks_overdue = FollowUpTask.objects.filter(status="pending", due_date__lt=today).count()
+
+    overdue_tasks = [
+        {
+            "id": t.id,
+            "title": t.title,
+            "due_date": t.due_date,
+            "assigned_to_name": (t.assigned_to.full_name if t.assigned_to else None),
+            "customer_name": (t.customer.name if t.customer else None),
+        }
+        for t in FollowUpTask.objects.filter(status="pending", due_date__lt=today)
+        .select_related("assigned_to", "customer")
+        .order_by("due_date")[:8]
+    ]
+    unassigned_leads = [
+        {
+            "id": l.id,
+            "name": l.name,
+            "phone": l.phone,
+            "source": l.source,
+            "created_at": l.created_at,
+        }
+        for l in leads.filter(status="new", assigned_to__isnull=True).order_by("-created_at")[:8]
+    ]
+
+    return {
+        "kpis": {
+            "new_leads": status_counts.get("new", 0),
+            "tasks_due_today": tasks_due_today,
+            "tasks_overdue": tasks_overdue,
+            "conversions_30d": leads.filter(converted_at__gte=since).count(),
+            "new_customers_30d": customers.filter(created_at__gte=since).count(),
+        },
+        "pipeline": [{"status": s, "count": status_counts.get(s, 0)} for s in PIPELINE_ORDER],
+        "overdue_tasks": overdue_tasks,
+        "unassigned_leads": unassigned_leads,
+    }
