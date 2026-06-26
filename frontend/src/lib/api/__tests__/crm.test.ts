@@ -13,19 +13,19 @@ vi.mock('@/lib/api/client', () => ({
 // ── LEAD_TRANSITIONS ──────────────────────────────────────────────────────────
 
 describe('LEAD_TRANSITIONS — pipeline state machine (frontend constant)', () => {
-  it('new only allows → contacted', () => {
+  it('new allows → contacted and → lost', () => {
     const targets = LEAD_TRANSITIONS.new.map(t => t.to);
-    expect(targets).toEqual(['contacted']);
+    expect(targets).toEqual(['contacted', 'lost']);
   });
 
-  it('contacted only allows → interested', () => {
+  it('contacted allows → interested and → lost', () => {
     const targets = LEAD_TRANSITIONS.contacted.map(t => t.to);
-    expect(targets).toEqual(['interested']);
+    expect(targets).toEqual(['interested', 'lost']);
   });
 
-  it('interested only allows → quoted', () => {
+  it('interested allows → quoted and → lost', () => {
     const targets = LEAD_TRANSITIONS.interested.map(t => t.to);
-    expect(targets).toEqual(['quoted']);
+    expect(targets).toEqual(['quoted', 'lost']);
   });
 
   it('quoted allows → converted', () => {
@@ -59,13 +59,13 @@ describe('LEAD_PIPELINE_COLS — kanban column definitions', () => {
     expect(statuses).toContain('converted');
   });
 
-  it('excludes lost (handled via filter, not a kanban column)', () => {
+  it('includes lost as a kanban column', () => {
     const statuses = LEAD_PIPELINE_COLS.map(c => c.status);
-    expect(statuses).not.toContain('lost');
+    expect(statuses).toContain('lost');
   });
 
-  it('has exactly 5 stages', () => {
-    expect(LEAD_PIPELINE_COLS).toHaveLength(5);
+  it('has all six stages', () => {
+    expect(LEAD_PIPELINE_COLS).toHaveLength(6);
   });
 });
 
