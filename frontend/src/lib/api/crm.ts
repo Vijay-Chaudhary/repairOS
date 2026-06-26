@@ -149,6 +149,8 @@ export interface LeadFilters {
   assigned_to?: string;
   source?: LeadSource;
   search?: string;
+  date_from?: string;
+  date_to?: string;
   page?: number;
 }
 

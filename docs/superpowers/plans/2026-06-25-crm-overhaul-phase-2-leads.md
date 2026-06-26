@@ -1,6 +1,6 @@
 # CRM Overhaul — Phase 2: Leads (mark-lost/convert fixes + filters + re-open) — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Make the leads mark-lost and convert features actually work end-to-end (clearing 16 pre-existing failing tests), then add `assigned_to` + date-range filters and verify lead re-open returns a card to its exact prior kanban column.
 
@@ -45,12 +45,12 @@ The existing tests in `TestLeadStatusTransition` / `TestLeadLostAndReopen` send 
 - Modify: `backend/apps/crm/serializers.py` (`LeadStatusSerializer`)
 - Modify: `backend/apps/crm/views.py` (`change_status`)
 
-- [ ] **Step 1: Confirm the red tests fail for the right reason**
+- [x] **Step 1: Confirm the red tests fail for the right reason**
 
 Run: `cd backend && python -m pytest apps/crm/tests/test_leads.py -k "lost or Lost or reopen or Reopen" --no-cov -q 2>&1 | tail -8`
 Expected: multiple FAIL with `422 == 200` (lost transition rejected). This is the baseline you will turn green.
 
-- [ ] **Step 2: Rename the serializer field to `reason`**
+- [x] **Step 2: Rename the serializer field to `reason`**
 
 In `backend/apps/crm/serializers.py`, change `LeadStatusSerializer`:
 
@@ -62,7 +62,7 @@ class LeadStatusSerializer(serializers.Serializer):
 
 (Was `lost_reason = serializers.CharField(...)`. The field is the API contract, not the model field; `transition_lead` takes the reason as a positional/keyword arg.)
 
-- [ ] **Step 3: Read `reason` in the view**
+- [x] **Step 3: Read `reason` in the view**
 
 In `backend/apps/crm/views.py`, in `change_status`, change the reason lookup:
 
@@ -77,12 +77,12 @@ In `backend/apps/crm/views.py`, in `change_status`, change the reason lookup:
 
 (Was `.get("lost_reason", "")`.)
 
-- [ ] **Step 4: Run the lost/reopen tests — confirm green**
+- [x] **Step 4: Run the lost/reopen tests — confirm green**
 
 Run: `cd backend && python -m pytest apps/crm/tests/test_leads.py -k "lost or Lost or reopen or Reopen or StatusTransition" --no-cov -q 2>&1 | tail -8`
 Expected: all PASS (no more `422 == 200`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/crm/serializers.py backend/apps/crm/views.py
@@ -99,12 +99,12 @@ full customer (`id`, `phone`). The view returns `{"customer_id": ...}`.
 
 **Files:** Modify `backend/apps/crm/views.py` (`convert` action).
 
-- [ ] **Step 1: Confirm the two convert tests are red**
+- [x] **Step 1: Confirm the two convert tests are red**
 
 Run: `cd backend && python -m pytest apps/crm/tests/test_leads.py::TestLeadConvertEnhanced --no-cov -q 2>&1 | tail -8`
 Expected: FAIL (`'id' in {'customer_id': ...}` / `KeyError: 'id'`).
 
-- [ ] **Step 2: Return the serialized customer**
+- [x] **Step 2: Return the serialized customer**
 
 In `backend/apps/crm/views.py`, change the `convert` action body:
 
@@ -118,17 +118,17 @@ In `backend/apps/crm/views.py`, change the `convert` action body:
 
 Confirm `CustomerSerializer` is imported in `views.py` (it is used by `CustomerViewSet`). If it is imported by-name in the `from .serializers import (...)` block, ensure `CustomerSerializer` is in that list; otherwise reference it the same way the `CustomerViewSet` does. Do NOT change the import style.
 
-- [ ] **Step 3: Run the convert tests — confirm green**
+- [x] **Step 3: Run the convert tests — confirm green**
 
 Run: `cd backend && python -m pytest apps/crm/tests/test_leads.py::TestLeadConvertEnhanced --no-cov -q 2>&1 | tail -6`
 Expected: all PASS. (`convert_lead` is already idempotent, so the idempotent test passes once the shape is right.)
 
-- [ ] **Step 4: Full backend leads regression**
+- [x] **Step 4: Full backend leads regression**
 
 Run: `cd backend && python -m pytest apps/crm/tests/test_leads.py --no-cov -q 2>&1 | tail -4`
 Expected: **0 failed** (all 11 previously-failing backend leads tests now pass).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/crm/views.py
@@ -143,7 +143,7 @@ git commit -m "fix(crm): lead convert returns the full customer object"
 - Modify: `backend/apps/crm/views.py` (`LeadViewSet.get_queryset`)
 - Modify: `backend/apps/crm/tests/test_leads.py` (append one test)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `backend/apps/crm/tests/test_leads.py` (reuse existing `admin_client` and `shop` fixtures; mirror how other list-filter tests build leads and assert counts — find one with `grep -n "def test_filter\|created_at\|class TestLeadList" apps/crm/tests/test_leads.py` and match its style):
 
@@ -169,12 +169,12 @@ class TestLeadDateFilter:
 
 > Verify the list response envelope shape first: `grep -n "items" apps/crm/tests/test_leads.py` — if the list endpoint returns `data` as a bare list rather than `{"items": [...]}`, adjust the assertion to match the existing list tests in this file.
 
-- [ ] **Step 2: Run it, confirm FAIL**
+- [x] **Step 2: Run it, confirm FAIL**
 
 Run: `cd backend && python -m pytest apps/crm/tests/test_leads.py::TestLeadDateFilter --no-cov -q`
 Expected: FAIL (`Old` is still present — no date filtering yet).
 
-- [ ] **Step 3: Add the filter to `get_queryset`**
+- [x] **Step 3: Add the filter to `get_queryset`**
 
 In `backend/apps/crm/views.py`, inside `LeadViewSet.get_queryset`, after the existing `assigned_to` filter block and before `return qs.order_by("-created_at")`, add:
 
@@ -188,12 +188,12 @@ In `backend/apps/crm/views.py`, inside `LeadViewSet.get_queryset`, after the exi
             qs = qs.filter(created_at__date__lte=date_to)
 ```
 
-- [ ] **Step 4: Run it, confirm PASS**
+- [x] **Step 4: Run it, confirm PASS**
 
 Run: `cd backend && python -m pytest apps/crm/tests/test_leads.py::TestLeadDateFilter --no-cov -q`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/crm/views.py backend/apps/crm/tests/test_leads.py
@@ -211,12 +211,12 @@ correct contract (this is realigning stale tests to spec-correct code, not weake
 
 **Files:** Modify `frontend/src/lib/api/__tests__/crm.test.ts`.
 
-- [ ] **Step 1: Confirm which 5 fail**
+- [x] **Step 1: Confirm which 5 fail**
 
 Run: `cd frontend && npx vitest run src/lib/api/__tests__/crm.test.ts 2>&1 | tail -12`
 Expected: 5 failed — `new/contacted/interested only allows …`, `excludes lost …`, `has exactly 5 stages`.
 
-- [ ] **Step 2: Update the three transition assertions**
+- [x] **Step 2: Update the three transition assertions**
 
 In `crm.test.ts`, replace the three stale `toEqual` assertions so each active stage allows its
 forward target AND `lost`:
@@ -240,7 +240,7 @@ forward target AND `lost`:
 
 (Leave the already-passing `quoted … toContain('converted')` / `toContain('lost')`, `converted` and `lost` empty-array tests as they are.)
 
-- [ ] **Step 3: Update the two pipeline-column assertions**
+- [x] **Step 3: Update the two pipeline-column assertions**
 
 Replace the `excludes lost` test and the `has exactly 5 stages` test with:
 
@@ -257,12 +257,12 @@ Replace the `excludes lost` test and the `has exactly 5 stages` test with:
 
 > Before finalizing, confirm `LEAD_PIPELINE_COLS` has exactly 6 entries (new, contacted, interested, quoted, converted, lost) in `frontend/src/lib/api/crm.ts`. If it has a different count, set the `toHaveLength` number to the actual count and keep the `toContain('lost')` assertion.
 
-- [ ] **Step 4: Run the file — confirm green**
+- [x] **Step 4: Run the file — confirm green**
 
 Run: `cd frontend && npx vitest run src/lib/api/__tests__/crm.test.ts 2>&1 | tail -6`
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/lib/api/__tests__/crm.test.ts
@@ -281,7 +281,7 @@ Add an `assigned_to` filter (users from `settingsApi.listUsers`) and a date-rang
 - Modify: `frontend/src/app/(app)/leads/page.tsx`
 - Test: `frontend/src/app/(app)/leads/__tests__/page.test.tsx` (create if absent)
 
-- [ ] **Step 1: Extend `LeadFilters`**
+- [x] **Step 1: Extend `LeadFilters`**
 
 In `frontend/src/lib/api/crm.ts`, find the `LeadFilters` interface (used by `crmApi.listLeads`) and add three optional fields:
 
@@ -293,7 +293,7 @@ In `frontend/src/lib/api/crm.ts`, find the `LeadFilters` interface (used by `crm
 
 Confirm `crmApi.listLeads` forwards arbitrary filter keys as query params (it does — it passes the filter object to `apiGet`). No change needed there if so.
 
-- [ ] **Step 2: Write the failing filter test**
+- [x] **Step 2: Write the failing filter test**
 
 Create/append `frontend/src/app/(app)/leads/__tests__/page.test.tsx`. Mirror the mock setup from `frontend/src/app/(app)/repair/spare-parts/__tests__/page.test.tsx` (QueryClientProvider, mock `activeShopStore`, `authStore`, `next/navigation`). Additionally mock `@/lib/api/settings` so `settingsApi.listUsers` resolves a small user list, and mock `@/lib/api/crm`'s `listLeads` to capture the filter argument. Assert:
 
@@ -308,7 +308,7 @@ Write the full test using the same patterns as the spare-parts page test (findBy
 
 Run: `cd frontend && npx vitest run "src/app/(app)/leads/__tests__/page.test.tsx" 2>&1 | tail -8` → FAIL.
 
-- [ ] **Step 3: Add filter state + controls**
+- [x] **Step 3: Add filter state + controls**
 
 In `frontend/src/app/(app)/leads/page.tsx`:
 1. Add state next to the existing `sourceFilter`:
@@ -334,7 +334,7 @@ In `frontend/src/app/(app)/leads/page.tsx`:
 ```
 4. Render an **Assignee** `<Select>` (mirror the existing source `<Select>` block) populated from `usersQuery.data` (option value = user id, label = full name), and two `<input type="date">` controls bound to `dateFrom`/`dateTo`. Keep them in the same toolbar row as the source filter.
 
-- [ ] **Step 4: Add removable active-filter chips**
+- [x] **Step 4: Add removable active-filter chips**
 
 Below the toolbar, render a chips row for each active non-default filter (source ≠ all, assignee ≠ all, dateFrom, dateTo). Each chip shows the label and an `×` button that resets that filter to its default. Example shape:
 
@@ -365,12 +365,12 @@ Below the toolbar, render a chips row for each active non-default filter (source
 )}
 ```
 
-- [ ] **Step 5: Run the filter test — confirm green; type-check**
+- [x] **Step 5: Run the filter test — confirm green; type-check**
 
 Run: `cd frontend && npx vitest run "src/app/(app)/leads/__tests__/page.test.tsx" 2>&1 | tail -8` → PASS.
 Run: `cd frontend && npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK"` → `OK`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add frontend/src/lib/api/crm.ts "frontend/src/app/(app)/leads/page.tsx" "frontend/src/app/(app)/leads/__tests__/page.test.tsx"
