@@ -128,6 +128,14 @@ class LeadViewSet(ShopScopedMixin, ModelViewSet):
         if shop_id:
             qs = qs.filter(shop_id=shop_id)
 
+        date_from = self.request.query_params.get("date_from")
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+
+        date_to = self.request.query_params.get("date_to")
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
         return qs.order_by("-created_at")
 
     def get_serializer_class(self):
@@ -152,7 +160,7 @@ class LeadViewSet(ShopScopedMixin, ModelViewSet):
     def convert(self, request, pk=None):
         lead = self.get_object()
         customer = services.convert_lead(lead, request.user)
-        return Response({"customer_id": str(customer.id)}, status=status.HTTP_200_OK)
+        return Response(CustomerSerializer(customer).data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"], url_path="status")
     def change_status(self, request, pk=None):
@@ -163,7 +171,7 @@ class LeadViewSet(ShopScopedMixin, ModelViewSet):
             lead,
             serializer.validated_data["to_status"],
             request.user,
-            serializer.validated_data.get("lost_reason", ""),
+            serializer.validated_data.get("reason", ""),
         )
         return Response(LeadSerializer(lead).data)
 

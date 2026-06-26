@@ -21,6 +21,7 @@ import {
   crmApi, LEAD_PIPELINE_COLS, SOURCE_LABELS,
   type Lead, type LeadSource, type LeadStatus,
 } from '@/lib/api/crm';
+import { settingsApi } from '@/lib/api/settings';
 import { qk } from '@/lib/query/keys';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
 import { useOfflineQueueStore } from '@/lib/stores/offlineQueueStore';
@@ -128,17 +129,31 @@ export default function LeadsPage() {
   const [view, setView] = useState<ViewMode>('kanban');
   const [search, setSearch] = useState('');
   const [sourceFilter, setSourceFilter] = useState<LeadSource | 'all'>('all');
+  const [assignedFilter, setAssignedFilter] = useState<string | 'all'>('all');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
   const [createOpen, setCreateOpen] = useState(false);
   const [listPage, setListPage] = useState(1);
 
   const debouncedSearch = useDebounce(search, 350);
   React.useEffect(() => { setListPage(1); }, [debouncedSearch]);
 
+  const usersQuery = useQuery({
+    queryKey: ['users', 'for-lead-filter'],
+    queryFn: () => settingsApi.listUsers({ is_active: true }),
+    staleTime: 300_000,
+  });
+  const users = usersQuery.data?.items ?? [];
+  const assignedName = users.find((u) => u.id === assignedFilter)?.full_name;
+
   const baseFilters = useMemo(() => ({
     shop_id: isAllShops ? undefined : activeShopId ?? undefined,
     search: debouncedSearch || undefined,
     source: sourceFilter === 'all' ? undefined : sourceFilter,
-  }), [isAllShops, activeShopId, debouncedSearch, sourceFilter]);
+    assigned_to: assignedFilter === 'all' ? undefined : assignedFilter,
+    date_from: dateFrom || undefined,
+    date_to: dateTo || undefined,
+  }), [isAllShops, activeShopId, debouncedSearch, sourceFilter, assignedFilter, dateFrom, dateTo]);
 
   // Kanban: per-column queries
   const columnQueries = useQueries({
@@ -214,7 +229,7 @@ export default function LeadsPage() {
 
         {/* Source filter */}
         <Select value={sourceFilter} onValueChange={(v) => setSourceFilter(v as LeadSource | 'all')}>
-          <SelectTrigger className="h-9 w-[140px]">
+          <SelectTrigger className="h-9 w-[140px]" aria-label="Source">
             <Filter className="h-3.5 w-3.5 text-[var(--text-muted)]" />
             <SelectValue placeholder="All sources" />
           </SelectTrigger>
@@ -225,6 +240,38 @@ export default function LeadsPage() {
             ))}
           </SelectContent>
         </Select>
+
+        {/* Assignee filter */}
+        <Select value={assignedFilter} onValueChange={setAssignedFilter}>
+          <SelectTrigger className="h-9 w-[150px]" aria-label="Assignee">
+            <Filter className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+            <SelectValue placeholder="All assignees" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All assignees</SelectItem>
+            {users.map((u) => (
+              <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Date range filter */}
+        <input
+          type="date"
+          aria-label="Created from"
+          className="h-9 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-body-sm text-[var(--text)]"
+          value={dateFrom}
+          max={dateTo || undefined}
+          onChange={(e) => setDateFrom(e.target.value)}
+        />
+        <input
+          type="date"
+          aria-label="Created to"
+          className="h-9 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-body-sm text-[var(--text)]"
+          value={dateTo}
+          min={dateFrom || undefined}
+          onChange={(e) => setDateTo(e.target.value)}
+        />
 
         <div className="flex items-center gap-1 ml-auto">
           <div className="flex rounded-md border border-[var(--border)] overflow-hidden">
@@ -252,6 +299,44 @@ export default function LeadsPage() {
           </Can>
         </div>
       </div>
+
+      {/* Active filter chips */}
+      {(sourceFilter !== 'all' || assignedFilter !== 'all' || dateFrom || dateTo) && (
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-[var(--border)] bg-[var(--surface)]">
+          {sourceFilter !== 'all' && (
+            <button
+              onClick={() => setSourceFilter('all')}
+              className="text-body-sm rounded-full border border-[var(--border)] px-2 py-0.5 text-[var(--text-muted)] hover:bg-[var(--surface-2)]"
+            >
+              Source: {SOURCE_LABELS[sourceFilter]} ×
+            </button>
+          )}
+          {assignedFilter !== 'all' && (
+            <button
+              onClick={() => setAssignedFilter('all')}
+              className="text-body-sm rounded-full border border-[var(--border)] px-2 py-0.5 text-[var(--text-muted)] hover:bg-[var(--surface-2)]"
+            >
+              Assignee: {assignedName ?? assignedFilter} ×
+            </button>
+          )}
+          {dateFrom && (
+            <button
+              onClick={() => setDateFrom('')}
+              className="text-body-sm rounded-full border border-[var(--border)] px-2 py-0.5 text-[var(--text-muted)] hover:bg-[var(--surface-2)]"
+            >
+              From {dateFrom} ×
+            </button>
+          )}
+          {dateTo && (
+            <button
+              onClick={() => setDateTo('')}
+              className="text-body-sm rounded-full border border-[var(--border)] px-2 py-0.5 text-[var(--text-muted)] hover:bg-[var(--surface-2)]"
+            >
+              To {dateTo} ×
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Board / List */}
       <div className="flex-1 overflow-auto p-4 md:p-6">

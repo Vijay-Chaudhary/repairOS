@@ -716,3 +716,23 @@ class TestLeadLostAndReopen:
         )
         assert res.status_code == status.HTTP_400_BAD_REQUEST
         assert res.json()["error"]["code"] == "INVALID_STATUS_TRANSITION"
+
+
+@pytest.mark.django_db
+class TestLeadDateFilter:
+    url = "/api/v1/crm/leads/"
+
+    def test_date_range_filters_by_created_at(self, admin_client, shop):
+        from datetime import timedelta
+        from django.utils import timezone
+        from crm.models import Lead
+
+        old = Lead.objects.create(shop=shop, name="Old", phone="+919110000301", status="new")
+        Lead.objects.filter(pk=old.pk).update(created_at=timezone.now() - timedelta(days=10))
+        Lead.objects.create(shop=shop, name="Recent", phone="+919110000302", status="new")
+
+        today = timezone.localdate()
+        res = admin_client.get(f"{self.url}?date_from={today.isoformat()}")
+        assert res.status_code == 200
+        names = [row["name"] for row in res.data["items"]]
+        assert "Recent" in names and "Old" not in names

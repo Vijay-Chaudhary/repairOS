@@ -86,11 +86,30 @@ new page also adds its own nav leaf, so the menu never contains a dead link.
 ### Backend `LeadViewSet.get_queryset`
 - Add `date_from` / `date_to` filtering on `created_at` (inclusive range) + a unit test.
 
+### Lead mark-lost / convert bug fixes (scope correction — discovered 2026-06-25)
+The original premise ("backend already restores `status_before_lost`; just a frontend check")
+was **wrong**. Investigation found the leads mark-lost and convert features are broken
+end-to-end, with 16 failing tests on the branch:
+- **Mark-lost field mismatch:** the frontend (and tests) send `reason`, but `LeadStatusSerializer`
+  defines `lost_reason` and the view reads `lost_reason` → the reason arrives empty → every
+  `→ lost` transition is rejected with 422. **Fix:** serializer/view accept `reason`.
+- **Convert response shape:** the view returns `{"customer_id": ...}` but the frontend
+  `convertLead` is typed `apiPost<Customer>` and tests expect the full customer (`id`, `phone`).
+  **Fix:** return `CustomerSerializer(customer).data`.
+- **Stale frontend tests (5):** `crm.test.ts` asserts the *old* contract (no `lost` transitions,
+  no `lost` column) while the code is spec-correct. **Fix:** update the tests to the spec
+  contract (lost reachable from every active stage; `lost` is a kanban column; 6 stages).
+
 ### Lead re-open
-- Verify (fix if needed) that re-opening a lost lead moves the board card to its **exact prior
-  column** (`status_before_lost`), per `01-crm-ui.md` §10 — not always "interested". The
-  backend `status` action already restores `status_before_lost`; this is a frontend board /
-  query-invalidation check, with a Vitest assertion.
+- After the mark-lost fix, verify re-opening a lost lead moves the board card to its **exact
+  prior column** (`status_before_lost`) via the existing card "Re-open" action, per
+  `01-crm-ui.md` §10 — with a Vitest assertion.
+
+### Leads filters
+- Add **assigned_to** (users from `settingsApi.listUsers`) and **date-range** (`date_from` /
+  `date_to` on `created_at`) filters, with removable active-filter chips, alongside the existing
+  source filter. Backend already supports `assigned_to`; add the date-range filter to
+  `LeadViewSet.get_queryset`.
 
 ---
 
