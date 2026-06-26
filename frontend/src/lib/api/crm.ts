@@ -335,6 +335,11 @@ export const crmApi = {
   bulkWhatsapp: (id: string, body: { template_name: string; variables?: Record<string, string> }) =>
     apiPost<{ queued: number; excluded_optout: number }>(`/crm/segments/${id}/bulk-whatsapp/`, body),
 
+  getSegmentRecipientCount: (id: string) =>
+    apiGet<{ total: number; recipients: number; excluded_optout: number }>(
+      `/crm/segments/${id}/recipient-count/`,
+    ),
+
   // Lead status
   changeLeadStatus: (id: string, toStatus: LeadStatus, reason?: string) =>
     apiPost<Lead>(`/crm/leads/${id}/status/`, { to_status: toStatus, ...(reason ? { reason } : {}) }),

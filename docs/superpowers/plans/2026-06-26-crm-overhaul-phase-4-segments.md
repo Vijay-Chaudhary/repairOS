@@ -40,7 +40,7 @@
 
 ## Task 1: Backend recipient-count endpoint (TDD)
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Append to `TestSegments` in `backend/apps/crm/tests/test_customers.py` (reuse `admin_client`, `shop`):
 ```python
@@ -57,7 +57,7 @@ Append to `TestSegments` in `backend/apps/crm/tests/test_customers.py` (reuse `a
 ```
 Run: `cd backend && python -m pytest apps/crm/tests/test_customers.py::TestSegments::test_recipient_count_excludes_optout --no-cov -q` → FAIL (404 / no route).
 
-- [ ] **Step 2: Add the services helper**
+- [x] **Step 2: Add the services helper**
 
 In `backend/apps/crm/services.py`, add (near `evaluate_segment`):
 ```python
@@ -77,7 +77,7 @@ def segment_recipient_ids(segment):
     return total, ids
 ```
 
-- [ ] **Step 3: Add the action + refactor `bulk_whatsapp`**
+- [x] **Step 3: Add the action + refactor `bulk_whatsapp`**
 
 In `backend/apps/crm/views.py` `CustomerSegmentViewSet`, add:
 ```python
@@ -89,12 +89,12 @@ In `backend/apps/crm/views.py` `CustomerSegmentViewSet`, add:
 ```
 Then refactor `bulk_whatsapp` to call `total, customer_ids = services.segment_recipient_ids(segment)` (replacing its inline dynamic/static branching), keeping the `.delay(...)` and the `{queued, excluded_optout}` response identical.
 
-- [ ] **Step 4: Run tests green + regression**
+- [x] **Step 4: Run tests green + regression**
 
 Run: `cd backend && python -m pytest apps/crm/tests/test_customers.py::TestSegments --no-cov -q` → PASS.
 Run: `cd backend && python -m pytest apps/crm/tests/ --no-cov -q 2>&1 | tail -3` → **0 failed**.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/crm/services.py backend/apps/crm/views.py backend/apps/crm/tests/test_customers.py
@@ -105,7 +105,7 @@ git commit -m "feat(crm): segment recipient-count endpoint (opt-out excluded, pr
 
 ## Task 2: Frontend route move + redirect + nav + API (TDD on nav)
 
-- [ ] **Step 1: Add the API method**
+- [x] **Step 1: Add the API method**
 
 In `frontend/src/lib/api/crm.ts`, next to `bulkWhatsapp`:
 ```typescript
@@ -115,11 +115,11 @@ In `frontend/src/lib/api/crm.ts`, next to `bulkWhatsapp`:
     ),
 ```
 
-- [ ] **Step 2: Move the page**
+- [x] **Step 2: Move the page**
 
 `git mv "frontend/src/app/(app)/settings/segments/page.tsx" "frontend/src/app/(app)/crm/segments/page.tsx"` (create the `crm/segments` dir). No content change in this step.
 
-- [ ] **Step 3: Redirect stub at the old path**
+- [x] **Step 3: Redirect stub at the old path**
 
 Recreate `frontend/src/app/(app)/settings/segments/page.tsx`:
 ```tsx
@@ -132,7 +132,7 @@ export default function SegmentsSettingsRedirect() {
 }
 ```
 
-- [ ] **Step 4: Update nav href + its test**
+- [x] **Step 4: Update nav href + its test**
 
 `AppShell.tsx:67` — change the Segments leaf `href` from `/settings/segments` to `/crm/segments`.
 `navItems.test.ts:68` — change `.find((c) => c.href === '/settings/segments')` to `'/crm/segments'`. Run:
@@ -144,7 +144,7 @@ export default function SegmentsSettingsRedirect() {
 
 All edits in the moved `frontend/src/app/(app)/crm/segments/page.tsx`.
 
-- [ ] **Step 1: Failing unit test for filter-rule round-trip**
+- [x] **Step 1: Failing unit test for filter-rule round-trip**
 
 Export `buildFilterRules` and `parseFilterRules` from the page module (add `export` to both). Create `frontend/src/app/(app)/crm/segments/__tests__/filterRules.test.ts`:
 ```typescript
@@ -168,7 +168,7 @@ describe('segment filter rules', () => {
 ```
 Run → FAIL (`city` not on the schema/helpers yet).
 
-- [ ] **Step 2: Extend schema + helpers**
+- [x] **Step 2: Extend schema + helpers**
 
 In `page.tsx`:
 - Add `city: z.string()` to `segmentSchema`.
@@ -176,11 +176,11 @@ In `page.tsx`:
 - `parseFilterRules`: add `city: typeof rules.city === 'string' ? rules.city : ''`.
 - Add `city: ''` to the form `defaultValues` (and use `parsed.city ?? ''`).
 
-- [ ] **Step 3: Render the two controls**
+- [x] **Step 3: Render the two controls**
 
 In `SegmentFormDialog`, inside the "Filter rules" box, add a `customer_type` `<Select>` (options: All / Individual / Business → values `all`/`individual`/`business`) and a `city` `<Input>` (placeholder "Delhi…"), each as a `FormField`. Mirror the existing field markup.
 
-- [ ] **Step 4: Pre-send recipient count in `BulkWhatsappDialog`**
+- [x] **Step 4: Pre-send recipient count in `BulkWhatsappDialog`**
 
 Add a query (enabled while the dialog is open):
 ```typescript
@@ -206,12 +206,12 @@ Render, above the template input:
 ```
 Disable Send when `count?.recipients === 0`.
 
-- [ ] **Step 5: Run tests + type-check**
+- [x] **Step 5: Run tests + type-check**
 
 Run: `cd frontend && npx vitest run "src/app/(app)/crm/segments/__tests__/filterRules.test.ts" src/components/shared/__tests__/navItems.test.ts 2>&1 | tail -6` → PASS.
 Run: `cd frontend && npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK"` → `OK`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add "frontend/src/app/(app)/crm/segments" "frontend/src/app/(app)/settings/segments/page.tsx" \

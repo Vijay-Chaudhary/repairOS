@@ -65,7 +65,7 @@ describe('NAV_ITEMS — CRM group', () => {
   });
 
   it('surfaces Segments gated on crm.segments.manage', () => {
-    const s = crmGroup().children.find((c) => c.href === '/settings/segments');
+    const s = crmGroup().children.find((c) => c.href === '/crm/segments');
     expect(s).toBeDefined();
     expect(s!.label).toBe('Segments');
     expect(s!.permission).toBe('crm.segments.manage');
