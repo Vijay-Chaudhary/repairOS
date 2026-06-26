@@ -719,6 +719,99 @@ class TestLeadLostAndReopen:
 
 
 @pytest.mark.django_db
+class TestLeadSmokeFlowE2E:
+    """
+    End-to-end walk of the Phase 2 manual smoke flow, exercised through the wired
+    HTTP endpoints (serializer + view + service) rather than calling services
+    directly. This is the automatable stand-in for the live-UI smoke test:
+    create → advance to quoted → mark lost (reason) → re-open to exact prior
+    column → convert (returns full customer). Mirrors the four manual smoke steps.
+    """
+
+    list_url = "/api/v1/crm/leads/"
+
+    def _status_url(self, lead_id):
+        return f"/api/v1/crm/leads/{lead_id}/status/"
+
+    def _convert_url(self, lead_id):
+        return f"/api/v1/crm/leads/{lead_id}/convert/"
+
+    def test_full_lead_lifecycle_through_the_api(self, admin_client, shop):
+        from crm.models import Customer, Lead
+
+        # 1. Create a lead (lands in 'new').
+        create = admin_client.post(self.list_url, {
+            "shop_id": str(shop.id),
+            "name": "Smoke Lead",
+            "phone": "+919110000401",
+            "source": "walk_in",
+        }, format="json")
+        assert create.status_code == status.HTTP_201_CREATED
+        assert create.data["status"] == "new"
+        lead_id = create.data["id"]
+
+        # 2. Advance new → contacted → interested → quoted via the status endpoint.
+        for to_status in ["contacted", "interested", "quoted"]:
+            step = admin_client.post(
+                self._status_url(lead_id), {"to_status": to_status}, format="json",
+            )
+            assert step.status_code == status.HTTP_200_OK, (to_status, step.data)
+            assert step.data["status"] == to_status
+
+        # 3. Mark lost with a reason → moves to 'lost', remembers prior column.
+        lost = admin_client.post(
+            self._status_url(lead_id),
+            {"to_status": "lost", "reason": "Budget constraint"},
+            format="json",
+        )
+        assert lost.status_code == status.HTTP_200_OK
+        assert lost.data["status"] == "lost"
+        assert lost.data["status_before_lost"] == "quoted"
+
+        # 4. Re-open → returns to the EXACT prior column and clears the marker.
+        reopen = admin_client.post(
+            self._status_url(lead_id), {"to_status": "quoted"}, format="json",
+        )
+        assert reopen.status_code == status.HTTP_200_OK
+        assert reopen.data["status"] == "quoted"
+        assert reopen.data["status_before_lost"] is None
+
+        # 5. Convert → response is the full customer object (not just an id).
+        convert = admin_client.post(self._convert_url(lead_id), format="json")
+        assert convert.status_code == status.HTTP_200_OK
+        assert "id" in convert.data
+        assert convert.data["phone"] == "+919110000401"
+        assert Customer.objects.filter(phone="+919110000401").exists()
+
+        Lead.objects.get(pk=lead_id).refresh_from_db()
+        assert Lead.objects.get(pk=lead_id).status == "converted"
+
+    def test_assigned_to_and_date_filters_compose(self, admin_client, shop):
+        """Backend side of the UI assignee + date-range filters (chips in the UI)."""
+        from crm.models import Lead
+
+        target = Lead.objects.create(
+            shop=shop, name="Assigned Recent", phone="+919110000402",
+            status="new", assigned_to=None,
+        )
+        # Assign to the admin user so the assigned_to filter has a value to match.
+        from authentication.models import User
+        admin = User.objects.first()
+        Lead.objects.filter(pk=target.pk).update(assigned_to=admin)
+        Lead.objects.create(shop=shop, name="Unassigned", phone="+919110000403", status="new")
+
+        from django.utils import timezone
+        today = timezone.localdate().isoformat()
+        res = admin_client.get(
+            f"{self.list_url}?assigned_to={admin.id}&date_from={today}"
+        )
+        assert res.status_code == status.HTTP_200_OK
+        names = [row["name"] for row in res.data["items"]]
+        assert "Assigned Recent" in names
+        assert "Unassigned" not in names
+
+
+@pytest.mark.django_db
 class TestLeadDateFilter:
     url = "/api/v1/crm/leads/"
 

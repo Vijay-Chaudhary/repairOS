@@ -442,7 +442,15 @@ Run: `cd backend && python manage.py makemigrations crm --check --dry-run` → `
 Run: `cd frontend && npx vitest run src/lib/api/__tests__/crm.test.ts "src/app/(app)/leads/__tests__/page.test.tsx" 2>&1 | tail -8` → all pass.
 Run: `cd frontend && npx tsc --noEmit 2>&1 | grep "error TS" | grep -v "Can.test.tsx" || echo "OK"` → `OK`.
 
-- [ ] **Manual smoke** (demo tenant, `X-Tenant-Slug: demo`)
+- [x] **Smoke flow — automated E2E** (stand-in for the live-UI walk-through)
+
+The four manual smoke steps are exercised end-to-end through the wired HTTP endpoints
+in `TestLeadSmokeFlowE2E` (`backend/apps/crm/tests/test_leads.py`):
+create → advance to quoted → **mark lost** (reason, no 422) → **re-open** to the exact
+prior column → **convert** (full customer returned), plus the **assigned_to + date-range**
+filters composing. `cd backend && python -m pytest apps/crm/tests/test_leads.py::TestLeadSmokeFlowE2E --no-cov -q` → **2 passed**.
+
+- [ ] **Manual smoke — live UI** (demo tenant, `X-Tenant-Slug: demo`) — *still recommended; could not run in the dev environment (no Docker stack)*
 
 1. Leads → on any active card, **Mark lost** (enter reason) → card moves to the **Lost** column (no 422).
 2. On the lost card → **Re-open** → it returns to the **exact prior** column (e.g. a lead lost from "quoted" reappears under Quoted).
