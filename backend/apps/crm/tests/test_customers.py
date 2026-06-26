@@ -303,6 +303,20 @@ class TestSegments:
         assert "Rich" in names
         assert "Poor" not in names
 
+    def test_recipient_count_excludes_optout(self, admin_client, shop):
+        from crm.models import Customer, CustomerSegment
+
+        Customer.objects.create(shop=shop, name="In", phone="+919000223001", total_billed="20000")
+        Customer.objects.create(
+            shop=shop, name="Out", phone="+919000223002", total_billed="20000", whatsapp_optout=True,
+        )
+        seg = CustomerSegment.objects.create(
+            name="HV", filter_rules={"min_total_billed": 10000}, is_dynamic=True,
+        )
+        res = admin_client.get(f"{self.url}{seg.id}/recipient-count/")
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data == {"total": 2, "recipients": 1, "excluded_optout": 1}
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Tenant isolation

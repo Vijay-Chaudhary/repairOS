@@ -316,6 +316,27 @@ def evaluate_segment(segment: CustomerSegment):
     return qs
 
 
+def segment_recipient_ids(segment: CustomerSegment):
+    """Return (total_members, opted_in_customer_ids) for a segment.
+
+    Single source of truth for both the bulk-WhatsApp send and the pre-send
+    recipient-count preview, so opt-out exclusion stays consistent.
+    """
+    from .models import CustomerSegmentMember
+
+    if segment.is_dynamic:
+        qs = evaluate_segment(segment)
+        total = qs.count()
+        ids = list(qs.filter(whatsapp_optout=False).values_list("id", flat=True))
+    else:
+        members = CustomerSegmentMember.objects.filter(segment=segment)
+        total = members.count()
+        ids = list(
+            members.filter(customer__whatsapp_optout=False).values_list("customer_id", flat=True)
+        )
+    return total, ids
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Follow-up task completion
 # ──────────────────────────────────────────────────────────────────────────────
