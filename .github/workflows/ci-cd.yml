@@ -21,6 +21,13 @@ jobs:
   backend-tests:
     name: Backend tests (pytest)
     runs-on: ubuntu-latest
+    # base.py evaluates SECRET_KEY and MASTER_DATABASE_URL at import time (before
+    # test.py can override DATABASES to sqlite), so both must be present in the
+    # environment. These are throwaway CI values — production settings keep
+    # requiring real secrets (no defaults), so prod still fails loudly if unset.
+    env:
+      SECRET_KEY: ci-insecure-test-secret-key-not-for-production
+      MASTER_DATABASE_URL: "sqlite://:memory:"
     defaults:
       run:
         working-directory: backend
