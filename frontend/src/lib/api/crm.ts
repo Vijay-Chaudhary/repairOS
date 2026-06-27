@@ -54,7 +54,9 @@ export interface Customer {
 export interface CommunicationLog {
   id: string;
   customer_id?: string | null;
+  customer_name?: string | null;
   lead_id?: string | null;
+  lead_name?: string | null;
   type: CommType;
   direction?: CommDirection | null;
   summary: string;
@@ -90,6 +92,9 @@ export interface QuoteItem {
 export interface LeadQuote {
   id: string;
   quote_number: string;
+  lead_id?: string;
+  lead_name?: string;
+  lead_status?: LeadStatus;
   items: QuoteItem[];
   total_amount: string;
   valid_until: string;
@@ -186,7 +191,10 @@ export interface TaskFilters {
   customer_id?: string;
   lead_id?: string;
   due_date?: string;
+  due_from?: string;
+  due_to?: string;
   page?: number;
+  page_size?: number;
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -319,7 +327,16 @@ export const crmApi = {
     apiGet<Task>(`/crm/tasks/${id}/`),
 
   // Communications
-  listCommunications: (filters: { customer_id?: string; lead_id?: string; cursor?: string } = {}) =>
+  listCommunications: (
+    filters: {
+      customer_id?: string;
+      lead_id?: string;
+      type?: CommType;
+      date_from?: string;
+      date_to?: string;
+      cursor?: string;
+    } = {},
+  ) =>
     apiGet<{ items: CommunicationLog[]; meta: PageMeta }>('/crm/communications/', filters as Record<string, string | undefined>),
 
   // Segments
@@ -374,6 +391,15 @@ export const crmApi = {
 
   listLeadQuotes: (id: string) =>
     apiGet<LeadQuote[]>(`/crm/leads/${id}/quotes/`),
+
+  // Cross-lead quotes worklist
+  listQuotes: (
+    filters: { lead_status?: LeadStatus; date_from?: string; date_to?: string; page?: number } = {},
+  ) =>
+    apiGet<{ items: LeadQuote[]; meta: PageMeta }>(
+      '/crm/quotes/',
+      filters as Record<string, string | number | undefined>,
+    ),
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────

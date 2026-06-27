@@ -120,11 +120,15 @@ class CommunicationLogSerializer(serializers.ModelSerializer):
     # EntityTimeline aliases: `description` maps to `summary`, `actor` maps to actor name
     description = serializers.CharField(source="summary", read_only=True)
     actor = serializers.CharField(source="logged_by.full_name", read_only=True, default="")
+    # Activity feed: display names so rows can deep-link to the related customer/lead
+    customer_name = serializers.CharField(source="customer.name", read_only=True, default=None)
+    lead_name = serializers.CharField(source="lead.name", read_only=True, default=None)
 
     class Meta:
         model = CommunicationLog
         fields = [
-            "id", "customer", "customer_id", "lead", "lead_id", "type", "direction",
+            "id", "customer", "customer_id", "customer_name",
+            "lead", "lead_id", "lead_name", "type", "direction",
             "summary", "description", "duration_minutes",
             "logged_by", "logged_by_name", "actor", "logged_at",
             "created_at",
@@ -167,11 +171,16 @@ class QuoteItemSerializer(serializers.Serializer):
 class LeadQuoteSerializer(serializers.ModelSerializer):
     items = QuoteItemSerializer(many=True)
     sent_by_name = serializers.CharField(source="sent_by.full_name", read_only=True)
+    # Cross-lead worklist: lead identity so rows can show + deep-link the lead.
+    lead_id = serializers.UUIDField(source="lead.id", read_only=True)
+    lead_name = serializers.CharField(source="lead.name", read_only=True)
+    lead_status = serializers.CharField(source="lead.status", read_only=True)
 
     class Meta:
         model = LeadQuote
         fields = [
-            "id", "quote_number", "items", "total_amount", "valid_until",
+            "id", "quote_number", "lead_id", "lead_name", "lead_status",
+            "items", "total_amount", "valid_until",
             "notes", "sent_via_whatsapp", "sent_by", "sent_by_name", "created_at",
         ]
         read_only_fields = ["id", "quote_number", "sent_via_whatsapp", "sent_by", "created_at"]

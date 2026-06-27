@@ -30,6 +30,7 @@ from .models import (
     CustomerSegmentMember,
     FollowUpTask,
     Lead,
+    LeadQuote,
 )
 from .serializers import (
     BulkWhatsAppSerializer,
@@ -195,6 +196,50 @@ class LeadViewSet(ShopScopedMixin, ModelViewSet):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Lead quote worklist viewset
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class LeadQuoteViewSet(ListModelMixin, GenericViewSet):
+    """
+    GET /quotes/ — cross-lead worklist of quotes sent to prospects.
+    Read-only; per-lead create lives at /leads/{id}/quote/.
+    """
+
+    serializer_class = LeadQuoteSerializer
+    pagination_class = RepairOSPageNumberPagination
+
+    def get_permissions(self):
+        return [require_permission("crm.leads.view")()]
+
+    def get_queryset(self):
+        qs = LeadQuote.objects.select_related("lead", "sent_by")
+
+        # Shop scoping — quotes have no direct shop FK, so scope through the
+        # lead's shop. Mirrors ShopScopedMixin semantics.
+        token = getattr(self.request, "auth", None)
+        if token is not None and not (token.get("is_tenant_wide") or token.get("is_platform_admin")):
+            shop_ids = token.get("shop_ids", [])
+            if shop_ids:
+                qs = qs.filter(lead__shop_id__in=shop_ids)
+            else:
+                qs = qs.none()
+
+        lead_status = self.request.query_params.get("lead_status")
+        if lead_status:
+            qs = qs.filter(lead__status=lead_status)
+
+        date_from = self.request.query_params.get("date_from")
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        date_to = self.request.query_params.get("date_to")
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        return qs.order_by("-created_at")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Customer viewset
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -312,14 +357,21 @@ class CustomerViewSet(ShopScopedMixin, ModelViewSet):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+class CommunicationLogCursorPagination(RepairOSCursorPagination):
+    """Activity feed orders by when the communication happened, not row creation.
+    `-created_at` is the stable tiebreaker for cursor consistency on ties."""
+
+    ordering = ("-logged_at", "-created_at")
+
+
 class CommunicationLogViewSet(CreateModelMixin, ListModelMixin, GenericViewSet):
     """
     POST  /communications/  — log a communication entry
-    GET   /communications/  — list (filter by customer/lead)
+    GET   /communications/  — list (filter by customer/lead/type/date range)
     """
 
     serializer_class = CommunicationLogSerializer
-    pagination_class = RepairOSCursorPagination
+    pagination_class = CommunicationLogCursorPagination
 
     def get_permissions(self):
         return [require_permission("crm.communications.log")()]
@@ -331,13 +383,37 @@ class CommunicationLogViewSet(CreateModelMixin, ListModelMixin, GenericViewSet):
 
     def get_queryset(self):
         qs = CommunicationLog.objects.select_related("logged_by", "customer", "lead")
+
+        # Shop scoping — comm logs have no direct shop FK, so scope through the
+        # related customer/lead's shop. Mirrors ShopScopedMixin semantics:
+        # tenant-wide / platform-admin → no filter; else restrict to JWT shop_ids.
+        token = getattr(self.request, "auth", None)
+        if token is not None and not (token.get("is_tenant_wide") or token.get("is_platform_admin")):
+            shop_ids = token.get("shop_ids", [])
+            if shop_ids:
+                qs = qs.filter(Q(customer__shop_id__in=shop_ids) | Q(lead__shop_id__in=shop_ids))
+            else:
+                qs = qs.none()
+
         customer_id = self.request.query_params.get("customer_id")
         if customer_id:
             qs = qs.filter(customer_id=customer_id)
         lead_id = self.request.query_params.get("lead_id")
         if lead_id:
             qs = qs.filter(lead_id=lead_id)
-        return qs
+
+        comm_type = self.request.query_params.get("type")
+        if comm_type:
+            qs = qs.filter(type=comm_type)
+
+        date_from = self.request.query_params.get("date_from")
+        if date_from:
+            qs = qs.filter(logged_at__date__gte=date_from)
+        date_to = self.request.query_params.get("date_to")
+        if date_to:
+            qs = qs.filter(logged_at__date__lte=date_to)
+
+        return qs.order_by("-logged_at")
 
 
 # ──────────────────────────────────────────────────────────────────────────────

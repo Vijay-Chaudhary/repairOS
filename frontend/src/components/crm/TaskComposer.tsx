@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -33,9 +34,11 @@ interface TaskComposerProps {
   customerId?: string;
   leadId?: string;
   jobId?: string;
+  /** Seed the due-date field when opened (e.g. from the calendar day click). */
+  defaultDueDate?: string;
 }
 
-export function TaskComposer({ open, onOpenChange, customerId, leadId, jobId }: TaskComposerProps) {
+export function TaskComposer({ open, onOpenChange, customerId, leadId, jobId, defaultDueDate }: TaskComposerProps) {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
 
@@ -44,12 +47,28 @@ export function TaskComposer({ open, onOpenChange, customerId, leadId, jobId }: 
     defaultValues: {
       title: '',
       description: '',
-      due_date: '',
+      due_date: defaultDueDate ?? '',
       due_time: '',
       priority: 'normal',
       assigned_to: user?.id ?? '',
     },
   });
+
+  // Re-seed the form each time the sheet opens so a calendar day-click prefills
+  // its date (and a plain "New task" open starts blank).
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        title: '',
+        description: '',
+        due_date: defaultDueDate ?? '',
+        due_time: '',
+        priority: 'normal',
+        assigned_to: user?.id ?? '',
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultDueDate]);
 
   const mutation = useMutation({
     mutationFn: (values: FormValues) =>
