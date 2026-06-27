@@ -77,12 +77,14 @@ def client_all(api_client, user, shop):
         "erp.expenses.view", "erp.expenses.create",
         "erp.budget.manage",
         "erp.assets.manage",
-        "reports.billing.view",
-        "reports.erp.view",
+        "reports.revenue.view",
+        "reports.inventory.view",
         "reports.repair.view",
         "reports.hr.view",
         "reports.crm.view",
         "reports.amc.view",
+        "reports.gst.view",
+        "reports.pl.view",
     ])
 
 

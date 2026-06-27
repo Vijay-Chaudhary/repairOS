@@ -41,7 +41,7 @@ def _shop_ids_from_token(request):
 
 
 class PettyCashAccountView(APIView):
-    permission_classes = [IsAuthenticated, require_permission("finance.petty_cash.manage")]
+    permission_classes = [IsAuthenticated, require_permission("hr.petty_cash.manage")]
 
     def get(self, request: Request, shop_id) -> Response:
         shop_ids, is_wide = _shop_ids_from_token(request)
@@ -55,7 +55,7 @@ class PettyCashAccountView(APIView):
 
 
 class PettyCashTransactionView(APIView):
-    permission_classes = [IsAuthenticated, require_permission("finance.petty_cash.manage")]
+    permission_classes = [IsAuthenticated, require_permission("hr.petty_cash.manage")]
 
     def get(self, request: Request) -> Response:
         """List transactions scoped to the user's shops, with optional filters."""

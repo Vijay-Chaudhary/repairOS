@@ -26,12 +26,14 @@ from rest_framework_simplejwt.tokens import RefreshToken
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 _REPORT_PERMS = [
-    "reports.billing.view",
+    "reports.revenue.view",
     "reports.repair.view",
     "reports.crm.view",
     "reports.hr.view",
-    "reports.erp.view",
+    "reports.inventory.view",
     "reports.amc.view",
+    "reports.gst.view",
+    "reports.pl.view",
 ]
 
 
