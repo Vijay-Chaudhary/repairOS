@@ -174,7 +174,10 @@ export interface TaskFilters {
   customer_id?: string;
   lead_id?: string;
   due_date?: string;
+  due_from?: string;
+  due_to?: string;
   page?: number;
+  page_size?: number;
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────
