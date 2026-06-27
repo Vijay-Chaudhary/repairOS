@@ -54,7 +54,9 @@ export interface Customer {
 export interface CommunicationLog {
   id: string;
   customer_id?: string | null;
+  customer_name?: string | null;
   lead_id?: string | null;
+  lead_name?: string | null;
   type: CommType;
   direction?: CommDirection | null;
   summary: string;
@@ -90,6 +92,9 @@ export interface QuoteItem {
 export interface LeadQuote {
   id: string;
   quote_number: string;
+  lead_id?: string;
+  lead_name?: string;
+  lead_status?: LeadStatus;
   items: QuoteItem[];
   total_amount: string;
   valid_until: string;
@@ -114,6 +119,23 @@ export interface SegmentMember {
   customer_name: string;
   customer_phone: string;
   added_at: string;
+}
+
+export type CampaignStatus = 'draft' | 'sending' | 'sent' | 'failed';
+
+export interface Campaign {
+  id: string;
+  name: string;
+  segment: string;
+  segment_name?: string;
+  template: string;
+  status: CampaignStatus;
+  recipient_count: number;
+  excluded_optout_count: number;
+  sent_at?: string | null;
+  created_by: string;
+  created_by_name?: string;
+  created_at: string;
 }
 
 export interface CrmOverview {
@@ -169,7 +191,10 @@ export interface TaskFilters {
   customer_id?: string;
   lead_id?: string;
   due_date?: string;
+  due_from?: string;
+  due_to?: string;
   page?: number;
+  page_size?: number;
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -302,7 +327,16 @@ export const crmApi = {
     apiGet<Task>(`/crm/tasks/${id}/`),
 
   // Communications
-  listCommunications: (filters: { customer_id?: string; lead_id?: string; cursor?: string } = {}) =>
+  listCommunications: (
+    filters: {
+      customer_id?: string;
+      lead_id?: string;
+      type?: CommType;
+      date_from?: string;
+      date_to?: string;
+      cursor?: string;
+    } = {},
+  ) =>
     apiGet<{ items: CommunicationLog[]; meta: PageMeta }>('/crm/communications/', filters as Record<string, string | undefined>),
 
   // Segments
@@ -340,6 +374,13 @@ export const crmApi = {
       `/crm/segments/${id}/recipient-count/`,
     ),
 
+  // Campaigns (bulk-WhatsApp history)
+  listCampaigns: (filters: { page?: number } = {}) =>
+    apiGet<{ items: Campaign[]; meta: PageMeta }>('/crm/campaigns/', filters as Record<string, string | number | undefined>),
+
+  createCampaign: (body: { name: string; segment_id: string; template: string; variables?: Record<string, string> }) =>
+    apiPost<Campaign>('/crm/campaigns/', body),
+
   // Lead status
   changeLeadStatus: (id: string, toStatus: LeadStatus, reason?: string) =>
     apiPost<Lead>(`/crm/leads/${id}/status/`, { to_status: toStatus, ...(reason ? { reason } : {}) }),
@@ -350,6 +391,15 @@ export const crmApi = {
 
   listLeadQuotes: (id: string) =>
     apiGet<LeadQuote[]>(`/crm/leads/${id}/quotes/`),
+
+  // Cross-lead quotes worklist
+  listQuotes: (
+    filters: { lead_status?: LeadStatus; date_from?: string; date_to?: string; page?: number } = {},
+  ) =>
+    apiGet<{ items: LeadQuote[]; meta: PageMeta }>(
+      '/crm/quotes/',
+      filters as Record<string, string | number | undefined>,
+    ),
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────

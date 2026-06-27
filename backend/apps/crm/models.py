@@ -301,3 +301,42 @@ class CustomerSegmentMember(BaseModel):
         app_label = "crm"
         db_table = "customer_segment_members"
         unique_together = [("segment", "customer")]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Campaign (bulk-WhatsApp history)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class Campaign(SoftDeleteModel):
+    """
+    A tracked bulk-WhatsApp send to a segment. The send itself is fire-and-forget
+    via the existing Celery task; this row is the durable history record.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        SENDING = "sending", "Sending"
+        SENT = "sent", "Sent"
+        FAILED = "failed", "Failed"
+
+    name = models.CharField(max_length=200)
+    segment = models.ForeignKey(
+        CustomerSegment, on_delete=models.PROTECT, related_name="campaigns"
+    )
+    template = models.CharField(max_length=100)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.SENT)
+    recipient_count = models.IntegerField(default=0)
+    excluded_optout_count = models.IntegerField(default=0)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_campaigns"
+    )
+
+    class Meta:
+        app_label = "crm"
+        db_table = "campaigns"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.name} → {self.segment_id} ({self.status})"

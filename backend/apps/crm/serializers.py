@@ -6,6 +6,7 @@ from rest_framework import serializers
 from core.models import Shop
 
 from .models import (
+    Campaign,
     CommunicationLog,
     Customer,
     CustomerSegment,
@@ -119,11 +120,15 @@ class CommunicationLogSerializer(serializers.ModelSerializer):
     # EntityTimeline aliases: `description` maps to `summary`, `actor` maps to actor name
     description = serializers.CharField(source="summary", read_only=True)
     actor = serializers.CharField(source="logged_by.full_name", read_only=True, default="")
+    # Activity feed: display names so rows can deep-link to the related customer/lead
+    customer_name = serializers.CharField(source="customer.name", read_only=True, default=None)
+    lead_name = serializers.CharField(source="lead.name", read_only=True, default=None)
 
     class Meta:
         model = CommunicationLog
         fields = [
-            "id", "customer", "customer_id", "lead", "lead_id", "type", "direction",
+            "id", "customer", "customer_id", "customer_name",
+            "lead", "lead_id", "lead_name", "type", "direction",
             "summary", "description", "duration_minutes",
             "logged_by", "logged_by_name", "actor", "logged_at",
             "created_at",
@@ -166,11 +171,16 @@ class QuoteItemSerializer(serializers.Serializer):
 class LeadQuoteSerializer(serializers.ModelSerializer):
     items = QuoteItemSerializer(many=True)
     sent_by_name = serializers.CharField(source="sent_by.full_name", read_only=True)
+    # Cross-lead worklist: lead identity so rows can show + deep-link the lead.
+    lead_id = serializers.UUIDField(source="lead.id", read_only=True)
+    lead_name = serializers.CharField(source="lead.name", read_only=True)
+    lead_status = serializers.CharField(source="lead.status", read_only=True)
 
     class Meta:
         model = LeadQuote
         fields = [
-            "id", "quote_number", "items", "total_amount", "valid_until",
+            "id", "quote_number", "lead_id", "lead_name", "lead_status",
+            "items", "total_amount", "valid_until",
             "notes", "sent_via_whatsapp", "sent_by", "sent_by_name", "created_at",
         ]
         read_only_fields = ["id", "quote_number", "sent_via_whatsapp", "sent_by", "created_at"]
@@ -264,6 +274,32 @@ class CustomerSegmentMemberSerializer(serializers.ModelSerializer):
 
 class BulkWhatsAppSerializer(serializers.Serializer):
     template_name = serializers.CharField(max_length=100)
+    variables = serializers.DictField(child=serializers.CharField(), required=False, default=dict)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Campaign
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class CampaignSerializer(serializers.ModelSerializer):
+    segment_name = serializers.CharField(source="segment.name", read_only=True)
+    created_by_name = serializers.CharField(source="created_by.full_name", read_only=True, default="")
+
+    class Meta:
+        model = Campaign
+        fields = [
+            "id", "name", "segment", "segment_name", "template", "status",
+            "recipient_count", "excluded_optout_count", "sent_at",
+            "created_by", "created_by_name", "created_at",
+        ]
+        read_only_fields = fields
+
+
+class CampaignCreateSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=200)
+    segment_id = serializers.UUIDField()
+    template = serializers.CharField(max_length=100)
     variables = serializers.DictField(child=serializers.CharField(), required=False, default=dict)
 
 

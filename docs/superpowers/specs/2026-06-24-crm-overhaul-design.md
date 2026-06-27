@@ -1,7 +1,7 @@
 # CRM Overhaul — Design Spec
 
 **Date:** 2026-06-24
-**Status:** Approved (pending implementation plans)
+**Status:** ✅ Complete — all 9 phases merged to `master` (2026-06-27). Phases 1–4 via PRs through #12; Phase 5 → #13, Phase 6 → #14, Phase 7 → #15, Phase 8 → #16, Phase 9 → #18.
 **Specs paired:** `docs/backend-spec/RepairOS-dev-spec/modules/01-crm.md`,
 `docs/frontend-spec/RepairOS-frontend-spec/modules/01-crm-ui.md`
 
