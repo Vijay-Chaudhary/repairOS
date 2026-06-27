@@ -130,12 +130,20 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # ──────────────────────────────────────────────────────────────────────────────
 # Cache / Redis
 # ──────────────────────────────────────────────────────────────────────────────
+# Segmented Redis logical DBs so a cache flush can never wipe the Celery broker
+# or the Channels layer. All three accept a password embedded in the URL
+# (redis://:password@host:6379/N), so Redis AUTH needs no extra setting here.
+#   /0 → Celery broker + result backend
+#   /1 → Django cache
+#   /2 → Channels (WebSocket) layer
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
+REDIS_CACHE_URL = env("REDIS_CACHE_URL", default="redis://localhost:6379/1")
+REDIS_CHANNELS_URL = env("REDIS_CHANNELS_URL", default="redis://localhost:6379/2")
 
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": REDIS_URL,
+        "LOCATION": REDIS_CACHE_URL,
         "TIMEOUT": 300,
     }
 }
@@ -146,7 +154,7 @@ CACHES = {
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {"hosts": [REDIS_URL]},
+        "CONFIG": {"hosts": [REDIS_CHANNELS_URL]},
     }
 }
 
@@ -297,6 +305,49 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Object storage (media)
+#
+# USE_S3=False (dev/test)  → media on the local filesystem (MEDIA_ROOT).
+# USE_S3=True  (prod)      → media via the S3 API. Works against self-hosted
+#                            MinIO today; switching to AWS S3 later is an
+#                            env-only change (drop AWS_S3_ENDPOINT_URL, set the
+#                            real bucket/region/keys). No application code change.
+# ──────────────────────────────────────────────────────────────────────────────
+USE_S3 = env.bool("USE_S3", default=False)
+
+if USE_S3:
+    AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY")
+    AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME")
+    AWS_S3_REGION_NAME = env("AWS_S3_REGION_NAME", default="us-east-1")
+    # Internal endpoint the backend talks to (MinIO service, or blank for real AWS S3).
+    AWS_S3_ENDPOINT_URL = env("AWS_S3_ENDPOINT_URL", default=None)
+    # Public host browsers use for media URLs (e.g. media.repaiross.app or the
+    # CloudFront/S3 domain later). Leave blank to derive from the endpoint.
+    AWS_S3_CUSTOM_DOMAIN = env("AWS_S3_CUSTOM_DOMAIN", default=None)
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_DEFAULT_ACL = None
+    AWS_QUERYSTRING_AUTH = env.bool("AWS_QUERYSTRING_AUTH", default=True)
+
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3.S3Storage",
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
+else:
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Tenant
