@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Phone, Wrench, ChevronRight, MoreVertical, UserCheck, UserCircle, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Wrench, ChevronRight, MoreVertical, UserCheck, UserCircle, Pencil, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -14,12 +14,12 @@ import { Input } from '@/components/ui/input';
 import { Can } from '@/components/shared/Can';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { PhoneActions } from '@/components/shared/PhoneActions';
 import { LogCommunicationSheet } from './LogCommunicationSheet';
 import { crmApi, LEAD_TRANSITIONS, SOURCE_LABELS, type Lead, type LeadSource, type QuoteItem } from '@/lib/api/crm';
 import { qk } from '@/lib/query/keys';
 import { ApiError } from '@/lib/api/client';
 import { formatDate } from '@/lib/format/date';
-import { formatPhone } from '@/lib/format/phone';
 
 const SOURCE_BADGE_STYLE: Record<LeadSource, string> = {
   walk_in:  'bg-[var(--accent)]/10 text-[var(--accent)]',
@@ -239,13 +239,11 @@ export function LeadCard({ lead }: LeadCardProps) {
             </div>
           </Can>
         </div>
-        <a
-          href={`tel:${lead.phone}`}
-          className="flex items-center gap-1 text-xs text-[var(--accent)] hover:underline mt-0.5"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <Phone className="h-3 w-3" />{formatPhone(lead.phone)}
-        </a>
+        <PhoneActions
+          phone={lead.phone}
+          onLogCall={() => setLogCommOpen(true)}
+          className="mt-0.5"
+        />
       </div>
 
       {/* Meta */}
