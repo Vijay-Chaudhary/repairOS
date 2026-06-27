@@ -37,6 +37,7 @@ apps/core/tests/test_money_serialization.py::TestReportDecimalStrings::test_reve
 apps/core/tests/test_notifications.py::TestSendEmail::test_valid_address_dispatches
 apps/core/tests/test_notifications.py::TestSendWhatsApp::test_opted_in_customer_dispatches
 apps/core/tests/test_shop_isolation.py::TestFinanceDetailIsolation::test_shop_a_user_gets_404_on_shop_b_petty_cash
+apps/core/tests/test_shop_isolation.py::TestFinanceDetailIsolation::test_shop_a_user_can_access_own_petty_cash
 apps/reports/tests/test_export_pipeline.py::TestExportRequest::test_csv_export_response_has_job_id
 apps/reports/tests/test_export_pipeline.py::TestExportRequest::test_csv_export_returns_202
 apps/reports/tests/test_export_pipeline.py::TestExportRequest::test_export_filters_stored_on_job
