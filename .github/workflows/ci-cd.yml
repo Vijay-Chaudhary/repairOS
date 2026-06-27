@@ -28,6 +28,9 @@ jobs:
     env:
       SECRET_KEY: ci-insecure-test-secret-key-not-for-production
       MASTER_DATABASE_URL: "sqlite://:memory:"
+      # Throwaway Fernet key (32 url-safe base64 bytes) so encrypted-field tests
+      # (HR, procurement, tenant provisioning) can run in CI. Not a real secret.
+      TENANT_CRED_ENCRYPTION_KEY: "STuYVoBE7R1taq32t1q26-jCPlqDpPlvUdbPcNPh7C0="
     defaults:
       run:
         working-directory: backend
