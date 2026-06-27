@@ -54,7 +54,9 @@ export interface Customer {
 export interface CommunicationLog {
   id: string;
   customer_id?: string | null;
+  customer_name?: string | null;
   lead_id?: string | null;
+  lead_name?: string | null;
   type: CommType;
   direction?: CommDirection | null;
   summary: string;
@@ -302,7 +304,16 @@ export const crmApi = {
     apiGet<Task>(`/crm/tasks/${id}/`),
 
   // Communications
-  listCommunications: (filters: { customer_id?: string; lead_id?: string; cursor?: string } = {}) =>
+  listCommunications: (
+    filters: {
+      customer_id?: string;
+      lead_id?: string;
+      type?: CommType;
+      date_from?: string;
+      date_to?: string;
+      cursor?: string;
+    } = {},
+  ) =>
     apiGet<{ items: CommunicationLog[]; meta: PageMeta }>('/crm/communications/', filters as Record<string, string | undefined>),
 
   // Segments
