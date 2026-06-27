@@ -71,6 +71,13 @@ describe('NAV_ITEMS — CRM group', () => {
     expect(s!.permission).toBe('crm.segments.manage');
   });
 
+  it('surfaces Campaigns gated on crm.segments.manage', () => {
+    const c = crmGroup().children.find((x) => x.href === '/crm/campaigns');
+    expect(c).toBeDefined();
+    expect(c!.label).toBe('Campaigns');
+    expect(c!.permission).toBe('crm.segments.manage');
+  });
+
   it('keeps Customers and Leads', () => {
     const hrefs = crmGroup().children.map((c) => c.href);
     expect(hrefs).toContain('/customers');

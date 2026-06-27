@@ -6,6 +6,7 @@ from rest_framework import serializers
 from core.models import Shop
 
 from .models import (
+    Campaign,
     CommunicationLog,
     Customer,
     CustomerSegment,
@@ -264,6 +265,32 @@ class CustomerSegmentMemberSerializer(serializers.ModelSerializer):
 
 class BulkWhatsAppSerializer(serializers.Serializer):
     template_name = serializers.CharField(max_length=100)
+    variables = serializers.DictField(child=serializers.CharField(), required=False, default=dict)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Campaign
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class CampaignSerializer(serializers.ModelSerializer):
+    segment_name = serializers.CharField(source="segment.name", read_only=True)
+    created_by_name = serializers.CharField(source="created_by.full_name", read_only=True, default="")
+
+    class Meta:
+        model = Campaign
+        fields = [
+            "id", "name", "segment", "segment_name", "template", "status",
+            "recipient_count", "excluded_optout_count", "sent_at",
+            "created_by", "created_by_name", "created_at",
+        ]
+        read_only_fields = fields
+
+
+class CampaignCreateSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=200)
+    segment_id = serializers.UUIDField()
+    template = serializers.CharField(max_length=100)
     variables = serializers.DictField(child=serializers.CharField(), required=False, default=dict)
 
 

@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Wrench, Users, ShoppingCart, FileText,
   Package, ShoppingBag, CreditCard, TrendingUp, Settings,
   Building, BarChart3, DollarSign, Menu, X, ChevronDown,
-  Bell, Search, LogOut, User, UserCheck, Boxes, Receipt, ClipboardList, ListChecks, Filter,
+  Bell, Search, LogOut, User, UserCheck, Boxes, Receipt, ClipboardList, ListChecks, Filter, Send,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
@@ -65,6 +65,7 @@ export const NAV_ITEMS: NavEntry[] = [
     { type: 'leaf', label: 'Leads',     href: '/leads',             icon: Users,           permission: 'crm.leads.view' },
     { type: 'leaf', label: 'Tasks',     href: '/tasks',             icon: ListChecks,      permission: 'crm.tasks.manage' },
     { type: 'leaf', label: 'Segments',  href: '/crm/segments',      icon: Filter,          permission: 'crm.segments.manage' },
+    { type: 'leaf', label: 'Campaigns', href: '/crm/campaigns',     icon: Send,            permission: 'crm.segments.manage' },
   ]},
   { type: 'leaf', label: 'POS',  href: '/pos', icon: ShoppingCart, permission: 'pos.counter_sale.create' },
   { type: 'leaf', label: 'AMC',  href: '/amc', icon: Building,     permission: 'amc.contracts.view' },

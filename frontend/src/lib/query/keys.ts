@@ -37,6 +37,7 @@ export const qk = {
   tasks:           listKey('tasks'),
   segments:        () => ['segments'] as const,
   segmentMembers:  (id: string) => ['segment-members', id] as const,
+  campaigns:       listKey('campaigns'),
 
   // POS
   posSales: listKey('pos-sales'),

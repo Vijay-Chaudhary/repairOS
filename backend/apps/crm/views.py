@@ -23,6 +23,7 @@ from core.pagination import RepairOSCursorPagination, RepairOSPageNumberPaginati
 
 from . import services
 from .models import (
+    Campaign,
     CommunicationLog,
     Customer,
     CustomerSegment,
@@ -32,6 +33,8 @@ from .models import (
 )
 from .serializers import (
     BulkWhatsAppSerializer,
+    CampaignCreateSerializer,
+    CampaignSerializer,
     CommunicationLogSerializer,
     CrmOverviewSerializer,
     CustomerMergeSerializer,
@@ -479,6 +482,47 @@ class CustomerSegmentViewSet(ModelViewSet):
             {"queued": len(customer_ids), "excluded_optout": excluded_count},
             status=status.HTTP_202_ACCEPTED,
         )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Campaign viewset  (bulk-WhatsApp history)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class CampaignViewSet(ListModelMixin, RetrieveModelMixin, CreateModelMixin, GenericViewSet):
+    """
+    GET  /campaigns/        — history (newest first)
+    GET  /campaigns/{id}/   — detail
+    POST /campaigns/        — create + trigger send (manual; no scheduling)
+    """
+
+    serializer_class = CampaignSerializer
+    pagination_class = RepairOSPageNumberPagination
+
+    def get_permissions(self):
+        return [require_permission("crm.segments.manage")()]
+
+    def get_queryset(self):
+        return Campaign.objects.select_related("segment", "created_by").order_by("-created_at")
+
+    def create(self, request, *args, **kwargs):
+        serializer = CampaignCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            segment = CustomerSegment.objects.get(pk=serializer.validated_data["segment_id"])
+        except CustomerSegment.DoesNotExist:
+            from rest_framework.exceptions import NotFound
+            raise NotFound("Segment not found.")
+
+        campaign = services.create_campaign(
+            segment=segment,
+            name=serializer.validated_data["name"],
+            template=serializer.validated_data["template"],
+            variables=serializer.validated_data.get("variables", {}),
+            user=request.user,
+        )
+        return Response(CampaignSerializer(campaign).data, status=status.HTTP_201_CREATED)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

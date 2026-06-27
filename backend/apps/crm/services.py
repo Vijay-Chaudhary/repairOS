@@ -12,6 +12,7 @@ from authentication.models import AuditLog
 from core.notifications import send_whatsapp
 
 from .models import (
+    Campaign,
     CommunicationLog,
     Customer,
     CustomerSegment,
@@ -335,6 +336,41 @@ def segment_recipient_ids(segment: CustomerSegment):
             members.filter(customer__whatsapp_optout=False).values_list("customer_id", flat=True)
         )
     return total, ids
+
+
+def create_campaign(segment: CustomerSegment, name: str, template: str, variables: dict, user) -> Campaign:
+    """
+    Record a bulk-WhatsApp campaign and fire the (manual) send.
+
+    Recipient/opt-out counts come from the same `segment_recipient_ids` used by
+    the pre-send preview, so the persisted numbers match what the user saw.
+    The send itself is fire-and-forget via Celery, so the campaign is recorded
+    as SENT once queued.
+    """
+    total, customer_ids = segment_recipient_ids(segment)
+    excluded = total - len(customer_ids)
+
+    campaign = Campaign.objects.create(
+        name=name,
+        segment=segment,
+        template=template,
+        status=Campaign.Status.SENT,
+        recipient_count=len(customer_ids),
+        excluded_optout_count=excluded,
+        sent_at=timezone.now(),
+        created_by=user,
+    )
+
+    if customer_ids:
+        from .tasks import send_bulk_whatsapp_segment
+        send_bulk_whatsapp_segment.delay(
+            customer_ids=[str(cid) for cid in customer_ids],
+            template_name=template,
+            variables=variables or {},
+        )
+
+    _write_audit(user.id, AuditLog.Action.CREATE, "Campaign", campaign.id)
+    return campaign
 
 
 # ──────────────────────────────────────────────────────────────────────────────

@@ -116,6 +116,23 @@ export interface SegmentMember {
   added_at: string;
 }
 
+export type CampaignStatus = 'draft' | 'sending' | 'sent' | 'failed';
+
+export interface Campaign {
+  id: string;
+  name: string;
+  segment: string;
+  segment_name?: string;
+  template: string;
+  status: CampaignStatus;
+  recipient_count: number;
+  excluded_optout_count: number;
+  sent_at?: string | null;
+  created_by: string;
+  created_by_name?: string;
+  created_at: string;
+}
+
 export interface CrmOverview {
   kpis: {
     new_leads: number;
@@ -339,6 +356,13 @@ export const crmApi = {
     apiGet<{ total: number; recipients: number; excluded_optout: number }>(
       `/crm/segments/${id}/recipient-count/`,
     ),
+
+  // Campaigns (bulk-WhatsApp history)
+  listCampaigns: (filters: { page?: number } = {}) =>
+    apiGet<{ items: Campaign[]; meta: PageMeta }>('/crm/campaigns/', filters as Record<string, string | number | undefined>),
+
+  createCampaign: (body: { name: string; segment_id: string; template: string; variables?: Record<string, string> }) =>
+    apiPost<Campaign>('/crm/campaigns/', body),
 
   // Lead status
   changeLeadStatus: (id: string, toStatus: LeadStatus, reason?: string) =>

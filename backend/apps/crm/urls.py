@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    CampaignViewSet,
     CommunicationLogViewSet,
     CrmOverviewView,
     CustomerSegmentViewSet,
@@ -16,6 +17,7 @@ router.register("customers", CustomerViewSet, basename="customers")
 router.register("communications", CommunicationLogViewSet, basename="communications")
 router.register("tasks", FollowUpTaskViewSet, basename="tasks")
 router.register("segments", CustomerSegmentViewSet, basename="segments")
+router.register("campaigns", CampaignViewSet, basename="campaigns")
 
 urlpatterns = [
     path("overview/", CrmOverviewView.as_view(), name="crm-overview"),
