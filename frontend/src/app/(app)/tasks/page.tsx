@@ -3,7 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, CheckCircle2, Clock, AlertCircle, Filter } from 'lucide-react';
+import {
+  Plus, CheckCircle2, Clock, AlertCircle, Filter, List, CalendarDays,
+} from 'lucide-react';
+import {
+  addMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, format,
+} from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -11,11 +16,14 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { PaginationBar } from '@/components/shared/PaginationBar';
 import { Can } from '@/components/shared/Can';
 import { TaskComposer } from '@/components/crm/TaskComposer';
+import { TaskCalendar } from '@/components/crm/TaskCalendar';
 import { crmApi, TASK_PRIORITY_LABELS, type Task, type TaskStatus, type TaskPriority } from '@/lib/api/crm';
 import { qk } from '@/lib/query/keys';
 import { ApiError } from '@/lib/api/client';
 import { formatDate, formatTime } from '@/lib/format/date';
 import { cn } from '@/lib/utils';
+
+type TaskView = 'list' | 'calendar';
 
 type StatusFilter = TaskStatus | 'all';
 type PriorityFilter = TaskPriority | 'all';
@@ -30,24 +38,47 @@ const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
 
 export default function TasksPage() {
   const queryClient = useQueryClient();
+  const [view, setView] = useState<TaskView>('list');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
   const [composerOpen, setComposerOpen] = useState(false);
+  const [composerDefaultDate, setComposerDefaultDate] = useState<string | undefined>(undefined);
   const [listPage, setListPage] = useState(1);
+  const [month, setMonth] = useState(() => startOfMonth(new Date()));
 
   useEffect(() => { setListPage(1); }, [statusFilter, priorityFilter]);
 
-  const filters = {
+  const sharedFilters = {
     status: statusFilter === 'all' ? undefined : statusFilter,
     priority: priorityFilter === 'all' ? undefined : priorityFilter,
-    page: listPage,
   };
 
+  const listFilters = { ...sharedFilters, page: listPage };
   const { data, isLoading } = useQuery({
-    queryKey: qk.tasks(filters),
-    queryFn: () => crmApi.listTasks(filters),
+    queryKey: qk.tasks(listFilters),
+    queryFn: () => crmApi.listTasks(listFilters),
+    enabled: view === 'list',
     staleTime: 30_000,
   });
+
+  // Calendar pulls the whole visible grid (incl. adjacent-month spill days) in one page.
+  const calFilters = {
+    ...sharedFilters,
+    due_from: format(startOfWeek(startOfMonth(month), { weekStartsOn: 0 }), 'yyyy-MM-dd'),
+    due_to: format(endOfWeek(endOfMonth(month), { weekStartsOn: 0 }), 'yyyy-MM-dd'),
+    page_size: 200,
+  };
+  const calQuery = useQuery({
+    queryKey: qk.tasks(calFilters),
+    queryFn: () => crmApi.listTasks(calFilters),
+    enabled: view === 'calendar',
+    staleTime: 30_000,
+  });
+
+  const openComposer = (date?: string) => {
+    setComposerDefaultDate(date);
+    setComposerOpen(true);
+  };
 
   const completeMutation = useMutation({
     mutationFn: (id: string) => crmApi.completeTask(id),
@@ -65,12 +96,35 @@ export default function TasksPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-h1 text-[var(--text)]">Tasks</h1>
-        <Can permission="crm.tasks.manage">
-          <Button onClick={() => setComposerOpen(true)}>
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">New task</span>
-          </Button>
-        </Can>
+        <div className="flex items-center gap-2">
+          {/* List ↔ calendar toggle */}
+          <div className="flex rounded-md border border-[var(--border)] overflow-hidden">
+            <button
+              onClick={() => setView('list')}
+              aria-label="List view"
+              aria-pressed={view === 'list'}
+              className={cn('h-9 w-9 flex items-center justify-center transition-colors',
+                view === 'list' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--surface)] text-[var(--text-muted)] hover:bg-[var(--surface-2)]')}
+            >
+              <List className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setView('calendar')}
+              aria-label="Calendar view"
+              aria-pressed={view === 'calendar'}
+              className={cn('h-9 w-9 flex items-center justify-center transition-colors',
+                view === 'calendar' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--surface)] text-[var(--text-muted)] hover:bg-[var(--surface-2)]')}
+            >
+              <CalendarDays className="h-4 w-4" />
+            </button>
+          </div>
+          <Can permission="crm.tasks.manage">
+            <Button onClick={() => openComposer()}>
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">New task</span>
+            </Button>
+          </Can>
+        </div>
       </div>
 
       {/* Filters */}
@@ -106,42 +160,57 @@ export default function TasksPage() {
         </Select>
       </div>
 
-      {/* Task list */}
-      {isLoading ? (
-        <div className="space-y-2">
-          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-16 rounded-lg" />)}
-        </div>
-      ) : tasks.length === 0 ? (
-        <EmptyState
-          icon={CheckCircle2}
-          title="No tasks"
-          description={statusFilter === 'pending' ? 'All clear — no pending tasks.' : 'No tasks matching this filter.'}
-          action={statusFilter === 'pending' ? { label: 'Create task', onClick: () => setComposerOpen(true) } : undefined}
+      {view === 'calendar' ? (
+        <TaskCalendar
+          month={month}
+          tasks={calQuery.data?.items ?? []}
+          loading={calQuery.isLoading}
+          onPrevMonth={() => setMonth((m) => addMonths(m, -1))}
+          onNextMonth={() => setMonth((m) => addMonths(m, 1))}
+          onToday={() => setMonth(startOfMonth(new Date()))}
+          onDayClick={(iso) => openComposer(iso)}
+          onTaskClick={(t) => openComposer(t.due_date?.slice(0, 10))}
         />
       ) : (
-        <div className="space-y-2">
-          {tasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              onComplete={() => completeMutation.mutate(task.id)}
-              completing={completeMutation.isPending}
+        <>
+          {/* Task list */}
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-16 rounded-lg" />)}
+            </div>
+          ) : tasks.length === 0 ? (
+            <EmptyState
+              icon={CheckCircle2}
+              title="No tasks"
+              description={statusFilter === 'pending' ? 'All clear — no pending tasks.' : 'No tasks matching this filter.'}
+              action={statusFilter === 'pending' ? { label: 'Create task', onClick: () => openComposer() } : undefined}
             />
-          ))}
-        </div>
+          ) : (
+            <div className="space-y-2">
+              {tasks.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  onComplete={() => completeMutation.mutate(task.id)}
+                  completing={completeMutation.isPending}
+                />
+              ))}
+            </div>
+          )}
+
+          {data?.meta?.total_pages !== undefined && data.meta.total_pages > 1 && (
+            <PaginationBar
+              page={listPage}
+              totalPages={data.meta.total_pages}
+              totalCount={data.meta.count}
+              loading={isLoading}
+              onPageChange={setListPage}
+            />
+          )}
+        </>
       )}
 
-      {data?.meta?.total_pages !== undefined && data.meta.total_pages > 1 && (
-        <PaginationBar
-          page={listPage}
-          totalPages={data.meta.total_pages}
-          totalCount={data.meta.count}
-          loading={isLoading}
-          onPageChange={setListPage}
-        />
-      )}
-
-      <TaskComposer open={composerOpen} onOpenChange={setComposerOpen} />
+      <TaskComposer open={composerOpen} onOpenChange={setComposerOpen} defaultDueDate={composerDefaultDate} />
     </div>
   );
 }
