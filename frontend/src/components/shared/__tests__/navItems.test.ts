@@ -71,6 +71,20 @@ describe('NAV_ITEMS — CRM group', () => {
     expect(s!.permission).toBe('crm.segments.manage');
   });
 
+  it('surfaces Quotes gated on crm.leads.view', () => {
+    const q = crmGroup().children.find((c) => c.href === '/crm/quotes');
+    expect(q).toBeDefined();
+    expect(q!.label).toBe('Quotes');
+    expect(q!.permission).toBe('crm.leads.view');
+  });
+
+  it('surfaces Activity gated on crm.communications.log', () => {
+    const a = crmGroup().children.find((c) => c.href === '/crm/activity');
+    expect(a).toBeDefined();
+    expect(a!.label).toBe('Activity');
+    expect(a!.permission).toBe('crm.communications.log');
+  });
+
   it('keeps Customers and Leads', () => {
     const hrefs = crmGroup().children.map((c) => c.href);
     expect(hrefs).toContain('/customers');
