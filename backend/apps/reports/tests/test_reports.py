@@ -58,8 +58,9 @@ def admin_user(db):
     )
     role = Role.objects.create(name="ReportAdmin", is_system_role=True)
     all_perms = [
-        "reports.billing.view", "reports.repair.view", "reports.crm.view",
-        "reports.hr.view", "reports.erp.view", "reports.amc.view",
+        "reports.revenue.view", "reports.repair.view", "reports.crm.view",
+        "reports.hr.view", "reports.inventory.view", "reports.amc.view",
+        "reports.gst.view", "reports.pl.view",
     ]
     for code in all_perms:
         perm, _ = Permission.objects.get_or_create(codename=code, defaults={"label": code})
@@ -75,8 +76,9 @@ def rpt_client(db, admin_user, shop):
     refresh = RefreshToken.for_user(admin_user)
     access = refresh.access_token
     access["permissions"] = [
-        "reports.billing.view", "reports.repair.view", "reports.crm.view",
-        "reports.hr.view", "reports.erp.view", "reports.amc.view",
+        "reports.revenue.view", "reports.repair.view", "reports.crm.view",
+        "reports.hr.view", "reports.inventory.view", "reports.amc.view",
+        "reports.gst.view", "reports.pl.view",
     ]
     access["shop_ids"] = [str(shop.id)]
     client = APIClient()
