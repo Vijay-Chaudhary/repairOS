@@ -1,0 +1,15 @@
+# Keep the build context small — node_modules and .next are rebuilt in-image.
+.git
+.gitignore
+node_modules/
+.next/
+out/
+coverage/
+.env
+.env.*
+!.env.example
+npm-debug.log*
+.vscode/
+.idea/
+Dockerfile
+.dockerignore

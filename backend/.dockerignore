@@ -1,0 +1,25 @@
+# Keep the build context small and secrets out of the image.
+.git
+.gitignore
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+media/
+staticfiles/
+*.sqlite3
+*.log
+.vscode/
+.idea/
+Dockerfile
+.dockerignore

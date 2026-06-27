@@ -38,8 +38,20 @@ RUN pip install -r requirements/base.txt
 
 COPY . .
 
-RUN python manage.py collectstatic --noinput
+# NOTE: collectstatic runs at container start (entrypoint.production.sh), not at
+# build time — production settings require ALLOWED_HOSTS et al. from the
+# environment, which is not available during `docker build`.
+
+# Run as a non-root user (least privilege). Pre-create the writable dirs and own
+# them so the mounted static_files volume inherits the right ownership on first
+# creation; entrypoint runs collectstatic into /app/staticfiles as this user.
+RUN groupadd -r appuser && useradd -r -g appuser appuser \
+    && mkdir -p /app/staticfiles /app/media \
+    && chown -R appuser:appuser /app
+USER appuser
 
 EXPOSE 8000
 
+# Default command: the backend service overrides this with the prod entrypoint
+# (migrate + collectstatic + daphne); celery services override it entirely.
 CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]

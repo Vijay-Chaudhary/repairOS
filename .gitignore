@@ -28,6 +28,10 @@ htmlcov/
 .env.local
 .env.*.local
 
+# Deploy state / backups (server-side, never committed)
+.deployed_tag
+backups/
+
 # Node / Next.js
 node_modules/
 .next/

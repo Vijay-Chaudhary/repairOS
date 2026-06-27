@@ -10,6 +10,9 @@ vi.mock('@/lib/stores/authStore', () => ({
 function mockAuth({
   hasPermission = (_p: string) => false,
   hasAnyPermission = (_ps: string[]) => false,
+}: {
+  hasPermission?: (p: string) => boolean;
+  hasAnyPermission?: (ps: string[]) => boolean;
 } = {}) {
   vi.mocked(authStoreModule.useAuthStore).mockReturnValue({
     hasPermission,
