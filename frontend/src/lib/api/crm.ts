@@ -92,6 +92,9 @@ export interface QuoteItem {
 export interface LeadQuote {
   id: string;
   quote_number: string;
+  lead_id?: string;
+  lead_name?: string;
+  lead_status?: LeadStatus;
   items: QuoteItem[];
   total_amount: string;
   valid_until: string;
@@ -361,6 +364,15 @@ export const crmApi = {
 
   listLeadQuotes: (id: string) =>
     apiGet<LeadQuote[]>(`/crm/leads/${id}/quotes/`),
+
+  // Cross-lead quotes worklist
+  listQuotes: (
+    filters: { lead_status?: LeadStatus; date_from?: string; date_to?: string; page?: number } = {},
+  ) =>
+    apiGet<{ items: LeadQuote[]; meta: PageMeta }>(
+      '/crm/quotes/',
+      filters as Record<string, string | number | undefined>,
+    ),
 };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
