@@ -29,6 +29,7 @@ from .models import (
     CustomerSegmentMember,
     FollowUpTask,
     Lead,
+    LeadQuote,
 )
 from .serializers import (
     BulkWhatsAppSerializer,
@@ -189,6 +190,50 @@ class LeadViewSet(ShopScopedMixin, ModelViewSet):
         lead = self.get_object()
         quotes = lead.quotes.select_related("sent_by").order_by("-created_at")
         return Response(LeadQuoteSerializer(quotes, many=True).data)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Lead quote worklist viewset
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class LeadQuoteViewSet(ListModelMixin, GenericViewSet):
+    """
+    GET /quotes/ — cross-lead worklist of quotes sent to prospects.
+    Read-only; per-lead create lives at /leads/{id}/quote/.
+    """
+
+    serializer_class = LeadQuoteSerializer
+    pagination_class = RepairOSPageNumberPagination
+
+    def get_permissions(self):
+        return [require_permission("crm.leads.view")()]
+
+    def get_queryset(self):
+        qs = LeadQuote.objects.select_related("lead", "sent_by")
+
+        # Shop scoping — quotes have no direct shop FK, so scope through the
+        # lead's shop. Mirrors ShopScopedMixin semantics.
+        token = getattr(self.request, "auth", None)
+        if token is not None and not (token.get("is_tenant_wide") or token.get("is_platform_admin")):
+            shop_ids = token.get("shop_ids", [])
+            if shop_ids:
+                qs = qs.filter(lead__shop_id__in=shop_ids)
+            else:
+                qs = qs.none()
+
+        lead_status = self.request.query_params.get("lead_status")
+        if lead_status:
+            qs = qs.filter(lead__status=lead_status)
+
+        date_from = self.request.query_params.get("date_from")
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        date_to = self.request.query_params.get("date_to")
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        return qs.order_by("-created_at")
 
 
 # ──────────────────────────────────────────────────────────────────────────────

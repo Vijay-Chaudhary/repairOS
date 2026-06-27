@@ -166,11 +166,16 @@ class QuoteItemSerializer(serializers.Serializer):
 class LeadQuoteSerializer(serializers.ModelSerializer):
     items = QuoteItemSerializer(many=True)
     sent_by_name = serializers.CharField(source="sent_by.full_name", read_only=True)
+    # Cross-lead worklist: lead identity so rows can show + deep-link the lead.
+    lead_id = serializers.UUIDField(source="lead.id", read_only=True)
+    lead_name = serializers.CharField(source="lead.name", read_only=True)
+    lead_status = serializers.CharField(source="lead.status", read_only=True)
 
     class Meta:
         model = LeadQuote
         fields = [
-            "id", "quote_number", "items", "total_amount", "valid_until",
+            "id", "quote_number", "lead_id", "lead_name", "lead_status",
+            "items", "total_amount", "valid_until",
             "notes", "sent_via_whatsapp", "sent_by", "sent_by_name", "created_at",
         ]
         read_only_fields = ["id", "quote_number", "sent_via_whatsapp", "sent_by", "created_at"]

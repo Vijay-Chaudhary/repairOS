@@ -63,6 +63,7 @@ export const NAV_ITEMS: NavEntry[] = [
     { type: 'leaf', label: 'Overview',  href: '/crm',               icon: LayoutDashboard, permission: 'crm.customers.view' },
     { type: 'leaf', label: 'Customers', href: '/customers',         icon: Users,           permission: 'crm.customers.view' },
     { type: 'leaf', label: 'Leads',     href: '/leads',             icon: Users,           permission: 'crm.leads.view' },
+    { type: 'leaf', label: 'Quotes',    href: '/crm/quotes',        icon: FileText,        permission: 'crm.leads.view' },
     { type: 'leaf', label: 'Tasks',     href: '/tasks',             icon: ListChecks,      permission: 'crm.tasks.manage' },
     { type: 'leaf', label: 'Segments',  href: '/crm/segments',      icon: Filter,          permission: 'crm.segments.manage' },
   ]},
