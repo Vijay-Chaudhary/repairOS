@@ -3,20 +3,20 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search, Phone } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DataTable, type Column } from '@/components/shared/DataTable';
 import { Money } from '@/components/shared/Money';
 import { Can } from '@/components/shared/Can';
+import { PhoneActions } from '@/components/shared/PhoneActions';
 import { CustomerFormDialog } from '@/components/crm/CustomerFormDialog';
 import { crmApi, type Customer, type CustomerType } from '@/lib/api/crm';
 import { qk } from '@/lib/query/keys';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
 import { useDebounce } from '@/lib/hooks/useDebounce';
 import { formatDate } from '@/lib/format/date';
-import { formatPhone } from '@/lib/format/phone';
 import { cn } from '@/lib/utils';
 
 const TYPE_BADGE: Record<CustomerType, string> = {
@@ -35,14 +35,7 @@ const LIST_COLUMNS: Column<Customer>[] = [
     cell: (r) => (
       <div className="flex items-center gap-2 min-w-0">
         <span className="text-body-sm font-medium text-[var(--text)] truncate">{r.name}</span>
-        <a
-        href={`tel:${r.phone}`}
-        className="flex items-center gap-0.5 text-xs text-[var(--accent)] hover:underline shrink-0"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Phone className="h-2.5 w-2.5" />
-        {formatPhone(r.phone)}
-      </a>
+        <PhoneActions phone={r.phone} whatsappOptout={r.whatsapp_optout} muted className="shrink-0" />
       </div>
     ),
   },

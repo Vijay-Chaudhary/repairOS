@@ -119,11 +119,15 @@ class CommunicationLogSerializer(serializers.ModelSerializer):
     # EntityTimeline aliases: `description` maps to `summary`, `actor` maps to actor name
     description = serializers.CharField(source="summary", read_only=True)
     actor = serializers.CharField(source="logged_by.full_name", read_only=True, default="")
+    # Activity feed: display names so rows can deep-link to the related customer/lead
+    customer_name = serializers.CharField(source="customer.name", read_only=True, default=None)
+    lead_name = serializers.CharField(source="lead.name", read_only=True, default=None)
 
     class Meta:
         model = CommunicationLog
         fields = [
-            "id", "customer", "customer_id", "lead", "lead_id", "type", "direction",
+            "id", "customer", "customer_id", "customer_name",
+            "lead", "lead_id", "lead_name", "type", "direction",
             "summary", "description", "duration_minutes",
             "logged_by", "logged_by_name", "actor", "logged_at",
             "created_at",

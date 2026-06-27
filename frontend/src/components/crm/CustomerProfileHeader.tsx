@@ -1,15 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Phone, Mail, MapPin, Star, MessageSquare, Plus, Edit2 } from 'lucide-react';
+import { Mail, MapPin, Star, MessageSquare, Plus, Edit2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Can } from '@/components/shared/Can';
 import { Money } from '@/components/shared/Money';
+import { PhoneActions } from '@/components/shared/PhoneActions';
 import { TagInput } from './TagInput';
 import { LogCommunicationSheet } from './LogCommunicationSheet';
 import { TaskComposer } from './TaskComposer';
 import type { Customer } from '@/lib/api/crm';
-import { formatPhone } from '@/lib/format/phone';
 import { formatDate } from '@/lib/format/date';
 import { cn } from '@/lib/utils';
 
@@ -44,28 +44,13 @@ export function CustomerProfileHeader({ customer, onEdit }: CustomerProfileHeade
           </div>
 
           <div className="mt-1 space-y-0.5">
-            <a
-              href={`tel:${customer.phone}`}
-              className="flex items-center gap-1.5 text-body-sm text-[var(--accent)] hover:underline"
-            >
-              <Phone className="h-3.5 w-3.5 shrink-0" />
-              {formatPhone(customer.phone)}
-              {!customer.whatsapp_optout && (
-                <a
-                  href={`https://wa.me/${customer.phone.replace(/\D/g, '')}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="ml-1 text-xs text-[var(--success)] hover:underline"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  WhatsApp
-                </a>
-              )}
-            </a>
+            <PhoneActions
+              phone={customer.phone}
+              whatsappOptout={customer.whatsapp_optout}
+              onLogCall={() => setLogCommOpen(true)}
+            />
             {customer.alternate_phone && (
-              <a href={`tel:${customer.alternate_phone}`} className="flex items-center gap-1.5 text-body-sm text-[var(--text-muted)] hover:text-[var(--accent)]">
-                <Phone className="h-3.5 w-3.5 shrink-0" />{formatPhone(customer.alternate_phone)}
-              </a>
+              <PhoneActions phone={customer.alternate_phone} whatsappOptout muted />
             )}
             {customer.email && (
               <p className="flex items-center gap-1.5 text-body-sm text-[var(--text-muted)]">
