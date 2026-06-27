@@ -1,12 +1,14 @@
 name: CI/CD
 
 # Test on every push & PR. Build images and deploy to the Hostinger VPS only
-# when commits land on master and the test gate is green.
+# on a MANUAL run (Actions → "Run workflow"), and only when the test gate is
+# green — there is intentionally no automatic production deploy on push to master.
 on:
   push:
     branches: [master]
   pull_request:
     branches: [master]
+  workflow_dispatch:
 
 concurrency:
   group: ci-cd-${{ github.ref }}
@@ -88,7 +90,8 @@ jobs:
   build-and-push:
     name: Build & push images
     needs: [backend-tests, frontend-tests]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # Manual only — runs on workflow_dispatch from master, never automatically on push.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     outputs:
       backend_image: ${{ steps.meta.outputs.backend_image }}
@@ -147,7 +150,8 @@ jobs:
   deploy:
     name: Deploy to Hostinger VPS
     needs: build-and-push
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # Manual only — never deploys automatically on push to master.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment: production
     steps:
