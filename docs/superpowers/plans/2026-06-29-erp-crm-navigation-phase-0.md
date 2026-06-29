@@ -701,7 +701,7 @@ git commit -m "feat(perms): seed Phase-0 nav permission slugs (deals, contacts, 
 
 New slugs are added to already-provisioned tenant DBs by re-running the existing idempotent seed via `backfill_role_permissions`. New tenants get them automatically at provisioning. This task is a runbook step plus a verification.
 
-- [ ] **Step 1: Run the backfill against all active tenants**
+- [x] **Step 1: Run the backfill against all active tenants**
 
 Run (from the deployment environment, per the command's docstring):
 ```bash
@@ -711,16 +711,29 @@ Expected output: one `✓ <slug>` line per active tenant, ending with `Backfill 
 
 (For a single tenant during testing: `… backfill_role_permissions --slug <slug>`.)
 
-- [ ] **Step 2: Verify a tenant received the new slugs**
+- [x] **Step 2: Verify a tenant received the new slugs**
+
+> Correction: the tenant DB connection must be registered in `connections.databases`
+> before `set_tenant_db_alias` resolves (the router does not auto-register dynamic tenant
+> aliases in a bare shell). Mirror the registration block from `backfill_role_permissions`:
 
 Run (from the deployment environment):
 ```bash
 docker compose exec backend python manage.py shell -c "
+from django.db import connections
 from core.context import set_tenant_db_alias
 from master.models import TenantDatabase
 from authentication.models import Permission
 tdb = TenantDatabase.objects.using('default').filter(is_active=True).select_related('tenant').first()
-set_tenant_db_alias(f'tenant_{tdb.tenant.slug}')
+alias = f'tenant_{tdb.tenant.slug}'
+if alias not in connections.databases:
+    connections.databases[alias] = {
+        'ENGINE':'django.db.backends.postgresql','NAME':tdb.db_name,'HOST':tdb.db_host,
+        'PORT':str(tdb.db_port),'USER':tdb.db_user,'PASSWORD':tdb.decrypt_password(),
+        'CONN_MAX_AGE':0,'CONN_HEALTH_CHECKS':False,'OPTIONS':{},'TIME_ZONE':None,
+        'ATOMIC_REQUESTS':False,'AUTOCOMMIT':True,'TEST':{},
+    }
+set_tenant_db_alias(alias)
 print('audit seeded:', Permission.objects.filter(codename='settings.audit.view').exists())
 print('deals seeded:', Permission.objects.filter(codename='crm.deals.view').exists())
 set_tenant_db_alias(None)
@@ -728,36 +741,67 @@ set_tenant_db_alias(None)
 ```
 Expected: `audit seeded: True` and `deals seeded: True`.
 
+> Verified 2026-06-29 on tenant `testshop123`: audit/deals/accounts.journal.post all
+> seeded; Tenant Admin granted all three checked slugs. Backfill ran clean across all
+> 16 active tenants.
+
 > This step requires a running environment with provisioned tenants. If running in CI/local without tenants, skip and note it — there is no code to commit for this task.
 
 ---
 
 ## Final Verification
 
-- [ ] **Step 1: Frontend — full test suite + type-check + lint**
+- [x] **Step 1: Frontend — full test suite + type-check + lint**
 
 Run (from `frontend/`):
 ```bash
 npx tsc --noEmit
 npm run test
-npm run lint
+npm run lint --no-cache   # --no-cache: .next is root-owned by the dev container
 ```
 Expected: tsc exit 0; all Vitest tests PASS; lint clean.
 
-- [ ] **Step 2: Frontend — production build (catches route/SSR issues in the 9 stub pages)**
+> Verified 2026-06-29: tsc exit 0; 122 Vitest tests pass (24 files, incl. 17 navItems);
+> lint clean (`--no-cache` needed because the dev container owns `.next/cache`).
 
-Run (from `frontend/`): `npm run build`
+- [x] **Step 2: Frontend — production build (catches route/SSR issues in the 9 stub pages)**
+
+Run inside the frontend container (it owns `.next`), forcing a production env:
+```bash
+docker compose exec -e NODE_ENV=production frontend sh -c "npm run build"
+```
 Expected: build succeeds; the 9 new routes appear in the route manifest.
 
-- [ ] **Step 3: Backend — seed + auth suites**
+> Verified 2026-06-29: build exit 0; 68/68 static pages generated; all 9 stub routes
+> present (`/audit`, `/billing/{outstanding,credit-notes,refunds}`, `/crm/{deals,contacts}`,
+> `/purchases/returns`, `/repair/{estimates,warranty}`).
+>
+> **Two gotchas surfaced and fixed during this step:**
+> 1. **Pre-existing build blocker (fixed):** `crm/segments/page.tsx` illegally re-exported
+>    helper functions (`buildFilterRules`/`parseFilterRules`) — App Router pages may only
+>    export the default component + reserved fields. The dev server tolerates it, so it went
+>    unnoticed; `next build` rejects it. Extracted the schema + helpers into a sibling
+>    `crm/segments/segment-filters.ts` and re-pointed the page + its test. Unrelated to the
+>    nav work, but `next build` (hence prod deploys) was broken on `master` until this.
+> 2. **Build must run with `NODE_ENV=production`.** The dev container sets
+>    `NODE_ENV=development`; building under it makes React resolve wrong and every page fails
+>    prerender with `Cannot read properties of null (reading 'useContext')`. Passing
+>    `-e NODE_ENV=production` resolves it. (Documenting so the next person doesn't chase a
+>    phantom app-wide SSR bug.)
+
+- [x] **Step 3: Backend — seed + auth suites**
 
 Run (from `backend/`): `python -m pytest apps/master apps/authentication -p no:cacheprovider -o addopts="" -q`
 Expected: PASS.
 
-- [ ] **Step 4: Confirm CI deny-list is unaffected**
+> Verified 2026-06-29: 96 passed.
+
+- [x] **Step 4: Confirm CI deny-list is unaffected**
 
 Run (from `backend/`): `cat ci-known-failures.txt`
 Expected: still comments-only (no new entries needed; this plan adds no known-failing tests).
+
+> Verified 2026-06-29: 0 non-comment lines (comments-only).
 
 ---
 
