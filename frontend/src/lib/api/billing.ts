@@ -86,6 +86,31 @@ export interface PaymentFilters {
   page?: number;
 }
 
+export type AgingBucket = 'current' | '1-30' | '31-60' | '61-90' | '90+';
+
+export interface OutstandingInvoice {
+  id: string;
+  invoice_number: string;
+  status: InvoiceStatus;
+  customer_name: string;
+  customer_phone: string;
+  grand_total: string;
+  amount_paid: string;
+  amount_outstanding: string;
+  due_date: string | null;
+  days_overdue: number;
+  bucket: AgingBucket;
+}
+
+export interface OutstandingReport {
+  summary: {
+    total_outstanding: string;
+    invoice_count: number;
+    buckets: Record<AgingBucket, string>;
+  };
+  results: OutstandingInvoice[];
+}
+
 // ── API ───────────────────────────────────────────────────────────────────────
 
 export const billingApi = {
@@ -97,6 +122,9 @@ export const billingApi = {
 
   getInvoice: (id: string) =>
     apiGet<Invoice>(`/billing/repair-invoices/${id}/`),
+
+  getOutstanding: (params: { shop_id?: string; overdue_days?: number; customer_id?: string } = {}) =>
+    apiGet<OutstandingReport>('/billing/outstanding/', params),
 
   createInvoice: (body: { job_id: string; discount_amount?: number; due_date?: string }) =>
     apiPost<Invoice>('/billing/repair-invoices/', body),

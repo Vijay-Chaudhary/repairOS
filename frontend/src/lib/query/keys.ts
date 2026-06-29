@@ -26,6 +26,9 @@ export const qk = {
   crmOverview:     (shopId: string | null) => ['crm-overview', shopId] as const,
   spareParts:     listKey('spare-parts'),
 
+  // Billing
+  outstanding:    (params?: Record<string, unknown>) => ['billing', 'outstanding', params ?? {}] as const,
+
   // CRM
   customers:       listKey('customers'),
   customer:        (id: string) => ['customer', id] as const,
