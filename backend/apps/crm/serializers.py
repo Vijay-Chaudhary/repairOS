@@ -8,6 +8,7 @@ from core.models import Shop
 from .models import (
     Campaign,
     CommunicationLog,
+    Contact,
     Customer,
     CustomerSegment,
     CustomerSegmentMember,
@@ -337,3 +338,14 @@ class CrmOverviewSerializer(serializers.Serializer):
     pipeline = CrmPipelineCountSerializer(many=True)
     overdue_tasks = CrmOverdueTaskSerializer(many=True)
     unassigned_leads = CrmUnassignedLeadSerializer(many=True)
+
+
+class ContactSerializer(serializers.ModelSerializer):
+    customer_id = serializers.PrimaryKeyRelatedField(source="customer", queryset=Customer.objects.all())
+    customer_name = serializers.CharField(source="customer.name", read_only=True)
+
+    class Meta:
+        model = Contact
+        fields = ["id", "customer_id", "customer_name", "name", "designation",
+                  "email", "phone", "notes", "is_primary", "created_at"]
+        read_only_fields = ["id", "created_at"]
