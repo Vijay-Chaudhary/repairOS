@@ -18,12 +18,16 @@ from authentication.permissions import require_permission
 from core.pagination import RepairOSCursorPagination, RepairOSPageNumberPagination
 
 from . import services
-from .models import Payment, RepairInvoice, TaxRate
+from .models import CreditNote, Payment, RepairInvoice, Refund, TaxRate
 from .serializers import (
+    CreateCreditNoteSerializer,
     CreatePaymentSerializer,
+    CreateRefundSerializer,
     CreateRepairInvoiceSerializer,
+    CreditNoteSerializer,
     OutstandingInvoiceSerializer,
     PaymentSerializer,
+    RefundSerializer,
     RepairInvoiceDetailSerializer,
     RepairInvoiceListSerializer,
     TaxRateSerializer,
@@ -348,3 +352,101 @@ class TaxRateDetailView(APIView):
     def delete(self, request: Request, tax_rate_id) -> Response:
         services.deactivate_tax_rate(self._get(tax_rate_id))
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CreditNoteView(APIView):
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [IsAuthenticated(), require_permission("billing.credit_notes.view")()]
+        return [IsAuthenticated(), require_permission("billing.credit_notes.create")()]
+
+    def get(self, request: Request) -> Response:
+        token = getattr(request, "auth", None)
+        shop_ids = _shop_ids_from_token(token)
+        qs = CreditNote.objects.select_related("invoice__customer", "approved_by").order_by("-created_at")
+        if shop_ids is not None:
+            qs = qs.filter(shop_id__in=shop_ids)
+        if s := request.query_params.get("status"):
+            qs = qs.filter(status=s)
+        if inv := request.query_params.get("invoice_id"):
+            qs = qs.filter(invoice_id=inv)
+        return Response(CreditNoteSerializer(qs, many=True).data)
+
+    def post(self, request: Request) -> Response:
+        ser = CreateCreditNoteSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        token = getattr(request, "auth", None)
+        shop_ids = _shop_ids_from_token(token)
+        qs = RepairInvoice.objects.select_related("shop", "customer")
+        if shop_ids is not None:
+            qs = qs.filter(shop_id__in=shop_ids)
+        try:
+            invoice = qs.get(id=ser.validated_data["invoice_id"])
+        except RepairInvoice.DoesNotExist:
+            return Response({"detail": "Invoice not found."}, status=status.HTTP_404_NOT_FOUND)
+        cn = services.create_credit_note(invoice, ser.validated_data["amount"], ser.validated_data["reason"], request.user)
+        return Response(CreditNoteSerializer(cn).data, status=status.HTTP_201_CREATED)
+
+
+class CreditNoteApproveView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("billing.credit_notes.approve")]
+
+    def post(self, request: Request, credit_note_id) -> Response:
+        from django.shortcuts import get_object_or_404
+        token = getattr(request, "auth", None)
+        shop_ids = _shop_ids_from_token(token)
+        qs = CreditNote.objects.select_related("invoice")
+        if shop_ids is not None:
+            qs = qs.filter(shop_id__in=shop_ids)
+        cn = get_object_or_404(qs, id=credit_note_id)
+        cn = services.approve_credit_note(cn, request.user)
+        return Response(CreditNoteSerializer(cn).data)
+
+
+class RefundView(APIView):
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [IsAuthenticated(), require_permission("billing.refunds.view")()]
+        return [IsAuthenticated(), require_permission("billing.refunds.create")()]
+
+    def get(self, request: Request) -> Response:
+        token = getattr(request, "auth", None)
+        shop_ids = _shop_ids_from_token(token)
+        qs = Refund.objects.select_related("invoice__customer", "approved_by").order_by("-created_at")
+        if shop_ids is not None:
+            qs = qs.filter(shop_id__in=shop_ids)
+        if s := request.query_params.get("status"):
+            qs = qs.filter(status=s)
+        if inv := request.query_params.get("invoice_id"):
+            qs = qs.filter(invoice_id=inv)
+        return Response(RefundSerializer(qs, many=True).data)
+
+    def post(self, request: Request) -> Response:
+        ser = CreateRefundSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        token = getattr(request, "auth", None)
+        shop_ids = _shop_ids_from_token(token)
+        qs = RepairInvoice.objects.select_related("shop", "customer")
+        if shop_ids is not None:
+            qs = qs.filter(shop_id__in=shop_ids)
+        try:
+            invoice = qs.get(id=ser.validated_data["invoice_id"])
+        except RepairInvoice.DoesNotExist:
+            return Response({"detail": "Invoice not found."}, status=status.HTTP_404_NOT_FOUND)
+        refund = services.create_refund(invoice, ser.validated_data["amount"], ser.validated_data["method"], ser.validated_data["reason"], request.user)
+        return Response(RefundSerializer(refund).data, status=status.HTTP_201_CREATED)
+
+
+class RefundApproveView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("billing.refunds.approve")]
+
+    def post(self, request: Request, refund_id) -> Response:
+        from django.shortcuts import get_object_or_404
+        token = getattr(request, "auth", None)
+        shop_ids = _shop_ids_from_token(token)
+        qs = Refund.objects.select_related("invoice")
+        if shop_ids is not None:
+            qs = qs.filter(shop_id__in=shop_ids)
+        refund = get_object_or_404(qs, id=refund_id)
+        refund = services.approve_refund(refund, request.user)
+        return Response(RefundSerializer(refund).data)

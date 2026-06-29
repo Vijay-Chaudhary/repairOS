@@ -479,3 +479,72 @@ def list_tax_rates(*, active_only=False):
 def deactivate_tax_rate(tax_rate) -> None:
     tax_rate.is_active = False
     tax_rate.save()  # auto_now refreshes updated_at
+
+
+def create_credit_note(invoice, amount, reason, user):
+    from core.models import DocumentCounter
+    from .models import CreditNote
+
+    now = timezone.now()
+    seq = DocumentCounter.next(invoice.shop, now.year, DocumentCounter.DocType.CREDIT_NOTE, month=now.month)
+    number = f"{invoice.shop.code}-CN-{now.year}-{now.month:02d}-{seq:04d}"
+    return CreditNote.objects.create(
+        shop=invoice.shop, invoice=invoice, credit_note_number=number,
+        amount=amount, reason=reason or "", created_by=user,
+    )
+
+
+def approve_credit_note(credit_note, user):
+    from rest_framework.exceptions import ValidationError
+    from .models import CreditNote
+
+    if credit_note.status != CreditNote.Status.PENDING:
+        raise ValidationError("Only pending credit notes can be approved.")
+    invoice = credit_note.invoice
+    if credit_note.amount > invoice.amount_outstanding:
+        raise ValidationError("Credit amount exceeds the invoice's outstanding balance.")
+    with transaction.atomic():
+        invoice.amount_outstanding = (invoice.amount_outstanding - credit_note.amount).quantize(_TWO_PLACES)
+        invoice.save(update_fields=["amount_outstanding"])
+        credit_note.status = CreditNote.Status.APPROVED
+        credit_note.approved_by = user
+        credit_note.approved_at = timezone.now()
+        credit_note.save(update_fields=["status", "approved_by", "approved_at", "updated_at"])
+    return credit_note
+
+
+def create_refund(invoice, amount, method, reason, user):
+    from core.models import DocumentCounter
+    from .models import Refund
+
+    now = timezone.now()
+    seq = DocumentCounter.next(invoice.shop, now.year, DocumentCounter.DocType.REFUND, month=now.month)
+    number = f"{invoice.shop.code}-RF-{now.year}-{now.month:02d}-{seq:04d}"
+    return Refund.objects.create(
+        shop=invoice.shop, invoice=invoice, refund_number=number,
+        amount=amount, method=method, reason=reason or "", created_by=user,
+    )
+
+
+def approve_refund(refund, user):
+    from rest_framework.exceptions import ValidationError
+    from .models import Refund
+
+    if refund.status != Refund.Status.PENDING:
+        raise ValidationError("Only pending refunds can be approved.")
+    invoice = refund.invoice
+    if refund.amount > invoice.amount_paid:
+        raise ValidationError("Refund amount exceeds the amount paid on the invoice.")
+    with transaction.atomic():
+        invoice.amount_paid = (invoice.amount_paid - refund.amount).quantize(_TWO_PLACES)
+        invoice.amount_outstanding = (invoice.amount_outstanding + refund.amount).quantize(_TWO_PLACES)
+        invoice.status = (
+            RepairInvoice.Status.ISSUED if invoice.amount_paid <= 0
+            else RepairInvoice.Status.PARTIALLY_PAID
+        )
+        invoice.save(update_fields=["amount_paid", "amount_outstanding", "status"])
+        refund.status = Refund.Status.APPROVED
+        refund.approved_by = user
+        refund.approved_at = timezone.now()
+        refund.save(update_fields=["status", "approved_by", "approved_at", "updated_at"])
+    return refund

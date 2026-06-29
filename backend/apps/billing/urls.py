@@ -13,6 +13,10 @@ urlpatterns = [
     path("payments/", views.PaymentView.as_view(), name="payments"),
     path("webhooks/razorpay/", views.RazorpayWebhookView.as_view(), name="razorpay-webhook"),
     path("tally-export/", views.TallyExportView.as_view(), name="tally-export"),
+    path("credit-notes/", views.CreditNoteView.as_view(), name="credit-notes"),
+    path("credit-notes/<uuid:credit_note_id>/approve/", views.CreditNoteApproveView.as_view(), name="credit-note-approve"),
+    path("refunds/", views.RefundView.as_view(), name="refunds"),
+    path("refunds/<uuid:refund_id>/approve/", views.RefundApproveView.as_view(), name="refund-approve"),
     path("tax-rates/", views.TaxRateView.as_view(), name="tax-rates"),
     path("tax-rates/<uuid:tax_rate_id>/", views.TaxRateDetailView.as_view(), name="tax-rate-detail"),
 ]

@@ -94,6 +94,7 @@ class DocumentCounter(models.Model):
         AMC = "amc", "AMC Contract"
         CREDIT_NOTE = "credit_note", "Credit Note"
         DEBIT_NOTE = "debit_note", "Debit Note"
+        REFUND = "refund", "Refund"
 
     shop = models.ForeignKey("core.Shop", on_delete=models.CASCADE, related_name="counters")
     year = models.IntegerField()

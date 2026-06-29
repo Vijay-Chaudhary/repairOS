@@ -303,6 +303,8 @@ class PurchasePaymentView(APIView):
 
 class PurchaseReturnView(APIView):
     def get_permissions(self):
+        if self.request.method == "GET":
+            return [require_permission("erp.purchase_returns.view")()]
         return [require_permission("erp.purchase_returns.create")()]
 
     def get(self, request):
