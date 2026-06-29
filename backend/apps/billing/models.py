@@ -105,3 +105,25 @@ class Payment(BaseModel):
 
     def __str__(self) -> str:
         return f"Payment {self.amount} for {self.invoice.invoice_number}"
+
+
+class TaxRate(BaseModel):
+    """GST tax-rate slab master (config). One row per named slab per tenant DB."""
+
+    class TaxType(models.TextChoices):
+        GST = "gst", "GST (CGST + SGST)"
+        IGST = "igst", "IGST (inter-state)"
+        EXEMPT = "exempt", "Exempt"
+
+    name = models.CharField(max_length=50, unique=True)
+    rate = models.DecimalField(max_digits=5, decimal_places=2)
+    tax_type = models.CharField(max_length=10, choices=TaxType.choices, default=TaxType.GST)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        app_label = "billing"
+        db_table = "tax_rates"
+        ordering = ["rate"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.rate}%)"

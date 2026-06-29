@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from .models import Payment, RepairInvoice, RepairInvoiceItem
+from .models import Payment, RepairInvoice, RepairInvoiceItem, TaxRate
 
 
 class RepairInvoiceItemSerializer(serializers.ModelSerializer):
@@ -130,3 +130,15 @@ class OutstandingInvoiceSerializer(serializers.ModelSerializer):
 
     def get_bucket(self, obj) -> str:
         return self._aging(obj)[0]
+
+
+class TaxRateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaxRate
+        fields = ["id", "name", "rate", "tax_type", "is_active", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+    def validate_rate(self, value):
+        if value < 0 or value > 100:
+            raise serializers.ValidationError("Rate must be between 0 and 100.")
+        return value

@@ -451,3 +451,17 @@ def outstanding_summary(invoices):
         "invoice_count": count,
         "buckets": {k: str(v) for k, v in buckets.items()},
     }
+
+
+# ── Tax rates (Settings › Taxes) ────────────────────────────────────────────────
+
+
+def list_tax_rates(*, active_only=False):
+    from .models import TaxRate
+    qs = TaxRate.objects.all().order_by("rate")
+    return qs.filter(is_active=True) if active_only else qs
+
+
+def deactivate_tax_rate(tax_rate) -> None:
+    tax_rate.is_active = False
+    tax_rate.save()  # auto_now refreshes updated_at
