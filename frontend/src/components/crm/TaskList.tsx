@@ -14,10 +14,11 @@ import { formatDate, formatTime } from '@/lib/format/date';
 import { cn } from '@/lib/utils';
 
 const STATUS_ICON: Record<TaskStatus, React.ReactNode> = {
-  pending:   <Clock className="h-4 w-4 text-[var(--info)]" />,
-  overdue:   <AlertCircle className="h-4 w-4 text-[var(--danger)]" />,
-  completed: <CheckCircle2 className="h-4 w-4 text-[var(--success)]" />,
-  cancelled: <CheckCircle2 className="h-4 w-4 text-[var(--text-muted)]" />,
+  pending:     <Clock className="h-4 w-4 text-[var(--info)]" />,
+  in_progress: <Clock className="h-4 w-4 text-[var(--status-progress)]" />,
+  overdue:     <AlertCircle className="h-4 w-4 text-[var(--danger)]" />,
+  completed:   <CheckCircle2 className="h-4 w-4 text-[var(--success)]" />,
+  cancelled:   <CheckCircle2 className="h-4 w-4 text-[var(--text-muted)]" />,
 };
 
 const PRIORITY_DOT: Record<string, string> = {
