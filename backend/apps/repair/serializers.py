@@ -9,6 +9,7 @@ from .models import (
     FaultTemplate,
     FaultTemplatePart,
     JobCheckinCondition,
+    JobAttachment,
     JobEstimate,
     JobSparePartRequest,
     JobStage,
@@ -394,3 +395,12 @@ class JobEstimateListSerializer(serializers.ModelSerializer):
         fields = ["id", "job_id", "job_number", "customer_name", "estimate_number",
                   "labor_charge", "parts_cost", "total_estimate", "valid_until",
                   "status", "sent_at", "created_at"]
+
+
+class JobAttachmentSerializer(serializers.ModelSerializer):
+    uploaded_by_name = serializers.CharField(source="uploaded_by.full_name", read_only=True, default=None)
+
+    class Meta:
+        model = JobAttachment
+        fields = ["id", "url", "filename", "content_type", "kind", "uploaded_by_name", "created_at"]
+        read_only_fields = ["id", "uploaded_by_name", "created_at"]

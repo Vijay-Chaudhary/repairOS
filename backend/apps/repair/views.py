@@ -30,6 +30,7 @@ from .serializers import (
     CreateEstimateSerializer,
     EstimateResponseSerializer,
     FaultTemplateSerializer,
+    JobAttachmentSerializer,
     JobCheckinConditionSerializer,
     JobEstimateListSerializer,
     JobSparePartRequestSerializer,
@@ -102,7 +103,8 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
         if self.action == "warranty_claim":
             return [require_permission("repair.warranty.view")()]
         if self.action == "attachments":
-            return [require_permission("repair.jobs.edit")()]
+            slug = "repair.jobs.view" if self.request.method == "GET" else "repair.jobs.edit"
+            return [require_permission(slug)()]
         return [require_permission("repair.jobs.view")()]
 
     # ── Queryset ──────────────────────────────────────────────────────────────
@@ -332,12 +334,17 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
         warranty_job = services.create_warranty_claim(job, request.user)
         return Response(JobTicketSerializer(warranty_job).data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["post"], url_path="attachments")
+    @action(detail=True, methods=["get", "post"], url_path="attachments")
     def attachments(self, request, pk=None):
-        # S3 integration: client uploads directly; this endpoint stores the S3 key reference.
-        # For now, return 200 with the provided key.
-        key = request.data.get("key", "")
-        return Response({"key": key, "message": "Attachment reference recorded."})
+        """List (GET) or add (POST) attachments for a job. Stores the object key/URL reference."""
+        job = self.get_object()
+        if request.method == "GET":
+            qs = job.attachments.select_related("uploaded_by").order_by("-created_at")
+            return Response(JobAttachmentSerializer(qs, many=True).data)
+        ser = JobAttachmentSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        ser.save(job=job, uploaded_by=request.user)
+        return Response(ser.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["get"], url_path="timeline")
     def timeline(self, request, pk=None):
