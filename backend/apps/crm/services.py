@@ -479,3 +479,37 @@ def get_crm_overview(shop_filter, shop_id=None):
         "overdue_tasks": overdue_tasks,
         "unassigned_leads": unassigned_leads,
     }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Deals (sales pipeline)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def change_deal_stage(deal, to_stage: str, user):
+    """Move a deal between open stages only. Won/Lost go through close_deal."""
+    from rest_framework.exceptions import ValidationError
+    from .models import Deal
+
+    if to_stage not in Deal.OPEN_STAGES or deal.stage not in Deal.OPEN_STAGES:
+        raise ValidationError("Use the close action to mark a deal won or lost.")
+    deal.stage = to_stage
+    deal.save(update_fields=["stage", "updated_at"])
+    return deal
+
+
+def close_deal(deal, outcome: str, reason: str, user):
+    """Close a deal as won or lost. `reason` is required when lost."""
+    from django.utils import timezone
+    from rest_framework.exceptions import ValidationError
+    from .models import Deal
+
+    if outcome not in ("won", "lost"):
+        raise ValidationError("outcome must be 'won' or 'lost'.")
+    if outcome == "lost" and not (reason or "").strip():
+        raise ValidationError("A reason is required when marking a deal lost.")
+    deal.stage = Deal.Stage.WON if outcome == "won" else Deal.Stage.LOST
+    deal.lost_reason = (reason or "") if outcome == "lost" else ""
+    deal.closed_at = timezone.now()
+    deal.save(update_fields=["stage", "lost_reason", "closed_at", "updated_at"])
+    return deal
