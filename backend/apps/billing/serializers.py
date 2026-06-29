@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from .models import CreditNote, Payment, RepairInvoice, RepairInvoiceItem, TaxRate
+from .models import CreditNote, Payment, RepairInvoice, RepairInvoiceItem, Refund, TaxRate
 
 
 class RepairInvoiceItemSerializer(serializers.ModelSerializer):
@@ -160,4 +160,24 @@ class CreditNoteSerializer(serializers.ModelSerializer):
 class CreateCreditNoteSerializer(serializers.Serializer):
     invoice_id = serializers.UUIDField()
     amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"))
+    reason = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class RefundSerializer(serializers.ModelSerializer):
+    invoice_id = serializers.UUIDField(source="invoice.id", read_only=True)
+    invoice_number = serializers.CharField(source="invoice.invoice_number", read_only=True)
+    customer_name = serializers.CharField(source="invoice.customer.name", read_only=True)
+    approved_by_name = serializers.CharField(source="approved_by.full_name", read_only=True, default=None)
+
+    class Meta:
+        model = Refund
+        fields = ["id", "invoice_id", "invoice_number", "customer_name", "refund_number",
+                  "amount", "method", "reason", "status", "approved_by_name", "approved_at", "created_at"]
+        read_only_fields = ["id", "refund_number", "status", "approved_by_name", "approved_at", "created_at"]
+
+
+class CreateRefundSerializer(serializers.Serializer):
+    invoice_id = serializers.UUIDField()
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"))
+    method = serializers.ChoiceField(choices=Refund.Method.choices, default=Refund.Method.CASH)
     reason = serializers.CharField(required=False, allow_blank=True, default="")

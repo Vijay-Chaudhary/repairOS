@@ -154,3 +154,39 @@ class CreditNote(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.credit_note_number} ({self.status})"
+
+
+class Refund(BaseModel):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        CANCELLED = "cancelled", "Cancelled"
+
+    class Method(models.TextChoices):
+        CASH = "cash", "Cash"
+        UPI = "upi", "UPI"
+        CARD = "card", "Card"
+        CHEQUE = "cheque", "Cheque"
+        NEFT = "neft", "NEFT"
+        OTHER = "other", "Other"
+
+    shop = models.ForeignKey("core.Shop", on_delete=models.PROTECT, related_name="refunds")
+    invoice = models.ForeignKey(RepairInvoice, on_delete=models.PROTECT, related_name="refunds")
+    refund_number = models.CharField(max_length=40, unique=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    method = models.CharField(max_length=20, choices=Method.choices, default=Method.CASH)
+    reason = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                    on_delete=models.SET_NULL, related_name="approved_refunds")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name="created_refunds")
+
+    class Meta:
+        app_label = "billing"
+        db_table = "billing_refunds"
+        indexes = [models.Index(fields=["shop", "status"])]
+
+    def __str__(self) -> str:
+        return f"{self.refund_number} ({self.status})"
