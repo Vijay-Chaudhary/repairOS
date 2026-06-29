@@ -213,9 +213,27 @@ export interface RepairOverview {
   }>;
 }
 
+export interface EstimateWorklistRow {
+  id: string;
+  job_id: string;
+  job_number: string;
+  customer_name: string;
+  estimate_number: string;
+  labor_charge: string;
+  parts_cost: string;
+  total_estimate: string;
+  valid_until: string | null;
+  status: EstimateStatus;
+  sent_at: string | null;
+  created_at: string;
+}
+
 export const repairApi = {
   listJobs: (filters: JobFilters = {}) =>
     apiGet<JobListResponse>('/repair/jobs/', filters as Record<string, string | number | boolean | undefined>),
+
+  listEstimates: (filters: { status?: EstimateStatus; date_from?: string; date_to?: string; page?: number } = {}) =>
+    apiGet<{ items: EstimateWorklistRow[]; meta: PageMeta }>('/repair/estimates/', filters as Record<string, string | number | undefined>),
 
   getOverview: (shopId?: string) =>
     apiGet<RepairOverview>('/repair/overview/', shopId ? { shop_id: shopId } : {}),
