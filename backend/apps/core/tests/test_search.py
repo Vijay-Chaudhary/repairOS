@@ -52,3 +52,20 @@ def test_search_respects_permission_gates(shop, client_with_perms):
 
     # short query → empty
     assert client.get("/api/v1/search/?q=R").json()["data"]["results"] == []
+
+
+@pytest.mark.django_db
+def test_search_finds_job_by_serial(shop, client_with_perms):
+    from crm.models import Customer
+    from authentication.models import User
+    from repair.models import JobTicket
+    from decimal import Decimal
+    cust = Customer.objects.create(shop=shop, name="C", phone="+919811111111")
+    u = User.objects.create_user(email="z@t.com", phone="+919800000044", full_name="Z", password="p")
+    JobTicket.objects.create(shop=shop, customer=cust, created_by=u, job_number="HTA-Z",
+                             device_type="Laptop", device_brand="Dell", device_model="X",
+                             problem_description="p", service_charge=Decimal("1"),
+                             status=JobTicket.Status.OPEN, serial_number="ZZZ-SERIAL")
+    client, _ = client_with_perms(["repair.jobs.view"], shop_ids=[shop.id])
+    body = client.get("/api/v1/search/?q=ZZZ-SERIAL").json()["data"]
+    assert any(r["type"] == "job" for r in body["results"])

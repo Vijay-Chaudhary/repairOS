@@ -610,3 +610,26 @@ class WarrantyWorklistView(APIView):
     def get(self, request: Request) -> Response:
         job_filter = _scoped_job_ids_q(request, field="shop_id")
         return Response(services.build_warranty_lists(job_filter))
+
+
+class DeviceHistoryView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("repair.jobs.view")]
+
+    def get(self, request: Request) -> Response:
+        serial = (request.query_params.get("serial") or "").strip()
+        imei = (request.query_params.get("imei") or "").strip()
+        if not serial and not imei:
+            return Response({"items": []})
+
+        q = Q()
+        if serial:
+            q |= Q(serial_number__icontains=serial)
+        if imei:
+            q |= Q(imei__icontains=imei)
+        jobs = (JobTicket.objects.filter(_scoped_job_ids_q(request, field="shop_id"))
+                .filter(q).select_related("customer").order_by("-created_at")[:50])
+        return Response({"items": [{
+            "job_id": str(j.id), "job_number": j.job_number, "status": j.status,
+            "device": f"{j.device_brand} {j.device_model}".strip() or j.device_type,
+            "created_at": j.created_at.isoformat(),
+        } for j in jobs]})

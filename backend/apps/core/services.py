@@ -86,6 +86,7 @@ def global_search(term, token):
         qs = scoped(JobTicket.objects.select_related("customer").filter(
             Q(job_number__icontains=term) | Q(device_brand__icontains=term)
             | Q(device_model__icontains=term) | Q(customer__name__icontains=term)
+            | Q(serial_number__icontains=term) | Q(imei__icontains=term)
         ))[:SEARCH_CAP]
         results += [{"type": "job", "id": str(j.id), "label": j.job_number,
                      "sublabel": f"{j.device_brand} {j.device_model}".strip() or j.customer.name,
