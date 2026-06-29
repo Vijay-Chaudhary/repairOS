@@ -575,7 +575,7 @@ Append the new slugs to `permissions_catalogue` in `_seed_roles_and_permissions`
 - Modify: `backend/apps/master/services.py` (the `permissions_catalogue` list, ~lines 346-395)
 - Test: `backend/apps/master/tests/test_permission_seed.py` (new)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/apps/master/tests/test_permission_seed.py`:
 
@@ -635,12 +635,12 @@ def test_new_slugs_are_seeded_and_granted_to_admin():
     assert not not_granted, f"slugs not granted to Tenant Admin: {not_granted}"
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run (from `backend/`): `python -m pytest apps/master/tests/test_permission_seed.py -p no:cacheprovider -o addopts="" -q`
 Expected: FAIL — `slugs not seeded: [...]` listing the new slugs.
 
-- [ ] **Step 3: Append the new slugs to the catalogue**
+- [x] **Step 3: Append the new slugs to the catalogue**
 
 In `backend/apps/master/services.py`, inside `_seed_roles_and_permissions`, append these entries to the `permissions_catalogue` list (place each block under its module's existing comment; add new `# accounts` and `# tasks` comment groups before `# settings`):
 
@@ -678,17 +678,17 @@ In `backend/apps/master/services.py`, inside `_seed_roles_and_permissions`, appe
 
 > Note: the catalogue is consumed by a `get_or_create` loop (`services.py:396-400`) and Tenant Admin is granted all permissions via the diff at `services.py:493-502`, so appending is sufficient — no other edits needed.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run (from `backend/`): `python -m pytest apps/master/tests/test_permission_seed.py -p no:cacheprovider -o addopts="" -q`
 Expected: PASS.
 
-- [ ] **Step 5: Run the broader master + auth suites for regressions**
+- [x] **Step 5: Run the broader master + auth suites for regressions**
 
 Run (from `backend/`): `python -m pytest apps/master apps/authentication -p no:cacheprovider -o addopts="" -q`
 Expected: PASS (no existing tests broken by the added slugs).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/apps/master/services.py backend/apps/master/tests/test_permission_seed.py
