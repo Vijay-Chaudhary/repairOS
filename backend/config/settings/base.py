@@ -261,6 +261,15 @@ CELERY_BEAT_SCHEDULE = {
         "task": "procurement.send_bill_due_reminders",
         "schedule": crontab(hour=7, minute=0),
     },
+    # Core — in-app notification scans
+    "core-scan-low-stock": {
+        "task": "core.scan_low_stock",
+        "schedule": crontab(hour=7, minute=30),
+    },
+    "core-scan-amc-renewals": {
+        "task": "core.scan_amc_renewals",
+        "schedule": crontab(hour=7, minute=45),
+    },
 }
 
 # ──────────────────────────────────────────────────────────────────────────────

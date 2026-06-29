@@ -265,6 +265,20 @@ def record_payment(invoice: RepairInvoice, data: dict, user) -> Payment:
         _update_crm_on_payment(invoice.customer, amount)
 
     _write_audit(user, AuditLog.Action.CREATE, "Payment", payment.id)
+
+    # In-app notification: notify the job's creator + per-stage technicians (not the actor).
+    from core.services import record_notifications
+    job = getattr(invoice, "job", None)
+    if job is not None:
+        stage_techs = list({s.assigned_technician for s in job.stages.all() if s.assigned_technician_id})
+        record_notifications(
+            [job.created_by, *stage_techs],
+            type="payment_received",
+            title=f"Payment ₹{payment.amount} received",
+            body=f"Invoice {invoice.invoice_number}",
+            route=f"/invoices/{invoice.id}",
+            exclude=user,
+        )
     return payment
 
 

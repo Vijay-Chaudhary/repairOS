@@ -179,6 +179,18 @@ def transition_job(job: JobTicket, to_status: str, user, reason: str = "", is_te
     })
 
     _send_status_notification(job, to_status, reason)
+
+    # In-app notification: notify the job creator + per-stage technicians (not the actor).
+    from core.services import record_notifications
+    stage_techs = list({s.assigned_technician for s in job.stages.all() if s.assigned_technician_id})
+    record_notifications(
+        [job.created_by, *stage_techs],
+        type="job_status",
+        title=f"Job {job.job_number} → {job.get_status_display()}",
+        body=reason or "",
+        route=f"/jobs/{job.id}",
+        exclude=user,
+    )
     return job
 
 

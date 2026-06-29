@@ -11,6 +11,7 @@ NotificationTemplate — per-template active/body overrides.
 
 import uuid
 
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -263,3 +264,25 @@ class NotificationLog(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.channel}/{self.template_name} → {self.recipient_phone or self.recipient_email} [{self.status}]"
+
+
+class Notification(BaseModel):
+    """Per-user in-app notification (distinct from the outbound NotificationLog)."""
+
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications"
+    )
+    type = models.CharField(max_length=40)
+    title = models.CharField(max_length=200)
+    body = models.TextField(blank=True, default="")
+    route = models.CharField(max_length=300, blank=True, default="")
+    read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        app_label = "core"
+        db_table = "notifications"
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["recipient", "read_at"])]
+
+    def __str__(self) -> str:
+        return f"{self.type} → {self.recipient_id} ({'read' if self.read_at else 'unread'})"

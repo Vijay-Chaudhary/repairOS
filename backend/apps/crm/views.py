@@ -158,6 +158,18 @@ class LeadViewSet(ShopScopedMixin, ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         self.perform_create(serializer)
+        lead = serializer.instance
+        # In-app notification: notify the assigned salesperson, else lead-viewers in the shop.
+        from core.services import record_notifications, users_with_permission
+        recipients = (
+            [lead.assigned_to] if lead.assigned_to_id
+            else list(users_with_permission("crm.leads.view", [lead.shop_id]))
+        )
+        record_notifications(
+            recipients, type="new_lead",
+            title=f"New lead: {lead.name}", body=lead.phone or "",
+            route=f"/leads/{lead.id}", exclude=self.request.user,
+        )
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], url_path="convert")

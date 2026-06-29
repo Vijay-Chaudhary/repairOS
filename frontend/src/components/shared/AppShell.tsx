@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Wrench, Users, ShoppingCart, FileText,
   Package, ShoppingBag, CreditCard, TrendingUp, Settings,
   Building, BarChart3, DollarSign, Menu, X, ChevronDown,
-  Bell, Search, LogOut, User, UserCheck, Boxes, Receipt, ClipboardList, ListChecks, Filter, Activity, Send,
+  Search, LogOut, User, UserCheck, Boxes, Receipt, ClipboardList, ListChecks, Filter, Activity, Send,
   Target, Contact, ShieldCheck, Tag, Truck, Undo2, Clock, FileMinus, ScrollText,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/stores/authStore';
@@ -17,6 +17,7 @@ import { wsClient } from '@/lib/ws/client';
 import { authApi } from '@/lib/api/auth';
 import { Can } from '@/components/shared/Can';
 import { CommandPalette } from '@/components/shared/CommandPalette';
+import { NotificationBell } from '@/components/shared/NotificationBell';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -469,22 +470,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               <Search className="h-5 w-5" />
             </button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  className="p-2 rounded-md hover:bg-[var(--surface-2)] text-[var(--text-muted)] min-h-[auto] min-w-[auto]"
-                  aria-label="Notifications"
-                >
-                  <Bell className="h-5 w-5" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <div className="px-2 py-1.5 text-xs font-semibold text-[var(--text-muted)]">Notifications</div>
-                <div className="px-2 py-6 text-center text-body-sm text-[var(--text-muted)]">
-                  You&apos;re all caught up.
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <NotificationBell />
           </header>
 
           {/* Page content */}
