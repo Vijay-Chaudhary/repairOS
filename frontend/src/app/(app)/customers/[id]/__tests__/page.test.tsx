@@ -72,7 +72,7 @@ describe('CustomerProfilePage — Sales + AMC tabs', () => {
     renderPage();
     const tabs = await screen.findAllByRole('tab');
     expect(tabs.map((t) => t.textContent)).toEqual(
-      ['Repair History', 'Sales', 'AMC', 'Timeline', 'Tasks', 'Financial'],
+      ['Repair History', 'Sales', 'AMC', 'Contacts', 'Timeline', 'Tasks', 'Financial'],
     );
   });
 
