@@ -340,3 +340,24 @@ class Campaign(SoftDeleteModel):
 
     def __str__(self) -> str:
         return f"{self.name} → {self.segment_id} ({self.status})"
+
+
+class Contact(SoftDeleteModel):
+    """A contact person belonging to a customer (many per customer)."""
+
+    shop = models.ForeignKey("core.Shop", on_delete=models.PROTECT, related_name="contacts")
+    customer = models.ForeignKey("Customer", on_delete=models.CASCADE, related_name="contacts")
+    name = models.CharField(max_length=200)
+    designation = models.CharField(max_length=100, blank=True, default="")
+    email = models.EmailField(null=True, blank=True)
+    phone = models.CharField(max_length=20, blank=True, default="")
+    notes = models.TextField(blank=True, default="")
+    is_primary = models.BooleanField(default=False)
+
+    class Meta:
+        app_label = "crm"
+        db_table = "contacts"
+        indexes = [models.Index(fields=["customer", "is_primary"])]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.customer_id})"
