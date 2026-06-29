@@ -479,3 +479,35 @@ def list_tax_rates(*, active_only=False):
 def deactivate_tax_rate(tax_rate) -> None:
     tax_rate.is_active = False
     tax_rate.save()  # auto_now refreshes updated_at
+
+
+def create_credit_note(invoice, amount, reason, user):
+    from core.models import DocumentCounter
+    from .models import CreditNote
+
+    now = timezone.now()
+    seq = DocumentCounter.next(invoice.shop, now.year, DocumentCounter.DocType.CREDIT_NOTE, month=now.month)
+    number = f"{invoice.shop.code}-CN-{now.year}-{now.month:02d}-{seq:04d}"
+    return CreditNote.objects.create(
+        shop=invoice.shop, invoice=invoice, credit_note_number=number,
+        amount=amount, reason=reason or "", created_by=user,
+    )
+
+
+def approve_credit_note(credit_note, user):
+    from rest_framework.exceptions import ValidationError
+    from .models import CreditNote
+
+    if credit_note.status != CreditNote.Status.PENDING:
+        raise ValidationError("Only pending credit notes can be approved.")
+    invoice = credit_note.invoice
+    if credit_note.amount > invoice.amount_outstanding:
+        raise ValidationError("Credit amount exceeds the invoice's outstanding balance.")
+    with transaction.atomic():
+        invoice.amount_outstanding = (invoice.amount_outstanding - credit_note.amount).quantize(_TWO_PLACES)
+        invoice.save(update_fields=["amount_outstanding"])
+        credit_note.status = CreditNote.Status.APPROVED
+        credit_note.approved_by = user
+        credit_note.approved_at = timezone.now()
+        credit_note.save(update_fields=["status", "approved_by", "approved_at", "updated_at"])
+    return credit_note

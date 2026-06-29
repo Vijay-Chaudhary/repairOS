@@ -127,3 +127,30 @@ class TaxRate(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.rate}%)"
+
+
+class CreditNote(BaseModel):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        CANCELLED = "cancelled", "Cancelled"
+
+    shop = models.ForeignKey("core.Shop", on_delete=models.PROTECT, related_name="credit_notes")
+    invoice = models.ForeignKey(RepairInvoice, on_delete=models.PROTECT, related_name="credit_notes")
+    credit_note_number = models.CharField(max_length=40, unique=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    reason = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                    on_delete=models.SET_NULL, related_name="approved_credit_notes")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name="created_credit_notes")
+
+    class Meta:
+        app_label = "billing"
+        db_table = "billing_credit_notes"
+        indexes = [models.Index(fields=["shop", "status"])]
+
+    def __str__(self) -> str:
+        return f"{self.credit_note_number} ({self.status})"
