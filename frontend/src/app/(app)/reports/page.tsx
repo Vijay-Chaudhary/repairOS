@@ -23,11 +23,11 @@ const MODULE_STYLES: Record<ReportModule, ModuleStyle> = {
 };
 
 const MODULE_PERMISSIONS: Record<ReportModule, string[]> = {
-  Billing: ['reports.billing.view'],
-  Repair:  ['reports.repair.view'],
+  Billing: ['reports.revenue.view', 'reports.inventory.view'],
+  Repair:  ['reports.repair.view', 'reports.hr.view'],
   CRM:     ['reports.crm.view'],
   AMC:     ['reports.amc.view'],
-  ERP:     ['reports.erp.view'],
+  ERP:     ['reports.inventory.view'],
   HR:      ['reports.hr.view'],
 };
 
