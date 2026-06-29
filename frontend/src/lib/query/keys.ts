@@ -29,6 +29,8 @@ export const qk = {
   // Billing
   outstanding:    (params?: Record<string, unknown>) => ['billing', 'outstanding', params ?? {}] as const,
   taxRates:       () => ['billing', 'tax-rates'] as const,
+  creditNotes:    (params?: Record<string, unknown>) => ['billing', 'credit-notes', params ?? {}] as const,
+  refunds:        (params?: Record<string, unknown>) => ['billing', 'refunds', params ?? {}] as const,
 
   // CRM — contacts + deals
   contacts:             (filters?: Record<string, unknown>) => ['crm', 'contacts', filters ?? {}] as const,

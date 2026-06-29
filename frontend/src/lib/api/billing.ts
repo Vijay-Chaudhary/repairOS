@@ -130,6 +130,22 @@ export interface TaxRateInput {
 
 // ── API ───────────────────────────────────────────────────────────────────────
 
+export type DocStatus = 'pending' | 'approved' | 'cancelled';
+
+export interface CreditNote {
+  id: string;
+  invoice_id: string;
+  invoice_number: string;
+  customer_name: string;
+  credit_note_number: string;
+  amount: string;
+  reason: string;
+  status: DocStatus;
+  approved_by_name: string | null;
+  approved_at: string | null;
+  created_at: string;
+}
+
 export const billingApi = {
   listInvoices: (filters: InvoiceFilters = {}) =>
     apiGet<{ items: Invoice[]; meta: PageMeta }>(
@@ -142,6 +158,13 @@ export const billingApi = {
 
   getOutstanding: (params: { shop_id?: string; overdue_days?: number; customer_id?: string } = {}) =>
     apiGet<OutstandingReport>('/billing/outstanding/', params),
+
+  listCreditNotes: (params: { status?: DocStatus; invoice_id?: string } = {}) =>
+    apiGet<CreditNote[]>('/billing/credit-notes/', params),
+  createCreditNote: (body: { invoice_id: string; amount: number; reason?: string }) =>
+    apiPost<CreditNote>('/billing/credit-notes/', body),
+  approveCreditNote: (id: string) =>
+    apiPost<CreditNote>(`/billing/credit-notes/${id}/approve/`, {}),
 
   listTaxRates: () =>
     apiGet<TaxRate[]>('/billing/tax-rates/'),
