@@ -361,3 +361,39 @@ class Contact(SoftDeleteModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.customer_id})"
+
+
+class Deal(SoftDeleteModel):
+    """A sales opportunity moving through fixed pipeline stages."""
+
+    class Stage(models.TextChoices):
+        QUALIFICATION = "qualification", "Qualification"
+        PROPOSAL = "proposal", "Proposal"
+        NEGOTIATION = "negotiation", "Negotiation"
+        WON = "won", "Won"
+        LOST = "lost", "Lost"
+
+    shop = models.ForeignKey("core.Shop", on_delete=models.PROTECT, related_name="deals")
+    title = models.CharField(max_length=200)
+    customer = models.ForeignKey("Customer", null=True, blank=True, on_delete=models.SET_NULL, related_name="deals")
+    contact = models.ForeignKey("Contact", null=True, blank=True, on_delete=models.SET_NULL, related_name="deals")
+    stage = models.CharField(max_length=20, choices=Stage.choices, default=Stage.QUALIFICATION, db_index=True)
+    expected_revenue = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    probability = models.IntegerField(default=0)
+    expected_close_date = models.DateField(null=True, blank=True)
+    assigned_to = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                    on_delete=models.SET_NULL, related_name="assigned_deals")
+    lost_reason = models.TextField(blank=True, default="")
+    closed_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name="created_deals")
+
+    OPEN_STAGES = ["qualification", "proposal", "negotiation"]
+
+    class Meta:
+        app_label = "crm"
+        db_table = "deals"
+        indexes = [models.Index(fields=["shop", "stage"]), models.Index(fields=["assigned_to"])]
+
+    def __str__(self) -> str:
+        return f"{self.title} [{self.stage}]"
