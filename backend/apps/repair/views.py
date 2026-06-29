@@ -7,6 +7,9 @@ import logging
 from django.db.models import Q
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.mixins import ListModelMixin
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
@@ -28,6 +31,7 @@ from .serializers import (
     EstimateResponseSerializer,
     FaultTemplateSerializer,
     JobCheckinConditionSerializer,
+    JobEstimateListSerializer,
     JobSparePartRequestSerializer,
     JobStatusSerializer,
     JobTicketDetailSerializer,
@@ -41,6 +45,14 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _scoped_job_ids_q(request, field="job__shop_id"):
+    """Return a Q filtering on the job's shop per the JWT, or Q() if tenant-wide."""
+    token = getattr(request, "auth", None) or {}
+    if token.get("is_tenant_wide") or token.get("is_platform_admin"):
+        return Q()
+    return Q(**{f"{field}__in": token.get("shop_ids", [])})
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -569,3 +581,24 @@ class RepairOverviewView(ShopScopedMixin, APIView):
         shop_id = request.query_params.get("shop_id")
         data = services.get_repair_overview(self._shop_filter(), shop_id)
         return Response(RepairOverviewSerializer(data).data)
+
+
+class JobEstimateWorklistViewSet(ListModelMixin, GenericViewSet):
+    """Cross-job estimate worklist. Per-job create lives at /jobs/{id}/estimate/."""
+
+    pagination_class = RepairOSPageNumberPagination
+    serializer_class = JobEstimateListSerializer
+
+    def get_permissions(self):
+        return [require_permission("repair.estimates.view")()]
+
+    def get_queryset(self):
+        from .models import JobEstimate
+        qs = JobEstimate.objects.select_related("job", "job__customer").filter(_scoped_job_ids_q(self.request))
+        if s := self.request.query_params.get("status"):
+            qs = qs.filter(status=s)
+        if df := self.request.query_params.get("date_from"):
+            qs = qs.filter(created_at__date__gte=df)
+        if dt := self.request.query_params.get("date_to"):
+            qs = qs.filter(created_at__date__lte=dt)
+        return qs.order_by("-created_at")

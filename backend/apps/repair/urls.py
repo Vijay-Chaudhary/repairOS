@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     FaultTemplateViewSet,
+    JobEstimateWorklistViewSet,
     JobTicketViewSet,
     RepairOverviewView,
     SparePartRequestViewSet,
@@ -12,6 +13,7 @@ router = DefaultRouter(trailing_slash=True)
 router.register("jobs", JobTicketViewSet, basename="jobs")
 router.register("spare-parts", SparePartRequestViewSet, basename="spare-parts")
 router.register("fault-templates", FaultTemplateViewSet, basename="fault-templates")
+router.register("estimates", JobEstimateWorklistViewSet, basename="estimates")
 
 urlpatterns = [
     path("overview/", RepairOverviewView.as_view(), name="repair-overview"),

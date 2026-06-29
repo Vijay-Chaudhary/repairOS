@@ -382,3 +382,15 @@ class RepairOverviewSerializer(serializers.Serializer):
     kpis = OverviewKpisSerializer()
     by_status = OverviewStatusCountSerializer(many=True)
     needs_attention = OverviewNeedsAttentionSerializer(many=True)
+
+
+class JobEstimateListSerializer(serializers.ModelSerializer):
+    job_id = serializers.UUIDField(source="job.id", read_only=True)
+    job_number = serializers.CharField(source="job.job_number", read_only=True)
+    customer_name = serializers.CharField(source="job.customer.name", read_only=True)
+
+    class Meta:
+        model = JobEstimate
+        fields = ["id", "job_id", "job_number", "customer_name", "estimate_number",
+                  "labor_charge", "parts_cost", "total_estimate", "valid_until",
+                  "status", "sent_at", "created_at"]
