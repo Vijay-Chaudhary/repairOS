@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -7,6 +8,7 @@ import {
   Package, ShoppingBag, CreditCard, TrendingUp, Settings,
   Building, BarChart3, DollarSign, Menu, X, ChevronDown,
   Bell, Search, LogOut, User, UserCheck, Boxes, Receipt, ClipboardList, ListChecks, Filter, Activity, Send,
+  Target, Contact, ShieldCheck, Tag, Truck, Undo2, Clock, FileMinus, ScrollText,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
@@ -14,6 +16,7 @@ import { useUiStore } from '@/lib/stores/uiStore';
 import { wsClient } from '@/lib/ws/client';
 import { authApi } from '@/lib/api/auth';
 import { Can } from '@/components/shared/Can';
+import { CommandPalette } from '@/components/shared/CommandPalette';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -54,39 +57,50 @@ export const NAV_ITEMS: NavEntry[] = [
   { type: 'section', label: 'Operations' },
   { type: 'leaf', label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { type: 'group', label: 'Repair', icon: Wrench, children: [
-    { type: 'leaf', label: 'Overview', href: '/repair', icon: LayoutDashboard, permission: 'repair.jobs.view' },
-    { type: 'leaf', label: 'Jobs', href: '/jobs', icon: Wrench, permission: 'repair.jobs.view' },
-    { type: 'leaf', label: 'Spare Parts', href: '/repair/spare-parts', icon: Package, permission: 'repair.spare_parts.request' },
-    { type: 'leaf', label: 'Fault Templates', href: '/repair/fault-templates', icon: ClipboardList, permission: 'repair.templates.manage' },
+    { type: 'leaf', label: 'Overview',        href: '/repair',                icon: LayoutDashboard, permission: 'repair.jobs.view' },
+    { type: 'leaf', label: 'Jobs',            href: '/jobs',                  icon: Wrench,          permission: 'repair.jobs.view' },
+    { type: 'leaf', label: 'Estimates',       href: '/repair/estimates',      icon: FileText,        permission: 'repair.estimates.view' },
+    { type: 'leaf', label: 'Spare Parts',     href: '/repair/spare-parts',    icon: Package,         permission: 'repair.spare_parts.request' },
+    { type: 'leaf', label: 'Fault Templates', href: '/repair/fault-templates',icon: ClipboardList,   permission: 'repair.templates.manage' },
+    { type: 'leaf', label: 'Warranty',        href: '/repair/warranty',       icon: ShieldCheck,     permission: 'repair.warranty.view' },
   ]},
   { type: 'group', label: 'CRM', icon: UserCheck, children: [
-    { type: 'leaf', label: 'Overview',  href: '/crm',               icon: LayoutDashboard, permission: 'crm.customers.view' },
-    { type: 'leaf', label: 'Customers', href: '/customers',         icon: Users,           permission: 'crm.customers.view' },
-    { type: 'leaf', label: 'Leads',     href: '/leads',             icon: Users,           permission: 'crm.leads.view' },
-    { type: 'leaf', label: 'Quotes',    href: '/crm/quotes',        icon: FileText,        permission: 'crm.leads.view' },
-    { type: 'leaf', label: 'Tasks',     href: '/tasks',             icon: ListChecks,      permission: 'crm.tasks.manage' },
-    { type: 'leaf', label: 'Activity',  href: '/crm/activity',      icon: Activity,        permission: 'crm.communications.log' },
-    { type: 'leaf', label: 'Segments',  href: '/crm/segments',      icon: Filter,          permission: 'crm.segments.manage' },
-    { type: 'leaf', label: 'Campaigns', href: '/crm/campaigns',     icon: Send,            permission: 'crm.segments.manage' },
+    { type: 'leaf', label: 'Overview',  href: '/crm',           icon: LayoutDashboard, permission: 'crm.customers.view' },
+    { type: 'leaf', label: 'Leads',     href: '/leads',         icon: Users,           permission: 'crm.leads.view' },
+    { type: 'leaf', label: 'Deals',     href: '/crm/deals',     icon: Target,          permission: 'crm.deals.view' },
+    { type: 'leaf', label: 'Contacts',  href: '/crm/contacts',  icon: Contact,         permission: 'crm.contacts.view' },
+    { type: 'leaf', label: 'Customers', href: '/customers',     icon: Users,           permission: 'crm.customers.view' },
+    { type: 'leaf', label: 'Quotes',    href: '/crm/quotes',    icon: FileText,        permission: 'crm.leads.view' },
+    { type: 'leaf', label: 'Activity',  href: '/crm/activity',  icon: Activity,        permission: 'crm.communications.log' },
+    { type: 'leaf', label: 'Segments',  href: '/crm/segments',  icon: Filter,          permission: 'crm.segments.manage' },
+    { type: 'leaf', label: 'Campaigns', href: '/crm/campaigns', icon: Send,            permission: 'crm.segments.manage' },
   ]},
-  { type: 'leaf', label: 'POS',  href: '/pos', icon: ShoppingCart, permission: 'pos.counter_sale.create' },
-  { type: 'leaf', label: 'AMC',  href: '/amc', icon: Building,     permission: 'amc.contracts.view' },
+  { type: 'leaf', label: 'POS',   href: '/pos',   icon: ShoppingCart, permission: 'pos.counter_sale.create' },
+  { type: 'leaf', label: 'AMC',   href: '/amc',   icon: Building,     permission: 'amc.contracts.view' },
+  { type: 'leaf', label: 'Tasks', href: '/tasks', icon: ListChecks,  anyOf: ['tasks.tasks.view', 'crm.tasks.manage'] },
 
   { type: 'section', label: 'Finance' },
-  { type: 'group', label: 'Inventory & Purchases', icon: Boxes, children: [
-    { type: 'leaf', label: 'Inventory', href: '/inventory', icon: Package,     permission: 'erp.inventory.view' },
-    { type: 'leaf', label: 'Purchases', href: '/purchases', icon: ShoppingBag, permission: 'erp.purchase_orders.create' },
+  { type: 'group', label: 'Inventory', icon: Boxes, children: [
+    { type: 'leaf', label: 'Products',        href: '/products',         icon: Tag,        permission: 'erp.products.view' },
+    { type: 'leaf', label: 'Stock',           href: '/inventory',        icon: Package,    permission: 'erp.inventory.view' },
+    { type: 'leaf', label: 'Suppliers',       href: '/suppliers',        icon: Truck,      permission: 'erp.suppliers.manage' },
+    { type: 'leaf', label: 'Purchase Orders', href: '/purchases',        icon: ShoppingBag,permission: 'erp.purchase_orders.create' },
+    { type: 'leaf', label: 'Purchase Returns',href: '/purchases/returns',icon: Undo2,      permission: 'erp.purchase_returns.view' },
   ]},
   { type: 'group', label: 'Billing', icon: Receipt, children: [
-    { type: 'leaf', label: 'Invoices', href: '/invoices', icon: FileText,   permission: 'billing.repair_invoices.view' },
-    { type: 'leaf', label: 'Payments', href: '/payments', icon: CreditCard, permission: 'billing.payments.record' },
+    { type: 'leaf', label: 'Invoices',     href: '/invoices',            icon: FileText,   permission: 'billing.repair_invoices.view' },
+    { type: 'leaf', label: 'Payments',     href: '/payments',            icon: CreditCard, permission: 'billing.payments.record' },
+    { type: 'leaf', label: 'Outstanding',  href: '/billing/outstanding', icon: Clock,      permission: 'billing.outstanding.view' },
+    { type: 'leaf', label: 'Credit Notes', href: '/billing/credit-notes',icon: FileMinus,  permission: 'billing.credit_notes.view' },
+    { type: 'leaf', label: 'Refunds',      href: '/billing/refunds',     icon: Undo2,      permission: 'billing.refunds.view' },
   ]},
+  { type: 'leaf', label: 'Accounts', href: '/finance', icon: DollarSign, permission: 'erp.expenses.view' },
 
   { type: 'section', label: 'Management' },
   { type: 'leaf', label: 'Commissions', href: '/commissions', icon: TrendingUp, permission: 'hr.salary.view' },
   { type: 'leaf', label: 'HR',          href: '/hr',          icon: Users,       permission: 'hr.employees.view' },
-  { type: 'leaf', label: 'Finance',     href: '/finance',     icon: DollarSign,  permission: 'erp.expenses.view' },
   { type: 'leaf', label: 'Reports',     href: '/reports',     icon: BarChart3,   anyOf: ['reports.revenue.view', 'reports.repair.view'] },
+  { type: 'leaf', label: 'Audit Log',   href: '/audit',       icon: ScrollText,  permission: 'settings.audit.view' },
 
   { type: 'section', label: 'Config' },
   { type: 'leaf', label: 'Settings', href: '/settings', icon: Settings, permission: 'settings.shop.edit' },
@@ -320,6 +334,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { sidebarCollapsed, toggleSidebar, mobileNavOpen, toggleMobileNav, setMobileNavOpen } = useUiStore();
   const router = useRouter();
 
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   async function handleLogout() {
     try { await authApi.logout(); } catch { /* ignore */ }
     logout();
@@ -435,12 +462,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
             <ShopSwitcher />
             <div className="flex-1" />
-            <button className="p-2 rounded-md hover:bg-[var(--surface-2)] text-[var(--text-muted)] min-h-[auto] min-w-[auto]" aria-label="Search">
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="p-2 rounded-md hover:bg-[var(--surface-2)] text-[var(--text-muted)] min-h-[auto] min-w-[auto]"
+              aria-label="Search"
+            >
               <Search className="h-5 w-5" />
             </button>
-            <button className="p-2 rounded-md hover:bg-[var(--surface-2)] text-[var(--text-muted)] min-h-[auto] min-w-[auto]" aria-label="Notifications">
-              <Bell className="h-5 w-5" />
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="p-2 rounded-md hover:bg-[var(--surface-2)] text-[var(--text-muted)] min-h-[auto] min-w-[auto]"
+                  aria-label="Notifications"
+                >
+                  <Bell className="h-5 w-5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <div className="px-2 py-1.5 text-xs font-semibold text-[var(--text-muted)]">Notifications</div>
+                <div className="px-2 py-6 text-center text-body-sm text-[var(--text-muted)]">
+                  You&apos;re all caught up.
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </header>
 
           {/* Page content */}
@@ -463,6 +507,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span>More</span>
           </button>
         </nav>
+
+        <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       </div>
     </TooltipProvider>
   );

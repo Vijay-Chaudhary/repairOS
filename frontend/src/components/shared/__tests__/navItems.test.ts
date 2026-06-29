@@ -1,100 +1,126 @@
 import { describe, it, expect } from 'vitest';
 import { NAV_ITEMS, type NavEntry } from '../AppShell';
 
-function repairGroup() {
-  const entry = NAV_ITEMS.find(
-    (e: NavEntry) => e.type === 'group' && e.label === 'Repair',
-  );
-  if (!entry || entry.type !== 'group') throw new Error('Repair group not found');
+function group(label: string) {
+  const entry = NAV_ITEMS.find((e: NavEntry) => e.type === 'group' && e.label === label);
+  if (!entry || entry.type !== 'group') throw new Error(`${label} group not found`);
   return entry;
 }
 
-describe('NAV_ITEMS — Repair group', () => {
-  it('has a Repair group with children', () => {
-    expect(repairGroup().children.length).toBeGreaterThan(0);
+function leaf(href: string) {
+  for (const e of NAV_ITEMS) {
+    if (e.type === 'leaf' && e.href === href) return e;
+    if (e.type === 'group') {
+      const c = e.children.find((x) => x.href === href);
+      if (c) return c;
+    }
+  }
+  throw new Error(`leaf ${href} not found`);
+}
+
+describe('NAV_ITEMS — invariants', () => {
+  it('every leaf carries a permission or anyOf (except Dashboard)', () => {
+    for (const e of NAV_ITEMS) {
+      if (e.type === 'leaf' && e.href !== '/dashboard') {
+        expect(Boolean(e.permission) || Boolean(e.anyOf)).toBe(true);
+      }
+      if (e.type === 'group') {
+        for (const c of e.children) {
+          expect(Boolean(c.permission) || Boolean(c.anyOf)).toBe(true);
+        }
+      }
+    }
   });
 
-  it('has the Overview leaf first, at /repair, gated on repair.jobs.view', () => {
-    const children = repairGroup().children;
-    expect(children[0].href).toBe('/repair');
-    expect(children[0].label).toBe('Overview');
-    expect(children[0].permission).toBe('repair.jobs.view');
-  });
-
-  it('keeps the Jobs leaf gated on repair.jobs.view', () => {
-    const jobs = repairGroup().children.find((c) => c.href === '/jobs');
-    expect(jobs).toBeDefined();
-    expect(jobs!.permission).toBe('repair.jobs.view');
-  });
-
-  it('includes the Spare Parts leaf gated on repair.spare_parts.request', () => {
-    const sp = repairGroup().children.find((c) => c.href === '/repair/spare-parts');
-    expect(sp).toBeDefined();
-    expect(sp!.label).toBe('Spare Parts');
-    expect(sp!.permission).toBe('repair.spare_parts.request');
-  });
-
-  it('includes the Fault Templates leaf gated on repair.templates.manage', () => {
-    const ft = repairGroup().children.find((c) => c.href === '/repair/fault-templates');
-    expect(ft).toBeDefined();
-    expect(ft!.label).toBe('Fault Templates');
-    expect(ft!.permission).toBe('repair.templates.manage');
+  it('has the four sections in order', () => {
+    const sections = NAV_ITEMS.filter((e) => e.type === 'section').map((e) => e.label);
+    expect(sections).toEqual(['Operations', 'Finance', 'Management', 'Config']);
   });
 });
 
-function crmGroup() {
-  const entry = NAV_ITEMS.find(
-    (e: NavEntry) => e.type === 'group' && e.label === 'CRM',
-  );
-  if (!entry || entry.type !== 'group') throw new Error('CRM group not found');
-  return entry;
-}
+describe('NAV_ITEMS — Repair group', () => {
+  it('starts with Overview at /repair on repair.jobs.view', () => {
+    const c = group('Repair').children;
+    expect(c[0].href).toBe('/repair');
+    expect(c[0].label).toBe('Overview');
+    expect(c[0].permission).toBe('repair.jobs.view');
+  });
+
+  it('adds Estimates on repair.estimates.view', () => {
+    expect(leaf('/repair/estimates').permission).toBe('repair.estimates.view');
+  });
+
+  it('adds Warranty on repair.warranty.view', () => {
+    expect(leaf('/repair/warranty').permission).toBe('repair.warranty.view');
+  });
+});
 
 describe('NAV_ITEMS — CRM group', () => {
-  it('has the Overview leaf first, at /crm, gated on crm.customers.view', () => {
-    const children = crmGroup().children;
-    expect(children[0].href).toBe('/crm');
-    expect(children[0].label).toBe('Overview');
-    expect(children[0].permission).toBe('crm.customers.view');
+  it('starts with Overview at /crm on crm.customers.view', () => {
+    const c = group('CRM').children;
+    expect(c[0].href).toBe('/crm');
+    expect(c[0].permission).toBe('crm.customers.view');
   });
 
-  it('surfaces Tasks gated on crm.tasks.manage', () => {
-    const t = crmGroup().children.find((c) => c.href === '/tasks');
+  it('adds Deals on crm.deals.view', () => {
+    expect(leaf('/crm/deals').permission).toBe('crm.deals.view');
+  });
+
+  it('adds Contacts on crm.contacts.view', () => {
+    expect(leaf('/crm/contacts').permission).toBe('crm.contacts.view');
+  });
+
+  it('no longer contains Tasks inside the CRM group', () => {
+    const hrefs = group('CRM').children.map((c) => c.href);
+    expect(hrefs).not.toContain('/tasks');
+  });
+});
+
+describe('NAV_ITEMS — Tasks is now a top-level Operations leaf', () => {
+  it('exists as a top-level leaf gated on tasks.tasks.view or crm.tasks.manage', () => {
+    const t = NAV_ITEMS.find((e) => e.type === 'leaf' && e.href === '/tasks');
     expect(t).toBeDefined();
-    expect(t!.permission).toBe('crm.tasks.manage');
+    expect(t!.type === 'leaf' && t!.anyOf).toEqual(['tasks.tasks.view', 'crm.tasks.manage']);
+  });
+});
+
+describe('NAV_ITEMS — Inventory group', () => {
+  it('is labelled "Inventory"', () => {
+    expect(group('Inventory').label).toBe('Inventory');
   });
 
-  it('surfaces Segments gated on crm.segments.manage', () => {
-    const s = crmGroup().children.find((c) => c.href === '/crm/segments');
-    expect(s).toBeDefined();
-    expect(s!.label).toBe('Segments');
-    expect(s!.permission).toBe('crm.segments.manage');
+  it('surfaces Products on erp.products.view', () => {
+    expect(leaf('/products').label).toBe('Products');
+    expect(leaf('/products').permission).toBe('erp.products.view');
   });
 
-  it('surfaces Quotes gated on crm.leads.view', () => {
-    const q = crmGroup().children.find((c) => c.href === '/crm/quotes');
-    expect(q).toBeDefined();
-    expect(q!.label).toBe('Quotes');
-    expect(q!.permission).toBe('crm.leads.view');
+  it('renames the stock leaf to "Stock" at /inventory', () => {
+    expect(leaf('/inventory').label).toBe('Stock');
+    expect(leaf('/inventory').permission).toBe('erp.inventory.view');
   });
 
-  it('surfaces Activity gated on crm.communications.log', () => {
-    const a = crmGroup().children.find((c) => c.href === '/crm/activity');
-    expect(a).toBeDefined();
-    expect(a!.label).toBe('Activity');
-    expect(a!.permission).toBe('crm.communications.log');
+  it('surfaces Suppliers and Purchase Returns', () => {
+    expect(leaf('/suppliers').permission).toBe('erp.suppliers.manage');
+    expect(leaf('/purchases/returns').permission).toBe('erp.purchase_returns.view');
+  });
+});
+
+describe('NAV_ITEMS — Billing group', () => {
+  it('adds Outstanding, Credit Notes, Refunds', () => {
+    expect(leaf('/billing/outstanding').permission).toBe('billing.outstanding.view');
+    expect(leaf('/billing/credit-notes').permission).toBe('billing.credit_notes.view');
+    expect(leaf('/billing/refunds').permission).toBe('billing.refunds.view');
+  });
+});
+
+describe('NAV_ITEMS — Accounts + Audit', () => {
+  it('renames the Finance leaf label to Accounts (route stays /finance)', () => {
+    expect(leaf('/finance').label).toBe('Accounts');
+    expect(leaf('/finance').permission).toBe('erp.expenses.view');
   });
 
-  it('surfaces Campaigns gated on crm.segments.manage', () => {
-    const c = crmGroup().children.find((x) => x.href === '/crm/campaigns');
-    expect(c).toBeDefined();
-    expect(c!.label).toBe('Campaigns');
-    expect(c!.permission).toBe('crm.segments.manage');
-  });
-
-  it('keeps Customers and Leads', () => {
-    const hrefs = crmGroup().children.map((c) => c.href);
-    expect(hrefs).toContain('/customers');
-    expect(hrefs).toContain('/leads');
+  it('adds an Audit Log leaf on settings.audit.view', () => {
+    expect(leaf('/audit').label).toBe('Audit Log');
+    expect(leaf('/audit').permission).toBe('settings.audit.view');
   });
 });

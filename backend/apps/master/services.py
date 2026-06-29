@@ -392,6 +392,35 @@ def _seed_roles_and_permissions() -> None:
         ("settings.users.manage", "settings"),
         ("settings.commission_rules.manage", "settings"),
         ("settings.notifications.manage", "settings"),
+        # crm — Phase-0 nav blueprint additions
+        ("crm.deals.view", "crm"), ("crm.deals.create", "crm"), ("crm.deals.edit", "crm"),
+        ("crm.deals.change_stage", "crm"), ("crm.deals.close", "crm"),
+        ("crm.contacts.view", "crm"), ("crm.contacts.create", "crm"), ("crm.contacts.edit", "crm"),
+        # repair — Phase-0 additions
+        ("repair.estimates.view", "repair"),
+        # erp — Phase-0 additions
+        ("erp.products.view", "erp"), ("erp.products.manage", "erp"),
+        ("erp.purchase_returns.view", "erp"),
+        # billing — Phase-0 additions
+        ("billing.credit_notes.view", "billing"), ("billing.credit_notes.create", "billing"),
+        ("billing.credit_notes.approve", "billing"),
+        ("billing.refunds.view", "billing"), ("billing.refunds.create", "billing"),
+        ("billing.refunds.approve", "billing"),
+        # accounts — Phase-0 new module (expenses stay under erp.expenses.*)
+        ("accounts.income.view", "accounts"), ("accounts.income.record", "accounts"),
+        ("accounts.cashbook.view", "accounts"),
+        ("accounts.bank.view", "accounts"), ("accounts.bank.manage", "accounts"),
+        ("accounts.ledger.view", "accounts"), ("accounts.ledger.export", "accounts"),
+        ("accounts.journal.view", "accounts"), ("accounts.journal.create", "accounts"),
+        ("accounts.journal.post", "accounts"),
+        # tasks — Phase-0 new global module
+        ("tasks.tasks.view", "tasks"), ("tasks.tasks.manage", "tasks"),
+        # hr — Phase-0 additions
+        ("hr.departments.manage", "hr"),
+        # settings — Phase-0 additions
+        ("settings.taxes.manage", "settings"), ("settings.branches.manage", "settings"),
+        ("settings.integrations.manage", "settings"), ("settings.backup.manage", "settings"),
+        ("settings.audit.view", "settings"),
     ]
     for codename, module in permissions_catalogue:
         Permission.objects.get_or_create(
