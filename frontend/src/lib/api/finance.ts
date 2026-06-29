@@ -74,9 +74,32 @@ export interface ShopAsset {
   is_active: boolean;
 }
 
+export interface CashBookEntry {
+  id: string;
+  account_name: string;
+  txn_type: PettyCashType;
+  amount: number;
+  category: string;
+  description: string;
+  date: string;
+  balance_after: number;
+  recorded_by_name?: string | null;
+}
+
+export interface CashBook {
+  opening_balance: string;
+  closing_balance: string;
+  total_credit: string;
+  total_debit: string;
+  results: CashBookEntry[];
+}
+
 export const financeApi = {
   getPettyCashAccount: (shopId: string) =>
     apiGet<PettyCashAccount>(`/finance/petty-cash/${shopId}/`),
+
+  getCashBook: (params: { date_from?: string; date_to?: string; shop_id?: string; account_id?: string } = {}) =>
+    apiGet<CashBook>('/finance/cash-book/', params),
 
   listPettyCashTransactions: (filters: {
     account_id?: string;

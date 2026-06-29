@@ -29,6 +29,9 @@ export const qk = {
   // Billing
   outstanding:    (params?: Record<string, unknown>) => ['billing', 'outstanding', params ?? {}] as const,
 
+  // Finance / Accounts
+  cashBook:       (params?: Record<string, unknown>) => ['finance', 'cash-book', params ?? {}] as const,
+
   // CRM
   customers:       listKey('customers'),
   customer:        (id: string) => ['customer', id] as const,
