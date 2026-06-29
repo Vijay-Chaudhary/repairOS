@@ -103,3 +103,30 @@ class CreatePaymentSerializer(serializers.Serializer):
     reference_id = serializers.CharField(required=False, default="", allow_blank=True)
     notes = serializers.CharField(required=False, default="", allow_blank=True)
     paid_at = serializers.DateTimeField(required=False, allow_null=True)
+
+
+class OutstandingInvoiceSerializer(serializers.ModelSerializer):
+    customer_name = serializers.CharField(source="customer.name", read_only=True)
+    customer_phone = serializers.CharField(source="customer.phone", read_only=True)
+    days_overdue = serializers.SerializerMethodField()
+    bucket = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RepairInvoice
+        fields = [
+            "id", "invoice_number", "status", "customer_name", "customer_phone",
+            "grand_total", "amount_paid", "amount_outstanding", "due_date",
+            "days_overdue", "bucket",
+        ]
+
+    def _aging(self, obj):
+        from django.utils import timezone
+
+        from .services import aging_bucket
+        return aging_bucket(obj.due_date, timezone.now().date())
+
+    def get_days_overdue(self, obj) -> int:
+        return self._aging(obj)[1]
+
+    def get_bucket(self, obj) -> str:
+        return self._aging(obj)[0]

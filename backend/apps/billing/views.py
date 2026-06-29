@@ -22,6 +22,7 @@ from .models import Payment, RepairInvoice
 from .serializers import (
     CreatePaymentSerializer,
     CreateRepairInvoiceSerializer,
+    OutstandingInvoiceSerializer,
     PaymentSerializer,
     RepairInvoiceDetailSerializer,
     RepairInvoiceListSerializer,
@@ -278,3 +279,31 @@ class TallyExportView(APIView):
             f'attachment; filename="tally-export-{from_date}-{to_date}.csv"'
         )
         return response
+
+
+class OutstandingView(APIView):
+    """Aging report over repair invoices with money still due."""
+
+    permission_classes = [IsAuthenticated, require_permission("billing.outstanding.view")]
+
+    def get(self, request: Request) -> Response:
+        token = getattr(request, "auth", None)
+        shop_ids = _shop_ids_from_token(token)
+        if qp_shop := request.query_params.get("shop_id"):
+            shop_ids = [qp_shop]
+
+        try:
+            overdue_days = int(request.query_params.get("overdue_days", 0))
+        except (TypeError, ValueError):
+            overdue_days = 0
+        customer_id = request.query_params.get("customer_id")
+
+        rows = list(
+            services.outstanding_queryset(
+                shop_ids, overdue_days=overdue_days, customer_id=customer_id
+            )
+        )
+        return Response({
+            "summary": services.outstanding_summary(rows),
+            "results": OutstandingInvoiceSerializer(rows, many=True).data,
+        })
