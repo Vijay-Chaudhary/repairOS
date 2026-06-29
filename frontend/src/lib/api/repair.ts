@@ -213,6 +213,16 @@ export interface RepairOverview {
   }>;
 }
 
+export interface WarrantyActiveRow {
+  job_id: string; job_number: string; customer_name: string; device: string;
+  warranty_expires_at: string; days_remaining: number;
+}
+export interface WarrantyClaimRow {
+  job_id: string; job_number: string; customer_name: string; device: string; status: string;
+  original_job_id: string | null; original_job_number: string | null; created_at: string;
+}
+export interface WarrantyLists { active: WarrantyActiveRow[]; claims: WarrantyClaimRow[]; }
+
 export interface EstimateWorklistRow {
   id: string;
   job_id: string;
@@ -234,6 +244,8 @@ export const repairApi = {
 
   listEstimates: (filters: { status?: EstimateStatus; date_from?: string; date_to?: string; page?: number } = {}) =>
     apiGet<{ items: EstimateWorklistRow[]; meta: PageMeta }>('/repair/estimates/', filters as Record<string, string | number | undefined>),
+
+  getWarranty: () => apiGet<WarrantyLists>('/repair/warranty/'),
 
   getOverview: (shopId?: string) =>
     apiGet<RepairOverview>('/repair/overview/', shopId ? { shop_id: shopId } : {}),
