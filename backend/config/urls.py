@@ -23,6 +23,7 @@ urlpatterns = [
     path("api/v1/finance/", include("finance.urls")),
     path("api/v1/reports/", include("reports.urls")),
     path("api/v1/notifications/", include("core.notification_urls")),
+    path("api/v1/search/", include("core.search_urls")),
     path("api/v1/health/", include("core.urls")),
 ]
 
