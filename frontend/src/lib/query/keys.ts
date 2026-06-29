@@ -28,6 +28,7 @@ export const qk = {
 
   // Billing
   outstanding:    (params?: Record<string, unknown>) => ['billing', 'outstanding', params ?? {}] as const,
+  taxRates:       () => ['billing', 'tax-rates'] as const,
 
   // Finance / Accounts
   cashBook:       (params?: Record<string, unknown>) => ['finance', 'cash-book', params ?? {}] as const,
