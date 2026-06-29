@@ -333,3 +333,59 @@ def dispatch_email_message(
     finally:
         if tenant_slug:
             clear_tenant_context()
+
+
+# ── In-app notification scans (scheduled producers) ─────────────────────────────
+
+
+def _scan_low_stock_for_db():
+    """Notify shop inventory managers when stock is at/below reorder level (deduped)."""
+    from django.db.models import F
+    from inventory.models import InventoryStock
+    from core.services import record_notifications, users_with_permission, notify_dedup
+
+    low = InventoryStock.objects.filter(quantity_in_stock__lte=F("reorder_level"))
+    by_shop: dict = {}
+    for s in low:
+        by_shop.setdefault(s.shop_id, 0)
+        by_shop[s.shop_id] += 1
+    for shop_id, count in by_shop.items():
+        for u in users_with_permission("erp.inventory.view", [shop_id]):
+            if notify_dedup(u, "low_stock", "/inventory"):
+                continue
+            record_notifications([u], type="low_stock",
+                                 title=f"{count} item(s) low on stock", route="/inventory")
+
+
+def _scan_amc_renewals_for_db():
+    """Notify shop AMC managers about contracts due for renewal within their window (deduped)."""
+    from datetime import date
+    from amc.models import AMCContract
+    from core.services import record_notifications, users_with_permission, notify_dedup
+
+    today = date.today()
+    active = AMCContract.objects.filter(
+        status__in=[AMCContract.Status.ACTIVE, AMCContract.Status.PENDING_RENEWAL]
+    ).select_related("shop")
+    by_shop: dict = {}
+    for c in active:
+        days_left = (c.end_date - today).days
+        if 0 <= days_left <= c.renewal_reminder_days:
+            by_shop.setdefault(c.shop_id, 0)
+            by_shop[c.shop_id] += 1
+    for shop_id, count in by_shop.items():
+        for u in users_with_permission("amc.contracts.view", [shop_id]):
+            if notify_dedup(u, "amc_renewal_due", "/amc"):
+                continue
+            record_notifications([u], type="amc_renewal_due",
+                                 title=f"{count} AMC contract(s) due for renewal", route="/amc")
+
+
+@app.task(name="core.scan_low_stock", bind=True, ignore_result=True)
+def scan_low_stock(self):
+    return _scan_low_stock_for_db()
+
+
+@app.task(name="core.scan_amc_renewals", bind=True, ignore_result=True)
+def scan_amc_renewals(self):
+    return _scan_amc_renewals_for_db()
