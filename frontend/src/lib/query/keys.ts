@@ -34,6 +34,12 @@ export const qk = {
   contacts:             (filters?: Record<string, unknown>) => ['crm', 'contacts', filters ?? {}] as const,
   deals:                (filters?: Record<string, unknown>) => ['crm', 'deals', filters ?? {}] as const,
 
+  // Repair — estimates worklist, warranty, device history, attachments
+  estimates:            (filters?: Record<string, unknown>) => ['repair', 'estimates', filters ?? {}] as const,
+  warranty:             () => ['repair', 'warranty'] as const,
+  deviceHistory:        (params?: Record<string, unknown>) => ['repair', 'device-history', params ?? {}] as const,
+  jobAttachments:       (jobId: string) => ['repair', 'job', jobId, 'attachments'] as const,
+
   // Global search + notifications
   search:               (q: string) => ['search', q] as const,
   notifications:        () => ['notifications'] as const,

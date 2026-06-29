@@ -213,9 +213,57 @@ export interface RepairOverview {
   }>;
 }
 
+export interface WarrantyActiveRow {
+  job_id: string; job_number: string; customer_name: string; device: string;
+  warranty_expires_at: string; days_remaining: number;
+}
+export interface WarrantyClaimRow {
+  job_id: string; job_number: string; customer_name: string; device: string; status: string;
+  original_job_id: string | null; original_job_number: string | null; created_at: string;
+}
+export interface WarrantyLists { active: WarrantyActiveRow[]; claims: WarrantyClaimRow[]; }
+
+export interface DeviceHistoryRow {
+  job_id: string; job_number: string; status: string; device: string; created_at: string;
+}
+
+export type AttachmentKind = 'before' | 'after' | 'document';
+export interface JobAttachment {
+  id: string; url: string; filename: string; content_type: string;
+  kind: AttachmentKind; uploaded_by_name: string | null; created_at: string;
+}
+
+export interface EstimateWorklistRow {
+  id: string;
+  job_id: string;
+  job_number: string;
+  customer_name: string;
+  estimate_number: string;
+  labor_charge: string;
+  parts_cost: string;
+  total_estimate: string;
+  valid_until: string | null;
+  status: EstimateStatus;
+  sent_at: string | null;
+  created_at: string;
+}
+
 export const repairApi = {
   listJobs: (filters: JobFilters = {}) =>
     apiGet<JobListResponse>('/repair/jobs/', filters as Record<string, string | number | boolean | undefined>),
+
+  listEstimates: (filters: { status?: EstimateStatus; date_from?: string; date_to?: string; page?: number } = {}) =>
+    apiGet<{ items: EstimateWorklistRow[]; meta: PageMeta }>('/repair/estimates/', filters as Record<string, string | number | undefined>),
+
+  getWarranty: () => apiGet<WarrantyLists>('/repair/warranty/'),
+
+  getDeviceHistory: (params: { serial?: string; imei?: string }) =>
+    apiGet<{ items: DeviceHistoryRow[] }>('/repair/device-history/', params),
+
+  listAttachments: (jobId: string) =>
+    apiGet<JobAttachment[]>(`/repair/jobs/${jobId}/attachments/`),
+  addAttachment: (jobId: string, body: { url: string; filename?: string; content_type?: string; kind?: AttachmentKind }) =>
+    apiPost<JobAttachment>(`/repair/jobs/${jobId}/attachments/`, body),
 
   getOverview: (shopId?: string) =>
     apiGet<RepairOverview>('/repair/overview/', shopId ? { shop_id: shopId } : {}),

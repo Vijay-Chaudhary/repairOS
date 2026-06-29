@@ -7,6 +7,9 @@ import logging
 from django.db.models import Q
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.mixins import ListModelMixin
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
@@ -27,7 +30,9 @@ from .serializers import (
     CreateEstimateSerializer,
     EstimateResponseSerializer,
     FaultTemplateSerializer,
+    JobAttachmentSerializer,
     JobCheckinConditionSerializer,
+    JobEstimateListSerializer,
     JobSparePartRequestSerializer,
     JobStatusSerializer,
     JobTicketDetailSerializer,
@@ -41,6 +46,14 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _scoped_job_ids_q(request, field="job__shop_id"):
+    """Return a Q filtering on the job's shop per the JWT, or Q() if tenant-wide."""
+    token = getattr(request, "auth", None) or {}
+    if token.get("is_tenant_wide") or token.get("is_platform_admin"):
+        return Q()
+    return Q(**{f"{field}__in": token.get("shop_ids", [])})
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -90,7 +103,8 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
         if self.action == "warranty_claim":
             return [require_permission("repair.warranty.view")()]
         if self.action == "attachments":
-            return [require_permission("repair.jobs.edit")()]
+            slug = "repair.jobs.view" if self.request.method == "GET" else "repair.jobs.edit"
+            return [require_permission(slug)()]
         return [require_permission("repair.jobs.view")()]
 
     # ── Queryset ──────────────────────────────────────────────────────────────
@@ -320,12 +334,17 @@ class JobTicketViewSet(ShopScopedMixin, GenericViewSet):
         warranty_job = services.create_warranty_claim(job, request.user)
         return Response(JobTicketSerializer(warranty_job).data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["post"], url_path="attachments")
+    @action(detail=True, methods=["get", "post"], url_path="attachments")
     def attachments(self, request, pk=None):
-        # S3 integration: client uploads directly; this endpoint stores the S3 key reference.
-        # For now, return 200 with the provided key.
-        key = request.data.get("key", "")
-        return Response({"key": key, "message": "Attachment reference recorded."})
+        """List (GET) or add (POST) attachments for a job. Stores the object key/URL reference."""
+        job = self.get_object()
+        if request.method == "GET":
+            qs = job.attachments.select_related("uploaded_by").order_by("-created_at")
+            return Response(JobAttachmentSerializer(qs, many=True).data)
+        ser = JobAttachmentSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        ser.save(job=job, uploaded_by=request.user)
+        return Response(ser.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["get"], url_path="timeline")
     def timeline(self, request, pk=None):
@@ -569,3 +588,55 @@ class RepairOverviewView(ShopScopedMixin, APIView):
         shop_id = request.query_params.get("shop_id")
         data = services.get_repair_overview(self._shop_filter(), shop_id)
         return Response(RepairOverviewSerializer(data).data)
+
+
+class JobEstimateWorklistViewSet(ListModelMixin, GenericViewSet):
+    """Cross-job estimate worklist. Per-job create lives at /jobs/{id}/estimate/."""
+
+    pagination_class = RepairOSPageNumberPagination
+    serializer_class = JobEstimateListSerializer
+
+    def get_permissions(self):
+        return [require_permission("repair.estimates.view")()]
+
+    def get_queryset(self):
+        from .models import JobEstimate
+        qs = JobEstimate.objects.select_related("job", "job__customer").filter(_scoped_job_ids_q(self.request))
+        if s := self.request.query_params.get("status"):
+            qs = qs.filter(status=s)
+        if df := self.request.query_params.get("date_from"):
+            qs = qs.filter(created_at__date__gte=df)
+        if dt := self.request.query_params.get("date_to"):
+            qs = qs.filter(created_at__date__lte=dt)
+        return qs.order_by("-created_at")
+
+
+class WarrantyWorklistView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("repair.warranty.view")]
+
+    def get(self, request: Request) -> Response:
+        job_filter = _scoped_job_ids_q(request, field="shop_id")
+        return Response(services.build_warranty_lists(job_filter))
+
+
+class DeviceHistoryView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("repair.jobs.view")]
+
+    def get(self, request: Request) -> Response:
+        serial = (request.query_params.get("serial") or "").strip()
+        imei = (request.query_params.get("imei") or "").strip()
+        if not serial and not imei:
+            return Response({"items": []})
+
+        q = Q()
+        if serial:
+            q |= Q(serial_number__icontains=serial)
+        if imei:
+            q |= Q(imei__icontains=imei)
+        jobs = (JobTicket.objects.filter(_scoped_job_ids_q(request, field="shop_id"))
+                .filter(q).select_related("customer").order_by("-created_at")[:50])
+        return Response({"items": [{
+            "job_id": str(j.id), "job_number": j.job_number, "status": j.status,
+            "device": f"{j.device_brand} {j.device_model}".strip() or j.device_type,
+            "created_at": j.created_at.isoformat(),
+        } for j in jobs]})

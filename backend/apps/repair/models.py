@@ -334,3 +334,28 @@ class JobSparePartRequest(BaseModel):
         part = self.custom_part_name or str(self.variant_id)
         target = self.job.job_number if self.job_id else "stock"
         return f"{part} x{self.quantity} for {target}"
+
+
+class JobAttachment(BaseModel):
+    """A file attached to a repair job (photo/document). Stores an object key/URL reference."""
+
+    class Kind(models.TextChoices):
+        BEFORE = "before", "Before"
+        AFTER = "after", "After"
+        DOCUMENT = "document", "Document"
+
+    job = models.ForeignKey(JobTicket, on_delete=models.CASCADE, related_name="attachments")
+    url = models.CharField(max_length=500)
+    filename = models.CharField(max_length=255, blank=True, default="")
+    content_type = models.CharField(max_length=100, blank=True, default="")
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.DOCUMENT)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                    on_delete=models.SET_NULL, related_name="job_attachments")
+
+    class Meta:
+        app_label = "repair"
+        db_table = "job_attachments"
+        indexes = [models.Index(fields=["job", "created_at"])]
+
+    def __str__(self) -> str:
+        return f"{self.filename or self.url} ({self.kind})"

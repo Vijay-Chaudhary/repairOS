@@ -9,6 +9,7 @@ from .models import (
     FaultTemplate,
     FaultTemplatePart,
     JobCheckinCondition,
+    JobAttachment,
     JobEstimate,
     JobSparePartRequest,
     JobStage,
@@ -382,3 +383,24 @@ class RepairOverviewSerializer(serializers.Serializer):
     kpis = OverviewKpisSerializer()
     by_status = OverviewStatusCountSerializer(many=True)
     needs_attention = OverviewNeedsAttentionSerializer(many=True)
+
+
+class JobEstimateListSerializer(serializers.ModelSerializer):
+    job_id = serializers.UUIDField(source="job.id", read_only=True)
+    job_number = serializers.CharField(source="job.job_number", read_only=True)
+    customer_name = serializers.CharField(source="job.customer.name", read_only=True)
+
+    class Meta:
+        model = JobEstimate
+        fields = ["id", "job_id", "job_number", "customer_name", "estimate_number",
+                  "labor_charge", "parts_cost", "total_estimate", "valid_until",
+                  "status", "sent_at", "created_at"]
+
+
+class JobAttachmentSerializer(serializers.ModelSerializer):
+    uploaded_by_name = serializers.CharField(source="uploaded_by.full_name", read_only=True, default=None)
+
+    class Meta:
+        model = JobAttachment
+        fields = ["id", "url", "filename", "content_type", "kind", "uploaded_by_name", "created_at"]
+        read_only_fields = ["id", "uploaded_by_name", "created_at"]
