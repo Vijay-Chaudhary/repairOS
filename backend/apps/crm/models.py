@@ -226,6 +226,7 @@ class CommunicationLog(SoftDeleteModel):
 class FollowUpTask(SoftDeleteModel):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
+        IN_PROGRESS = "in_progress", "In Progress"
         COMPLETED = "completed", "Completed"
         CANCELLED = "cancelled", "Cancelled"
         OVERDUE = "overdue", "Overdue"
