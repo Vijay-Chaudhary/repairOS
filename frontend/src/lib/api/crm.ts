@@ -199,9 +199,32 @@ export interface TaskFilters {
 
 // ── API ───────────────────────────────────────────────────────────────────────
 
+export interface Contact {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  name: string;
+  designation: string;
+  email: string | null;
+  phone: string;
+  notes: string;
+  is_primary: boolean;
+  created_at: string;
+}
+
 export const crmApi = {
   getOverview: (shopId?: string) =>
     apiGet<CrmOverview>('/crm/overview/', shopId ? { shop_id: shopId } : {}),
+
+  // Contacts
+  listContacts: (filters: { customer_id?: string; page?: number } = {}) =>
+    apiGet<{ items: Contact[]; meta: PageMeta }>('/crm/contacts/', filters as Record<string, string | number | undefined>),
+  createContact: (body: { customer_id: string; name: string; designation?: string; email?: string; phone?: string; notes?: string; is_primary?: boolean }) =>
+    apiPost<Contact>('/crm/contacts/', body),
+  updateContact: (id: string, body: Partial<{ name: string; designation: string; email: string; phone: string; notes: string; is_primary: boolean }>) =>
+    apiPatch<Contact>(`/crm/contacts/${id}/`, body),
+  deleteContact: (id: string) =>
+    apiDelete<void>(`/crm/contacts/${id}/`),
 
   // Leads
   listLeads: (filters: LeadFilters = {}) =>

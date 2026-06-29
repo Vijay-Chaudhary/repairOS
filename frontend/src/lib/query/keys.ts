@@ -30,6 +30,10 @@ export const qk = {
   outstanding:    (params?: Record<string, unknown>) => ['billing', 'outstanding', params ?? {}] as const,
   taxRates:       () => ['billing', 'tax-rates'] as const,
 
+  // CRM — contacts + deals
+  contacts:             (filters?: Record<string, unknown>) => ['crm', 'contacts', filters ?? {}] as const,
+  deals:                (filters?: Record<string, unknown>) => ['crm', 'deals', filters ?? {}] as const,
+
   // Global search + notifications
   search:               (q: string) => ['search', q] as const,
   notifications:        () => ['notifications'] as const,
