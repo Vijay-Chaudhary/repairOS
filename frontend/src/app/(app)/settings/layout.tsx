@@ -16,6 +16,7 @@ const TABS: TabDef[] = [
   { label: 'Users',             href: '/settings/users',            permission: 'settings.users.manage' },
   { label: 'Roles',             href: '/settings/roles',            permission: 'settings.roles.manage' },
   { label: 'Commission Rules',  href: '/settings/commission-rules', permission: 'settings.commission_rules.manage' },
+  { label: 'Taxes',             href: '/settings/taxes',            permission: 'settings.taxes.manage' },
   { label: 'WhatsApp',          href: '/settings/whatsapp',         permission: 'settings.notifications.manage' },
   { label: 'Segments',          href: '/settings/segments',         permission: 'crm.segments.manage' },
 ];

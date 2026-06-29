@@ -49,13 +49,13 @@ export interface ReportDef {
 
 export const REPORT_CATALOGUE: ReportDef[] = [
   // Billing
-  { type: 'revenue-summary',           label: 'Revenue Summary',              module: 'Billing', permission: 'reports.billing.view', filters: ['date_range', 'shop'],                  exports: ['pdf', 'csv'] },
-  { type: 'outstanding-dues-repair',   label: 'Outstanding Dues (Repair)',    module: 'Billing', permission: 'reports.billing.view', filters: ['overdue_days', 'shop'],               exports: ['pdf', 'csv'] },
-  { type: 'outstanding-dues-wholesale',label: 'Outstanding Dues (Wholesale)', module: 'Billing', permission: 'reports.billing.view', filters: ['overdue_days', 'shop'],               exports: ['pdf', 'csv'] },
-  { type: 'payment-collection-log',    label: 'Payment Collection Log',       module: 'Billing', permission: 'reports.billing.view', filters: ['date_range', 'shop'],                  exports: ['csv'] },
-  { type: 'pl-summary',                label: 'P&L Summary',                  module: 'Billing', permission: 'reports.billing.view', filters: ['month_year', 'shop'],                  exports: ['pdf'] },
-  { type: 'gstr-1',                    label: 'GSTR-1 (Outward Supplies)',    module: 'Billing', permission: 'reports.billing.view', filters: ['month_year', 'shop'],                  exports: ['csv'] },
-  { type: 'gstr-2',                    label: 'GSTR-2 Proxy (Inward)',        module: 'Billing', permission: 'reports.billing.view', filters: ['month_year', 'shop'],                  exports: ['csv'] },
+  { type: 'revenue-summary',           label: 'Revenue Summary',              module: 'Billing', permission: 'reports.revenue.view',   filters: ['date_range', 'shop'],                  exports: ['pdf', 'csv'] },
+  { type: 'outstanding-dues-repair',   label: 'Outstanding Dues (Repair)',    module: 'Billing', permission: 'reports.revenue.view',   filters: ['overdue_days', 'shop'],               exports: ['pdf', 'csv'] },
+  { type: 'outstanding-dues-wholesale',label: 'Outstanding Dues (Wholesale)', module: 'Billing', permission: 'reports.inventory.view', filters: ['overdue_days', 'shop'],               exports: ['pdf', 'csv'] },
+  { type: 'payment-collection-log',    label: 'Payment Collection Log',       module: 'Billing', permission: 'reports.revenue.view',   filters: ['date_range', 'shop'],                  exports: ['csv'] },
+  { type: 'pl-summary',                label: 'P&L Summary',                  module: 'Billing', permission: 'reports.revenue.view',   filters: ['month_year', 'shop'],                  exports: ['pdf'] },
+  { type: 'gstr-1',                    label: 'GSTR-1 (Outward Supplies)',    module: 'Billing', permission: 'reports.revenue.view',   filters: ['month_year', 'shop'],                  exports: ['csv'] },
+  { type: 'gstr-2',                    label: 'GSTR-2 Proxy (Inward)',        module: 'Billing', permission: 'reports.revenue.view',   filters: ['month_year', 'shop'],                  exports: ['csv'] },
   // Repair
   { type: 'job-status-summary',        label: 'Job Status Summary',           module: 'Repair',  permission: 'reports.repair.view',  filters: ['date_range', 'shop', 'status', 'technician_id'], exports: ['pdf', 'csv'] },
   { type: 'job-turnaround-time',       label: 'Job Turnaround Time',          module: 'Repair',  permission: 'reports.repair.view',  filters: ['date_range', 'shop'],                  exports: ['csv'] },
@@ -72,12 +72,12 @@ export const REPORT_CATALOGUE: ReportDef[] = [
   { type: 'amc-visit-compliance',      label: 'AMC Visit Compliance',         module: 'AMC',     permission: 'reports.amc.view',     filters: ['date_range', 'shop'],                  exports: ['csv'] },
   { type: 'amc-revenue',               label: 'AMC Revenue',                  module: 'AMC',     permission: 'reports.amc.view',     filters: ['date_range', 'shop'],                  exports: ['pdf', 'csv'] },
   // ERP
-  { type: 'inventory-valuation',       label: 'Inventory Valuation',          module: 'ERP',     permission: 'reports.erp.view',     filters: ['date_range', 'shop', 'category'],      exports: ['csv'] },
-  { type: 'stock-movement-ledger',     label: 'Stock Movement Ledger',        module: 'ERP',     permission: 'reports.erp.view',     filters: ['date_range', 'shop'],                  exports: ['csv'] },
-  { type: 'supplier-payable',          label: 'Supplier Payable (Aged)',       module: 'ERP',     permission: 'reports.erp.view',     filters: ['overdue_days', 'shop'],               exports: ['pdf', 'csv'] },
-  { type: 'purchase-summary',          label: 'Purchase Summary',             module: 'ERP',     permission: 'reports.erp.view',     filters: ['date_range', 'shop'],                  exports: ['pdf', 'csv'] },
-  { type: 'expense-by-category',       label: 'Expense by Category',          module: 'ERP',     permission: 'reports.erp.view',     filters: ['date_range', 'shop', 'category'],      exports: ['pdf', 'csv'] },
-  { type: 'budget-vs-actual',          label: 'Budget vs Actual',             module: 'ERP',     permission: 'reports.erp.view',     filters: ['month_year', 'shop'],                  exports: ['pdf', 'csv'] },
+  { type: 'inventory-valuation',       label: 'Inventory Valuation',          module: 'ERP',     permission: 'reports.inventory.view', filters: ['date_range', 'shop', 'category'],      exports: ['csv'] },
+  { type: 'stock-movement-ledger',     label: 'Stock Movement Ledger',        module: 'ERP',     permission: 'reports.inventory.view', filters: ['date_range', 'shop'],                  exports: ['csv'] },
+  { type: 'supplier-payable',          label: 'Supplier Payable (Aged)',       module: 'ERP',     permission: 'reports.inventory.view', filters: ['overdue_days', 'shop'],               exports: ['pdf', 'csv'] },
+  { type: 'purchase-summary',          label: 'Purchase Summary',             module: 'ERP',     permission: 'reports.inventory.view', filters: ['date_range', 'shop'],                  exports: ['pdf', 'csv'] },
+  { type: 'expense-by-category',       label: 'Expense by Category',          module: 'ERP',     permission: 'reports.inventory.view', filters: ['date_range', 'shop', 'category'],      exports: ['pdf', 'csv'] },
+  { type: 'budget-vs-actual',          label: 'Budget vs Actual',             module: 'ERP',     permission: 'reports.inventory.view', filters: ['month_year', 'shop'],                  exports: ['pdf', 'csv'] },
   // HR
   { type: 'hr-attendance-summary',     label: 'HR Attendance Summary',        module: 'HR',      permission: 'reports.hr.view',      filters: ['month_year', 'shop', 'employee_id'],   exports: ['pdf', 'csv'] },
   { type: 'salary-register',           label: 'Salary Register',              module: 'HR',      permission: 'reports.hr.view',      filters: ['month_year', 'shop'],                  exports: ['pdf', 'csv'] },

@@ -1,4 +1,4 @@
-import { apiGet, apiPost, type PageMeta } from './client';
+import { apiGet, apiPost, apiPatch, type PageMeta } from './client';
 import { useAuthStore } from '@/lib/stores/authStore';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -86,6 +86,48 @@ export interface PaymentFilters {
   page?: number;
 }
 
+export type AgingBucket = 'current' | '1-30' | '31-60' | '61-90' | '90+';
+
+export interface OutstandingInvoice {
+  id: string;
+  invoice_number: string;
+  status: InvoiceStatus;
+  customer_name: string;
+  customer_phone: string;
+  grand_total: string;
+  amount_paid: string;
+  amount_outstanding: string;
+  due_date: string | null;
+  days_overdue: number;
+  bucket: AgingBucket;
+}
+
+export interface OutstandingReport {
+  summary: {
+    total_outstanding: string;
+    invoice_count: number;
+    buckets: Record<AgingBucket, string>;
+  };
+  results: OutstandingInvoice[];
+}
+
+export type TaxType = 'gst' | 'igst' | 'exempt';
+
+export interface TaxRate {
+  id: string;
+  name: string;
+  rate: string;
+  tax_type: TaxType;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface TaxRateInput {
+  name: string;
+  rate: number;
+  tax_type: TaxType;
+}
+
 // ── API ───────────────────────────────────────────────────────────────────────
 
 export const billingApi = {
@@ -97,6 +139,18 @@ export const billingApi = {
 
   getInvoice: (id: string) =>
     apiGet<Invoice>(`/billing/repair-invoices/${id}/`),
+
+  getOutstanding: (params: { shop_id?: string; overdue_days?: number; customer_id?: string } = {}) =>
+    apiGet<OutstandingReport>('/billing/outstanding/', params),
+
+  listTaxRates: () =>
+    apiGet<TaxRate[]>('/billing/tax-rates/'),
+
+  createTaxRate: (body: TaxRateInput) =>
+    apiPost<TaxRate>('/billing/tax-rates/', body),
+
+  updateTaxRate: (id: string, body: Partial<TaxRateInput> & { is_active?: boolean }) =>
+    apiPatch<TaxRate>(`/billing/tax-rates/${id}/`, body),
 
   createInvoice: (body: { job_id: string; discount_amount?: number; due_date?: string }) =>
     apiPost<Invoice>('/billing/repair-invoices/', body),

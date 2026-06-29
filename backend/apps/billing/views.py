@@ -18,13 +18,15 @@ from authentication.permissions import require_permission
 from core.pagination import RepairOSCursorPagination, RepairOSPageNumberPagination
 
 from . import services
-from .models import Payment, RepairInvoice
+from .models import Payment, RepairInvoice, TaxRate
 from .serializers import (
     CreatePaymentSerializer,
     CreateRepairInvoiceSerializer,
+    OutstandingInvoiceSerializer,
     PaymentSerializer,
     RepairInvoiceDetailSerializer,
     RepairInvoiceListSerializer,
+    TaxRateSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -278,3 +280,71 @@ class TallyExportView(APIView):
             f'attachment; filename="tally-export-{from_date}-{to_date}.csv"'
         )
         return response
+
+
+class OutstandingView(APIView):
+    """Aging report over repair invoices with money still due."""
+
+    permission_classes = [IsAuthenticated, require_permission("billing.outstanding.view")]
+
+    def get(self, request: Request) -> Response:
+        token = getattr(request, "auth", None)
+        shop_ids = _shop_ids_from_token(token)
+        if qp_shop := request.query_params.get("shop_id"):
+            shop_ids = [qp_shop]
+
+        try:
+            overdue_days = int(request.query_params.get("overdue_days", 0))
+        except (TypeError, ValueError):
+            overdue_days = 0
+        customer_id = request.query_params.get("customer_id")
+
+        rows = list(
+            services.outstanding_queryset(
+                shop_ids, overdue_days=overdue_days, customer_id=customer_id
+            )
+        )
+        return Response({
+            "summary": services.outstanding_summary(rows),
+            "results": OutstandingInvoiceSerializer(rows, many=True).data,
+        })
+
+
+class TaxRateView(APIView):
+    """List/create GST tax-rate slabs (Settings › Taxes)."""
+
+    permission_classes = [IsAuthenticated, require_permission("settings.taxes.manage")]
+
+    def get(self, request: Request) -> Response:
+        active_only = request.query_params.get("is_active", "").lower() == "true"
+        rates = services.list_tax_rates(active_only=active_only)
+        return Response(TaxRateSerializer(rates, many=True).data)
+
+    def post(self, request: Request) -> Response:
+        ser = TaxRateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        return Response(ser.data, status=status.HTTP_201_CREATED)
+
+
+class TaxRateDetailView(APIView):
+    """Retrieve/update/deactivate a single tax-rate slab."""
+
+    permission_classes = [IsAuthenticated, require_permission("settings.taxes.manage")]
+
+    def _get(self, tax_rate_id) -> TaxRate:
+        from django.shortcuts import get_object_or_404
+        return get_object_or_404(TaxRate, id=tax_rate_id)
+
+    def get(self, request: Request, tax_rate_id) -> Response:
+        return Response(TaxRateSerializer(self._get(tax_rate_id)).data)
+
+    def patch(self, request: Request, tax_rate_id) -> Response:
+        ser = TaxRateSerializer(self._get(tax_rate_id), data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        return Response(ser.data)
+
+    def delete(self, request: Request, tax_rate_id) -> Response:
+        services.deactivate_tax_rate(self._get(tax_rate_id))
+        return Response(status=status.HTTP_204_NO_CONTENT)

@@ -9,6 +9,7 @@ const ORDERED: { href: string; permission: string }[] = [
   { href: '/settings/users',            permission: 'settings.users.manage' },
   { href: '/settings/roles',            permission: 'settings.roles.manage' },
   { href: '/settings/commission-rules', permission: 'settings.commission_rules.manage' },
+  { href: '/settings/taxes',            permission: 'settings.taxes.manage' },
   { href: '/settings/whatsapp',         permission: 'settings.notifications.manage' },
   { href: '/settings/segments',         permission: 'crm.segments.manage' },
 ];

@@ -5,6 +5,7 @@ from . import views
 urlpatterns = [
     path("petty-cash/<uuid:shop_id>/", views.PettyCashAccountView.as_view(), name="petty-cash-account"),
     path("petty-cash/transactions/", views.PettyCashTransactionView.as_view(), name="petty-cash-txn"),
+    path("cash-book/", views.CashBookView.as_view(), name="cash-book"),
     path("budget/", views.BudgetHeadListView.as_view(), name="budget-heads"),
     path("budget/allocations/", views.BudgetAllocationView.as_view(), name="budget-allocations"),
     path("expenses/", views.ExpenseListCreateView.as_view(), name="expenses"),

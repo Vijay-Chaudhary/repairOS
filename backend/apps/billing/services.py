@@ -392,3 +392,76 @@ def tally_export_csv(shop, from_date, to_date) -> str:
         ])
 
     return output.getvalue()
+
+
+# ── Outstanding (aging) report ──────────────────────────────────────────────────
+
+OUTSTANDING_BUCKETS = ["current", "1-30", "31-60", "61-90", "90+"]
+
+
+def aging_bucket(due_date, today):
+    """Return (bucket_label, days_overdue) for an invoice due_date relative to today."""
+    if due_date is None or due_date >= today:
+        return "current", 0
+    days = (today - due_date).days
+    if days <= 30:
+        return "1-30", days
+    if days <= 60:
+        return "31-60", days
+    if days <= 90:
+        return "61-90", days
+    return "90+", days
+
+
+def outstanding_queryset(shop_ids, *, overdue_days=0, customer_id=None):
+    """Repair invoices with money still due, optionally shop/customer/overdue filtered."""
+    from datetime import timedelta
+
+    qs = (
+        RepairInvoice.objects.select_related("customer", "shop")
+        .filter(
+            status__in=[RepairInvoice.Status.ISSUED, RepairInvoice.Status.PARTIALLY_PAID],
+            amount_outstanding__gt=0,
+        )
+        .order_by("due_date", "created_at")
+    )
+    if shop_ids is not None:
+        qs = qs.filter(shop_id__in=shop_ids)
+    if customer_id:
+        qs = qs.filter(customer_id=customer_id)
+    if overdue_days and overdue_days > 0:
+        cutoff = timezone.now().date() - timedelta(days=overdue_days)
+        qs = qs.filter(due_date__lte=cutoff)
+    return qs
+
+
+def outstanding_summary(invoices):
+    """One-pass aging summary over an iterable of outstanding invoices."""
+    today = timezone.now().date()
+    buckets = {b: Decimal("0") for b in OUTSTANDING_BUCKETS}
+    total = Decimal("0")
+    count = 0
+    for inv in invoices:
+        bucket, _ = aging_bucket(inv.due_date, today)
+        buckets[bucket] += inv.amount_outstanding
+        total += inv.amount_outstanding
+        count += 1
+    return {
+        "total_outstanding": str(total),
+        "invoice_count": count,
+        "buckets": {k: str(v) for k, v in buckets.items()},
+    }
+
+
+# ── Tax rates (Settings › Taxes) ────────────────────────────────────────────────
+
+
+def list_tax_rates(*, active_only=False):
+    from .models import TaxRate
+    qs = TaxRate.objects.all().order_by("rate")
+    return qs.filter(is_active=True) if active_only else qs
+
+
+def deactivate_tax_rate(tax_rate) -> None:
+    tax_rate.is_active = False
+    tax_rate.save()  # auto_now refreshes updated_at
