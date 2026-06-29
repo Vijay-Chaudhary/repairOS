@@ -227,6 +227,12 @@ export interface DeviceHistoryRow {
   job_id: string; job_number: string; status: string; device: string; created_at: string;
 }
 
+export type AttachmentKind = 'before' | 'after' | 'document';
+export interface JobAttachment {
+  id: string; url: string; filename: string; content_type: string;
+  kind: AttachmentKind; uploaded_by_name: string | null; created_at: string;
+}
+
 export interface EstimateWorklistRow {
   id: string;
   job_id: string;
@@ -253,6 +259,11 @@ export const repairApi = {
 
   getDeviceHistory: (params: { serial?: string; imei?: string }) =>
     apiGet<{ items: DeviceHistoryRow[] }>('/repair/device-history/', params),
+
+  listAttachments: (jobId: string) =>
+    apiGet<JobAttachment[]>(`/repair/jobs/${jobId}/attachments/`),
+  addAttachment: (jobId: string, body: { url: string; filename?: string; content_type?: string; kind?: AttachmentKind }) =>
+    apiPost<JobAttachment>(`/repair/jobs/${jobId}/attachments/`, body),
 
   getOverview: (shopId?: string) =>
     apiGet<RepairOverview>('/repair/overview/', shopId ? { shop_id: shopId } : {}),

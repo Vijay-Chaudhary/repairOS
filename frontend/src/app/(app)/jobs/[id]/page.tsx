@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Money } from '@/components/shared/Money';
 import { Can } from '@/components/shared/Can';
+import { PhotoUploader } from '@/components/shared/PhotoUploader';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { EntityTimeline } from '@/components/shared/EntityTimeline';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -86,6 +87,16 @@ export default function JobDetailPage() {
     staleTime: 60_000,
   });
   const otherDeviceJobs = (deviceHistory?.items ?? []).filter((r) => r.job_id !== id);
+
+  const { data: attachments } = useQuery({
+    queryKey: qk.jobAttachments(id),
+    queryFn: () => repairApi.listAttachments(id),
+    staleTime: 60_000,
+  });
+  const addAttachmentMutation = useMutation({
+    mutationFn: (url: string) => repairApi.addAttachment(id, { url, filename: url.split('/').pop() || '' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.jobAttachments(id) }),
+  });
 
   const statusMutation = useMutation({
     mutationFn: ({ to, reason }: { to: JobStatus; reason?: string }) =>
@@ -203,7 +214,7 @@ export default function JobDetailPage() {
       <Tabs defaultValue="overview" className="flex-1 min-h-0">
         <div className="border-b border-[var(--border)] bg-[var(--surface)] sticky top-0 z-10 px-4">
           <TabsList className="h-10 bg-transparent gap-0 -mb-px w-full justify-start overflow-x-auto">
-            {['overview', 'checkin', 'estimate', 'stages', 'parts', ...(hasDevice ? ['history'] : []), 'timeline'].map((tab) => (
+            {['overview', 'checkin', 'estimate', 'stages', 'parts', 'attachments', ...(hasDevice ? ['history'] : []), 'timeline'].map((tab) => (
               <TabsTrigger
                 key={tab}
                 value={tab}
@@ -416,6 +427,29 @@ export default function JobDetailPage() {
                     </div>
                     <StatusBadge status={part.status} />
                   </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Attachments */}
+          <TabsContent value="attachments" className="p-4 md:p-6 mt-0 space-y-4">
+            <Can permission="repair.jobs.edit">
+              <PhotoUploader
+                value={[]}
+                onChange={(urls) => urls.forEach((u) => addAttachmentMutation.mutate(u))}
+              />
+            </Can>
+            {(attachments ?? []).length === 0 ? (
+              <EmptyState title="No attachments" description="Add photos or documents for this job." />
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {(attachments ?? []).map((a) => (
+                  <a key={a.id} href={a.url} target="_blank" rel="noreferrer"
+                    className="rounded-md border border-[var(--border)] bg-[var(--surface)] p-2 hover:bg-[var(--surface-2)]">
+                    <span className="block text-body-sm text-[var(--text)] truncate">{a.filename || 'Attachment'}</span>
+                    <span className="block text-xs text-[var(--text-muted)] capitalize">{a.kind}</span>
+                  </a>
                 ))}
               </div>
             )}
