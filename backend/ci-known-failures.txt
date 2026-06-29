@@ -1,19 +1,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # CI known-failing tests (deselected by the pipeline test gate).
 #
-# The reports/finance permission-slug drift that caused the bulk of these has
-# been FIXED (see commit aligning view/test slugs to the seed). The entries below
-# are the remaining PRE-EXISTING failures, which are STALE TESTS — not product
-# bugs and not slug drift. Fix and remove them so this file shrinks to empty.
+# Currently EMPTY — all previously known failures have been fixed:
+#   - reports/finance permission-slug drift (aligned view/test slugs to the seed)
+#   - billing duplicate-invoice assertion (400 → 422 BusinessRuleViolation)
+#   - notification mocks (now assert the tenant_slug kwarg)
 #
-# FORMAT: one pytest node id (or file / file::Class) per line. '#' = comment.
+# To deselect a genuinely pre-existing failure, add its pytest node id (or
+# file / file::Class) on its own line below, with a comment explaining why and a
+# plan to fix it. '#' = comment. Keep this file shrinking toward empty.
 # ─────────────────────────────────────────────────────────────────────────────
-
-# Stale test: a duplicate invoice correctly returns 422 (BusinessRuleViolation),
-# but the test still asserts 400.
-apps/billing/tests/test_billing.py::TestInvoiceCreation::test_duplicate_invoice_for_same_job_blocked
-
-# Stale mocks: notification tasks now receive tenant_slug (tenant-context change),
-# but these assert the old call signature without it.
-apps/core/tests/test_notifications.py::TestSendEmail::test_valid_address_dispatches
-apps/core/tests/test_notifications.py::TestSendWhatsApp::test_opted_in_customer_dispatches

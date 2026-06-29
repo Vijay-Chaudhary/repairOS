@@ -214,7 +214,8 @@ class TestInvoiceCreation:
             "job_id": str(job.id),
             "discount_amount": "0",
         }, format="json")
-        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        # Duplicate invoice is a BusinessRuleViolation → 422 (not a 400 serializer error).
+        assert res.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
     def test_invoice_number_format(self, admin_client, job, shop):
         from django.utils import timezone
