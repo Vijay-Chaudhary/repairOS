@@ -146,6 +146,23 @@ export interface CreditNote {
   created_at: string;
 }
 
+export type RefundMethod = 'cash' | 'upi' | 'card' | 'cheque' | 'neft' | 'other';
+
+export interface Refund {
+  id: string;
+  invoice_id: string;
+  invoice_number: string;
+  customer_name: string;
+  refund_number: string;
+  amount: string;
+  method: RefundMethod;
+  reason: string;
+  status: DocStatus;
+  approved_by_name: string | null;
+  approved_at: string | null;
+  created_at: string;
+}
+
 export const billingApi = {
   listInvoices: (filters: InvoiceFilters = {}) =>
     apiGet<{ items: Invoice[]; meta: PageMeta }>(
@@ -165,6 +182,13 @@ export const billingApi = {
     apiPost<CreditNote>('/billing/credit-notes/', body),
   approveCreditNote: (id: string) =>
     apiPost<CreditNote>(`/billing/credit-notes/${id}/approve/`, {}),
+
+  listRefunds: (params: { status?: DocStatus; invoice_id?: string } = {}) =>
+    apiGet<Refund[]>('/billing/refunds/', params),
+  createRefund: (body: { invoice_id: string; amount: number; method: RefundMethod; reason?: string }) =>
+    apiPost<Refund>('/billing/refunds/', body),
+  approveRefund: (id: string) =>
+    apiPost<Refund>(`/billing/refunds/${id}/approve/`, {}),
 
   listTaxRates: () =>
     apiGet<TaxRate[]>('/billing/tax-rates/'),
