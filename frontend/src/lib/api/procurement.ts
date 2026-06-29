@@ -236,6 +236,9 @@ export const procurementApi = {
   listReturns: (invoiceId: string) =>
     apiGet<PurchaseReturn[]>('/procurement/purchase-returns/', { invoice_id: invoiceId }),
 
+  listAllReturns: () =>
+    apiGet<PurchaseReturn[]>('/procurement/purchase-returns/'),
+
   createReturn: (body: {
     purchase_invoice_id: string;
     reason: string;

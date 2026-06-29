@@ -88,6 +88,7 @@ export const qk = {
   suppliers:       listKey('suppliers'),
   supplier:        (id: string) => ['supplier', id] as const,
   purchaseReturns: (invoiceId: string) => ['purchase-returns', invoiceId] as const,
+  allPurchaseReturns: () => ['purchase-returns', 'all'] as const,
 
   // Billing
   invoices: listKey('invoices'),
