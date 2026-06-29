@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -15,6 +16,7 @@ import { useUiStore } from '@/lib/stores/uiStore';
 import { wsClient } from '@/lib/ws/client';
 import { authApi } from '@/lib/api/auth';
 import { Can } from '@/components/shared/Can';
+import { CommandPalette } from '@/components/shared/CommandPalette';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -332,6 +334,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { sidebarCollapsed, toggleSidebar, mobileNavOpen, toggleMobileNav, setMobileNavOpen } = useUiStore();
   const router = useRouter();
 
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   async function handleLogout() {
     try { await authApi.logout(); } catch { /* ignore */ }
     logout();
@@ -447,12 +462,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
             <ShopSwitcher />
             <div className="flex-1" />
-            <button className="p-2 rounded-md hover:bg-[var(--surface-2)] text-[var(--text-muted)] min-h-[auto] min-w-[auto]" aria-label="Search">
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="p-2 rounded-md hover:bg-[var(--surface-2)] text-[var(--text-muted)] min-h-[auto] min-w-[auto]"
+              aria-label="Search"
+            >
               <Search className="h-5 w-5" />
             </button>
-            <button className="p-2 rounded-md hover:bg-[var(--surface-2)] text-[var(--text-muted)] min-h-[auto] min-w-[auto]" aria-label="Notifications">
-              <Bell className="h-5 w-5" />
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="p-2 rounded-md hover:bg-[var(--surface-2)] text-[var(--text-muted)] min-h-[auto] min-w-[auto]"
+                  aria-label="Notifications"
+                >
+                  <Bell className="h-5 w-5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <div className="px-2 py-1.5 text-xs font-semibold text-[var(--text-muted)]">Notifications</div>
+                <div className="px-2 py-6 text-center text-body-sm text-[var(--text-muted)]">
+                  You&apos;re all caught up.
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </header>
 
           {/* Page content */}
@@ -475,6 +507,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span>More</span>
           </button>
         </nav>
+
+        <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       </div>
     </TooltipProvider>
   );
