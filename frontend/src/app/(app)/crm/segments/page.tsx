@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { toast } from 'sonner';
 import { Plus, Users, Send, Pencil, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,42 +21,12 @@ import { crmApi, type Segment, type SegmentMember } from '@/lib/api/crm';
 import { qk } from '@/lib/query/keys';
 import { ApiError } from '@/lib/api/client';
 import { formatPhone } from '@/lib/format/phone';
-
-// ── Segment filter rules schema ────────────────────────────────────────────────
-
-const segmentSchema = z.object({
-  name: z.string().min(2, 'Name required'),
-  description: z.string().optional(),
-  is_dynamic: z.boolean(),
-  // Filter rules fields
-  tags: z.array(z.string()),
-  min_total_billed: z.number().min(0),
-  min_total_jobs: z.number().min(0),
-  customer_type: z.enum(['individual', 'business', 'all']),
-  city: z.string(),
-});
-
-type SegmentFormValues = z.infer<typeof segmentSchema>;
-
-export function buildFilterRules(values: SegmentFormValues): Record<string, unknown> {
-  const rules: Record<string, unknown> = {};
-  if (values.tags.length > 0) rules.tags = values.tags;
-  if (values.min_total_billed > 0) rules.min_total_billed = values.min_total_billed;
-  if (values.min_total_jobs > 0) rules.min_total_jobs = values.min_total_jobs;
-  if (values.customer_type !== 'all') rules.customer_type = values.customer_type;
-  if (values.city.trim()) rules.city = values.city.trim();
-  return rules;
-}
-
-export function parseFilterRules(rules: Record<string, unknown>): Partial<SegmentFormValues> {
-  return {
-    tags: Array.isArray(rules.tags) ? (rules.tags as string[]) : [],
-    min_total_billed: typeof rules.min_total_billed === 'number' ? rules.min_total_billed : 0,
-    min_total_jobs: typeof rules.min_total_jobs === 'number' ? rules.min_total_jobs : 0,
-    customer_type: (rules.customer_type as 'individual' | 'business') ?? 'all',
-    city: typeof rules.city === 'string' ? rules.city : '',
-  };
-}
+import {
+  segmentSchema,
+  buildFilterRules,
+  parseFilterRules,
+  type SegmentFormValues,
+} from './segment-filters';
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 

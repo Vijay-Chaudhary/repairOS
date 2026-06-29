@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildFilterRules, parseFilterRules } from '../page';
+import { buildFilterRules, parseFilterRules } from '../segment-filters';
 
 describe('segment filter rules', () => {
   it('emits city + customer_type when set', () => {
