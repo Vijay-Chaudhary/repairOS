@@ -52,6 +52,7 @@ class TestSendWhatsApp:
             phone="+919900000001",
             template_name="job_created",
             variables={"k": "v"},
+            tenant_slug="",
         )
 
     def test_no_customer_dispatches(self):
@@ -289,6 +290,7 @@ class TestSendEmail:
             subject="Bill Due",
             body="Pay up",
             template_name="purchase_bill_due",
+            tenant_slug="",
         )
 
 
