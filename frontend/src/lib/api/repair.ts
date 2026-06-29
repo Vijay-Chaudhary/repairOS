@@ -223,6 +223,10 @@ export interface WarrantyClaimRow {
 }
 export interface WarrantyLists { active: WarrantyActiveRow[]; claims: WarrantyClaimRow[]; }
 
+export interface DeviceHistoryRow {
+  job_id: string; job_number: string; status: string; device: string; created_at: string;
+}
+
 export interface EstimateWorklistRow {
   id: string;
   job_id: string;
@@ -246,6 +250,9 @@ export const repairApi = {
     apiGet<{ items: EstimateWorklistRow[]; meta: PageMeta }>('/repair/estimates/', filters as Record<string, string | number | undefined>),
 
   getWarranty: () => apiGet<WarrantyLists>('/repair/warranty/'),
+
+  getDeviceHistory: (params: { serial?: string; imei?: string }) =>
+    apiGet<{ items: DeviceHistoryRow[] }>('/repair/device-history/', params),
 
   getOverview: (shopId?: string) =>
     apiGet<RepairOverview>('/repair/overview/', shopId ? { shop_id: shopId } : {}),

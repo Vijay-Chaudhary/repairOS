@@ -78,6 +78,15 @@ export default function JobDetailPage() {
     staleTime: 60_000,
   });
 
+  const hasDevice = !!(job?.serial_number || job?.imei);
+  const { data: deviceHistory } = useQuery({
+    queryKey: qk.deviceHistory({ serial: job?.serial_number ?? '', imei: job?.imei ?? '' }),
+    queryFn: () => repairApi.getDeviceHistory({ serial: job?.serial_number ?? undefined, imei: job?.imei ?? undefined }),
+    enabled: hasDevice,
+    staleTime: 60_000,
+  });
+  const otherDeviceJobs = (deviceHistory?.items ?? []).filter((r) => r.job_id !== id);
+
   const statusMutation = useMutation({
     mutationFn: ({ to, reason }: { to: JobStatus; reason?: string }) =>
       repairApi.changeStatus(id, { to_status: to, reason }),
@@ -194,7 +203,7 @@ export default function JobDetailPage() {
       <Tabs defaultValue="overview" className="flex-1 min-h-0">
         <div className="border-b border-[var(--border)] bg-[var(--surface)] sticky top-0 z-10 px-4">
           <TabsList className="h-10 bg-transparent gap-0 -mb-px w-full justify-start overflow-x-auto">
-            {['overview', 'checkin', 'estimate', 'stages', 'parts', 'timeline'].map((tab) => (
+            {['overview', 'checkin', 'estimate', 'stages', 'parts', ...(hasDevice ? ['history'] : []), 'timeline'].map((tab) => (
               <TabsTrigger
                 key={tab}
                 value={tab}
@@ -411,6 +420,34 @@ export default function JobDetailPage() {
               </div>
             )}
           </TabsContent>
+
+          {/* Device history */}
+          {hasDevice && (
+            <TabsContent value="history" className="p-4 md:p-6 mt-0">
+              <p className="text-body-sm text-[var(--text-muted)] mb-3">
+                Other repairs for this device{job.serial_number ? ` (S/N ${job.serial_number})` : ''}{job.imei ? ` (IMEI ${job.imei})` : ''}.
+              </p>
+              {otherDeviceJobs.length === 0 ? (
+                <EmptyState title="No prior repairs" description="This is the only job recorded for this device." />
+              ) : (
+                <div className="rounded-lg border border-[var(--border)] divide-y divide-[var(--border)]">
+                  {otherDeviceJobs.map((r) => (
+                    <button
+                      key={r.job_id}
+                      onClick={() => router.push(`/jobs/${r.job_id}`)}
+                      className="w-full text-left px-4 py-3 bg-[var(--surface)] hover:bg-[var(--surface-2)] flex items-center justify-between"
+                    >
+                      <span>
+                        <span className="block text-body-sm font-medium text-[var(--text)]">{r.job_number}</span>
+                        <span className="block text-xs text-[var(--text-muted)]">{r.device} · {formatDate(r.created_at)}</span>
+                      </span>
+                      <span className="text-xs text-[var(--text-muted)]">{r.status}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          )}
 
           {/* Timeline */}
           <TabsContent value="timeline" className="p-4 md:p-6 mt-0">
