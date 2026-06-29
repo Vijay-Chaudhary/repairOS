@@ -8,9 +8,11 @@ from core.models import Shop
 from .models import (
     Campaign,
     CommunicationLog,
+    Contact,
     Customer,
     CustomerSegment,
     CustomerSegmentMember,
+    Deal,
     FollowUpTask,
     Lead,
     LeadQuote,
@@ -337,3 +339,27 @@ class CrmOverviewSerializer(serializers.Serializer):
     pipeline = CrmPipelineCountSerializer(many=True)
     overdue_tasks = CrmOverdueTaskSerializer(many=True)
     unassigned_leads = CrmUnassignedLeadSerializer(many=True)
+
+
+class ContactSerializer(serializers.ModelSerializer):
+    customer_id = serializers.PrimaryKeyRelatedField(source="customer", queryset=Customer.objects.all())
+    customer_name = serializers.CharField(source="customer.name", read_only=True)
+
+    class Meta:
+        model = Contact
+        fields = ["id", "customer_id", "customer_name", "name", "designation",
+                  "email", "phone", "notes", "is_primary", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+
+class DealSerializer(serializers.ModelSerializer):
+    customer_name = serializers.CharField(source="customer.name", read_only=True, default=None)
+    contact_name = serializers.CharField(source="contact.name", read_only=True, default=None)
+    assigned_to_name = serializers.CharField(source="assigned_to.full_name", read_only=True, default=None)
+
+    class Meta:
+        model = Deal
+        fields = ["id", "shop", "title", "stage", "customer", "customer_name", "contact",
+                  "contact_name", "expected_revenue", "probability", "expected_close_date",
+                  "assigned_to", "assigned_to_name", "lost_reason", "closed_at", "created_at"]
+        read_only_fields = ["id", "stage", "lost_reason", "closed_at", "created_at"]

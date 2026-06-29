@@ -199,9 +199,64 @@ export interface TaskFilters {
 
 // ── API ───────────────────────────────────────────────────────────────────────
 
+export interface Contact {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  name: string;
+  designation: string;
+  email: string | null;
+  phone: string;
+  notes: string;
+  is_primary: boolean;
+  created_at: string;
+}
+
+export type DealStage = 'qualification' | 'proposal' | 'negotiation' | 'won' | 'lost';
+
+export interface Deal {
+  id: string;
+  title: string;
+  stage: DealStage;
+  customer: string | null;
+  customer_name: string | null;
+  contact: string | null;
+  contact_name: string | null;
+  expected_revenue: string;
+  probability: number;
+  expected_close_date: string | null;
+  assigned_to: string | null;
+  assigned_to_name: string | null;
+  lost_reason: string;
+  closed_at: string | null;
+  created_at: string;
+}
+
 export const crmApi = {
   getOverview: (shopId?: string) =>
     apiGet<CrmOverview>('/crm/overview/', shopId ? { shop_id: shopId } : {}),
+
+  // Contacts
+  listContacts: (filters: { customer_id?: string; page?: number } = {}) =>
+    apiGet<{ items: Contact[]; meta: PageMeta }>('/crm/contacts/', filters as Record<string, string | number | undefined>),
+  createContact: (body: { customer_id: string; name: string; designation?: string; email?: string; phone?: string; notes?: string; is_primary?: boolean }) =>
+    apiPost<Contact>('/crm/contacts/', body),
+  updateContact: (id: string, body: Partial<{ name: string; designation: string; email: string; phone: string; notes: string; is_primary: boolean }>) =>
+    apiPatch<Contact>(`/crm/contacts/${id}/`, body),
+  deleteContact: (id: string) =>
+    apiDelete<void>(`/crm/contacts/${id}/`),
+
+  // Deals
+  listDeals: (filters: { stage?: DealStage; assigned_to?: string; page?: number } = {}) =>
+    apiGet<{ items: Deal[]; meta: PageMeta }>('/crm/deals/', filters as Record<string, string | number | undefined>),
+  createDeal: (body: { shop: string; title: string; customer?: string; contact?: string; expected_revenue?: number; probability?: number; expected_close_date?: string; assigned_to?: string }) =>
+    apiPost<Deal>('/crm/deals/', body),
+  updateDeal: (id: string, body: Partial<{ title: string; customer: string; contact: string; expected_revenue: number; probability: number; expected_close_date: string; assigned_to: string }>) =>
+    apiPatch<Deal>(`/crm/deals/${id}/`, body),
+  changeDealStage: (id: string, toStage: DealStage) =>
+    apiPost<Deal>(`/crm/deals/${id}/stage/`, { to_stage: toStage }),
+  closeDeal: (id: string, outcome: 'won' | 'lost', reason?: string) =>
+    apiPost<Deal>(`/crm/deals/${id}/close/`, { outcome, ...(reason ? { reason } : {}) }),
 
   // Leads
   listLeads: (filters: LeadFilters = {}) =>
@@ -411,6 +466,14 @@ export const LEAD_PIPELINE_COLS: Array<{ status: LeadStatus; label: string }> = 
   { status: 'quoted',     label: 'Quoted' },
   { status: 'converted',  label: 'Converted' },
   { status: 'lost',       label: 'Lost' },
+];
+
+export const DEAL_PIPELINE_COLS: Array<{ stage: DealStage; label: string }> = [
+  { stage: 'qualification', label: 'Qualification' },
+  { stage: 'proposal',      label: 'Proposal' },
+  { stage: 'negotiation',   label: 'Negotiation' },
+  { stage: 'won',           label: 'Won' },
+  { stage: 'lost',          label: 'Lost' },
 ];
 
 export const LEAD_TRANSITIONS: Record<LeadStatus, Array<{ to: LeadStatus; label: string; requiresReason?: boolean; requiresQuote?: boolean }>> = {

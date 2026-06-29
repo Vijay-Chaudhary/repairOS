@@ -25,9 +25,11 @@ from . import services
 from .models import (
     Campaign,
     CommunicationLog,
+    Contact,
     Customer,
     CustomerSegment,
     CustomerSegmentMember,
+    Deal,
     FollowUpTask,
     Lead,
     LeadQuote,
@@ -37,7 +39,9 @@ from .serializers import (
     CampaignCreateSerializer,
     CampaignSerializer,
     CommunicationLogSerializer,
+    ContactSerializer,
     CrmOverviewSerializer,
+    DealSerializer,
     CustomerMergeSerializer,
     CustomerSegmentMemberSerializer,
     CustomerSegmentSerializer,
@@ -628,3 +632,76 @@ class CrmOverviewView(ShopScopedMixin, APIView):
         shop_id = request.query_params.get("shop_id")
         data = services.get_crm_overview(self._shop_filter(), shop_id)
         return Response(CrmOverviewSerializer(data).data)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Contact viewset
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class ContactViewSet(ShopScopedMixin, ModelViewSet):
+    pagination_class = RepairOSPageNumberPagination
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+    serializer_class = ContactSerializer
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [require_permission("crm.contacts.view")()]
+        if self.action == "create":
+            return [require_permission("crm.contacts.create")()]
+        return [require_permission("crm.contacts.edit")()]
+
+    def get_queryset(self):
+        qs = Contact.objects.filter(self._shop_filter()).select_related("customer")
+        if cid := self.request.query_params.get("customer_id"):
+            qs = qs.filter(customer_id=cid)
+        return qs.order_by("-is_primary", "name")
+
+    def perform_create(self, serializer):
+        customer = serializer.validated_data["customer"]
+        serializer.save(shop=customer.shop)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Deal viewset
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class DealViewSet(ShopScopedMixin, ModelViewSet):
+    pagination_class = RepairOSPageNumberPagination
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+    serializer_class = DealSerializer
+
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [require_permission("crm.deals.view")()]
+        if self.action == "create":
+            return [require_permission("crm.deals.create")()]
+        if self.action == "change_stage":
+            return [require_permission("crm.deals.change_stage")()]
+        if self.action == "close":
+            return [require_permission("crm.deals.close")()]
+        return [require_permission("crm.deals.edit")()]
+
+    def get_queryset(self):
+        qs = Deal.objects.filter(self._shop_filter()).select_related("customer", "contact", "assigned_to")
+        if stage := self.request.query_params.get("stage"):
+            qs = qs.filter(stage=stage)
+        if assigned := self.request.query_params.get("assigned_to"):
+            qs = qs.filter(assigned_to_id=assigned)
+        return qs.order_by("-created_at")
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=["post"], url_path="stage")
+    def change_stage(self, request, pk=None):
+        deal = self.get_object()
+        deal = services.change_deal_stage(deal, request.data.get("to_stage", ""), request.user)
+        return Response(DealSerializer(deal).data)
+
+    @action(detail=True, methods=["post"], url_path="close")
+    def close(self, request, pk=None):
+        deal = self.get_object()
+        deal = services.close_deal(deal, request.data.get("outcome", ""), request.data.get("reason", ""), request.user)
+        return Response(DealSerializer(deal).data)

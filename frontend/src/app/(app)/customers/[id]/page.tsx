@@ -135,6 +135,13 @@ export default function CustomerProfilePage() {
     enabled: !!customer && activeTab === 'amc',
   });
 
+  const contactsQuery = useQuery({
+    queryKey: qk.contacts({ customer_id: id }),
+    queryFn: () => crmApi.listContacts({ customer_id: id }),
+    staleTime: 60_000,
+    enabled: !!customer && activeTab === 'contacts',
+  });
+
   if (isLoading) {
     return (
       <div className="p-4 space-y-4">
@@ -187,7 +194,7 @@ export default function CustomerProfilePage() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 min-h-0">
         <div className="border-b border-[var(--border)] bg-[var(--surface)] sticky top-0 z-10 px-4">
           <TabsList className="h-10 bg-transparent gap-0 -mb-px w-full justify-start overflow-x-auto">
-            {['repairs', 'sales', 'amc', 'timeline', 'tasks', 'financial'].map((tab) => (
+            {['repairs', 'sales', 'amc', 'contacts', 'timeline', 'tasks', 'financial'].map((tab) => (
               <TabsTrigger
                 key={tab}
                 value={tab}
@@ -243,6 +250,24 @@ export default function CustomerProfilePage() {
               emptyDescription="No annual maintenance contracts for this customer yet."
             />
             {contractsError && <RetryBanner onRetry={() => refetchContracts()} />}
+          </TabsContent>
+
+          {/* Contacts */}
+          <TabsContent value="contacts" className="p-4 md:p-6 mt-0">
+            {(contactsQuery.data?.items ?? []).length === 0 ? (
+              <EmptyState title="No contacts" description="No contact people for this customer yet." />
+            ) : (
+              <ul className="divide-y divide-[var(--border)] rounded-lg border border-[var(--border)]">
+                {(contactsQuery.data?.items ?? []).map((c) => (
+                  <li key={c.id} className="px-4 py-3 bg-[var(--surface)]">
+                    <p className="text-body-sm font-medium text-[var(--text)]">{c.name}{c.is_primary && ' ★'}</p>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      {[c.designation, c.email, c.phone].filter(Boolean).join(' · ') || '—'}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </TabsContent>
 
           {/* Timeline */}
