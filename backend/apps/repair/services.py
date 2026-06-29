@@ -799,3 +799,32 @@ def get_repair_overview(shop_filter, shop_id=None):
         "by_status": [{"status": s, "count": status_counts.get(s, 0)} for s in STATUS_ORDER],
         "needs_attention": needs_attention,
     }
+
+
+def build_warranty_lists(job_filter) -> dict:
+    """Active warranties (not yet expired) + warranty-claim jobs. `job_filter` is a Q on JobTicket."""
+    from datetime import date
+
+    today = date.today()
+    base = JobTicket.objects.filter(job_filter).select_related("customer", "warranty_of_job")
+
+    active = base.filter(warranty_expires_at__gte=today).order_by("warranty_expires_at")
+    claims = base.filter(warranty_of_job__isnull=False).order_by("-created_at")
+
+    def _device(j):
+        return f"{j.device_brand} {j.device_model}".strip() or j.device_type
+
+    return {
+        "active": [{
+            "job_id": str(j.id), "job_number": j.job_number, "customer_name": j.customer.name,
+            "device": _device(j), "warranty_expires_at": str(j.warranty_expires_at),
+            "days_remaining": (j.warranty_expires_at - today).days,
+        } for j in active],
+        "claims": [{
+            "job_id": str(j.id), "job_number": j.job_number, "customer_name": j.customer.name,
+            "device": _device(j), "status": j.status,
+            "original_job_id": str(j.warranty_of_job_id) if j.warranty_of_job_id else None,
+            "original_job_number": j.warranty_of_job.job_number if j.warranty_of_job else None,
+            "created_at": j.created_at.isoformat(),
+        } for j in claims],
+    }

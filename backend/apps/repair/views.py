@@ -602,3 +602,11 @@ class JobEstimateWorklistViewSet(ListModelMixin, GenericViewSet):
         if dt := self.request.query_params.get("date_to"):
             qs = qs.filter(created_at__date__lte=dt)
         return qs.order_by("-created_at")
+
+
+class WarrantyWorklistView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("repair.warranty.view")]
+
+    def get(self, request: Request) -> Response:
+        job_filter = _scoped_job_ids_q(request, field="shop_id")
+        return Response(services.build_warranty_lists(job_filter))

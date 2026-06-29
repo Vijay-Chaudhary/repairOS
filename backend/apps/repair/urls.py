@@ -7,6 +7,7 @@ from .views import (
     JobTicketViewSet,
     RepairOverviewView,
     SparePartRequestViewSet,
+    WarrantyWorklistView,
 )
 
 router = DefaultRouter(trailing_slash=True)
@@ -17,5 +18,6 @@ router.register("estimates", JobEstimateWorklistViewSet, basename="estimates")
 
 urlpatterns = [
     path("overview/", RepairOverviewView.as_view(), name="repair-overview"),
+    path("warranty/", WarrantyWorklistView.as_view(), name="repair-warranty"),
     path("", include(router.urls)),
 ]
