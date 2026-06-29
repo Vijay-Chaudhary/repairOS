@@ -17,6 +17,7 @@ from .models import BudgetAllocation, BudgetHead, Expense, PettyCashAccount, Pet
 from .serializers import (
     BudgetAllocationSerializer,
     BudgetHeadSerializer,
+    CashBookEntrySerializer,
     CreateAssetSerializer,
     CreateBudgetAllocationSerializer,
     CreateBudgetHeadSerializer,
@@ -299,3 +300,31 @@ class AssetDetailView(APIView):
 
         asset = services.update_asset(asset, serializer.validated_data)
         return Response(ShopAssetSerializer(asset).data)
+
+
+def _parse_cash_book_date(value):
+    from datetime import date as _date
+    if not value:
+        return None
+    try:
+        return _date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+class CashBookView(APIView):
+    """Read-only running cash ledger over petty-cash transactions."""
+
+    permission_classes = [IsAuthenticated, require_permission("accounts.cashbook.view")]
+
+    def get(self, request: Request) -> Response:
+        shop_ids, is_wide = _shop_ids_from_token(request)
+        scope = None if is_wide else shop_ids
+        data = services.build_cash_book(
+            scope,
+            date_from=_parse_cash_book_date(request.query_params.get("date_from")),
+            date_to=_parse_cash_book_date(request.query_params.get("date_to")),
+            account_id=request.query_params.get("account_id"),
+        )
+        data["results"] = CashBookEntrySerializer(data["results"], many=True).data
+        return Response(data)

@@ -185,3 +185,60 @@ def update_asset(asset: ShopAsset, data: dict) -> ShopAsset:
 
     asset.save()
     return asset
+
+
+# ── Cash Book (read-only running ledger over petty cash) ────────────────────────
+
+
+def build_cash_book(shop_ids, *, date_from=None, date_to=None, account_id=None) -> dict:
+    """Running cash ledger over petty-cash transactions for the in-scope accounts.
+
+    `shop_ids=None` means tenant-wide (no shop filter). Returns opening/closing
+    balances, period credit/debit totals, and the ordered transactions (as model
+    instances under "results" — the view serializes them).
+    """
+    from .models import PettyCashAccount, PettyCashTransaction
+
+    accounts = PettyCashAccount.objects.all()
+    if shop_ids is not None:
+        accounts = accounts.filter(shop_id__in=shop_ids)
+    if account_id:
+        accounts = accounts.filter(id=account_id)
+    account_ids = list(accounts.values_list("id", flat=True))
+
+    txns = (
+        PettyCashTransaction.objects.select_related("account", "recorded_by")
+        .filter(account_id__in=account_ids)
+        .order_by("date", "created_at")
+    )
+
+    # Opening balance = sum over accounts of the latest balance_after before date_from.
+    opening = Decimal("0")
+    if date_from is not None:
+        for aid in account_ids:
+            last = (
+                PettyCashTransaction.objects.filter(account_id=aid, date__lt=date_from)
+                .order_by("date", "created_at")
+                .last()
+            )
+            if last is not None:
+                opening += last.balance_after
+        txns = txns.filter(date__gte=date_from)
+    if date_to is not None:
+        txns = txns.filter(date__lte=date_to)
+
+    rows = list(txns)
+    total_credit = sum(
+        (t.amount for t in rows if t.txn_type == PettyCashTransaction.TxnType.CREDIT), Decimal("0")
+    )
+    total_debit = sum(
+        (t.amount for t in rows if t.txn_type == PettyCashTransaction.TxnType.DEBIT), Decimal("0")
+    )
+    closing = opening + total_credit - total_debit
+    return {
+        "opening_balance": str(opening),
+        "closing_balance": str(closing),
+        "total_credit": str(total_credit),
+        "total_debit": str(total_debit),
+        "results": rows,
+    }

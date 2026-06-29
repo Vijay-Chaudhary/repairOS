@@ -146,3 +146,18 @@ class UpdateAssetSerializer(serializers.Serializer):
     notes = serializers.CharField(required=False, allow_blank=True)
     warranty_expiry = serializers.DateField(required=False, allow_null=True)
     is_active = serializers.BooleanField(required=False)
+
+
+class CashBookEntrySerializer(serializers.ModelSerializer):
+    account_name = serializers.CharField(source="account.name", read_only=True)
+    recorded_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PettyCashTransaction
+        fields = [
+            "id", "account_name", "txn_type", "amount", "category",
+            "description", "date", "balance_after", "recorded_by_name",
+        ]
+
+    def get_recorded_by_name(self, obj) -> str:
+        return (obj.recorded_by.full_name or "") if obj.recorded_by else ""
