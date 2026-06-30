@@ -9,4 +9,6 @@ urlpatterns = [
     path("journal/", views.JournalListCreateView.as_view(), name="journal-list-create"),
     path("journal/<uuid:entry_id>/", views.JournalDetailView.as_view(), name="journal-detail"),
     path("journal/<uuid:entry_id>/post/", views.PostJournalView.as_view(), name="journal-post"),
+    path("ledger/<uuid:account_id>/", views.LedgerView.as_view(), name="ledger"),
+    path("trial-balance/", views.TrialBalanceView.as_view(), name="trial-balance"),
 ]

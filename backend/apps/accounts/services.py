@@ -170,3 +170,114 @@ def post_journal_entry(entry: JournalEntry, user, source_ref: str | None = None)
         entry.reference = source_ref
     entry.save(update_fields=["status", "posted_by", "posted_at", "reference", "updated_at"])
     return entry
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# General Ledger + Trial Balance
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _signed_movement(account: Account, debit: Decimal, credit: Decimal) -> Decimal:
+    """Movement signed by the account's normal balance."""
+    if account.normal_balance == "debit":
+        return debit - credit
+    return credit - debit
+
+
+def account_ledger(account: Account, date_from=None, date_to=None) -> dict:
+    """Return posted ledger rows for an account with a running balance respecting
+    its normal balance, plus opening/closing balances. No N+1: a single query."""
+    base = (
+        JournalLine.objects.filter(
+            account=account, entry__status=JournalEntry.Status.POSTED
+        )
+        .select_related("entry")
+        .order_by("entry__date", "entry__entry_number", "created_at")
+    )
+
+    opening = Decimal("0.00")
+    if date_from:
+        from django.db.models import DecimalField, Sum
+        from django.db.models.functions import Coalesce
+
+        dec = DecimalField(max_digits=16, decimal_places=2)
+        zero = Decimal("0.00")
+        prior = base.filter(entry__date__lt=date_from).aggregate(
+            d=Coalesce(Sum("debit"), zero, output_field=dec),
+            c=Coalesce(Sum("credit"), zero, output_field=dec),
+        )
+        opening = _signed_movement(account, prior["d"], prior["c"])
+
+    window = base
+    if date_from:
+        window = window.filter(entry__date__gte=date_from)
+    if date_to:
+        window = window.filter(entry__date__lte=date_to)
+
+    running = opening
+    rows = []
+    for line in window:
+        running += _signed_movement(account, line.debit, line.credit)
+        rows.append({
+            "line_id": line.id,
+            "entry_id": line.entry_id,
+            "entry_number": line.entry.entry_number,
+            "date": line.entry.date,
+            "narration": line.line_narration or line.entry.narration,
+            "debit": line.debit,
+            "credit": line.credit,
+            "running_balance": running,
+        })
+
+    return {
+        "opening_balance": opening.quantize(TWO_PLACES),
+        "closing_balance": running.quantize(TWO_PLACES),
+        "rows": rows,
+    }
+
+
+def trial_balance(shop, as_of=None) -> dict:
+    """Per-account posted debit/credit totals where Σdebit == Σcredit. Single aggregated query."""
+    from django.db.models import DecimalField, Q, Sum
+    from django.db.models.functions import Coalesce
+
+    line_q = Q(journal_lines__entry__status=JournalEntry.Status.POSTED)
+    if as_of:
+        line_q &= Q(journal_lines__entry__date__lte=as_of)
+
+    zero = Decimal("0.00")
+    dec = DecimalField(max_digits=16, decimal_places=2)
+    accounts = (
+        Account.objects.filter(shop=shop)
+        .annotate(
+            sum_debit=Coalesce(Sum("journal_lines__debit", filter=line_q), zero, output_field=dec),
+            sum_credit=Coalesce(Sum("journal_lines__credit", filter=line_q), zero, output_field=dec),
+        )
+        .order_by("code")
+    )
+
+    rows = []
+    total_debit = Decimal("0.00")
+    total_credit = Decimal("0.00")
+    for acct in accounts:
+        net = (acct.sum_debit or zero) - (acct.sum_credit or zero)
+        if net == 0:
+            continue
+        debit_col = net if net > 0 else zero
+        credit_col = -net if net < 0 else zero
+        total_debit += debit_col
+        total_credit += credit_col
+        rows.append({
+            "account_id": acct.id,
+            "code": acct.code,
+            "name": acct.name,
+            "account_type": acct.account_type,
+            "debit": debit_col.quantize(TWO_PLACES),
+            "credit": credit_col.quantize(TWO_PLACES),
+        })
+
+    return {
+        "rows": rows,
+        "total_debit": total_debit.quantize(TWO_PLACES),
+        "total_credit": total_credit.quantize(TWO_PLACES),
+    }

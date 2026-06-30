@@ -71,3 +71,23 @@ class UpdateJournalEntrySerializer(serializers.Serializer):
     date = serializers.DateField(required=False)
     narration = serializers.CharField(max_length=255, required=False, allow_blank=True)
     reference = serializers.CharField(max_length=120, required=False, allow_blank=True)
+
+
+class LedgerRowSerializer(serializers.Serializer):
+    line_id = serializers.UUIDField()
+    entry_id = serializers.UUIDField()
+    entry_number = serializers.CharField()
+    date = serializers.DateField()
+    narration = serializers.CharField(allow_blank=True)
+    debit = serializers.DecimalField(max_digits=14, decimal_places=2)
+    credit = serializers.DecimalField(max_digits=14, decimal_places=2)
+    running_balance = serializers.DecimalField(max_digits=16, decimal_places=2)
+
+
+class TrialBalanceRowSerializer(serializers.Serializer):
+    account_id = serializers.UUIDField()
+    code = serializers.CharField()
+    name = serializers.CharField()
+    account_type = serializers.CharField()
+    debit = serializers.DecimalField(max_digits=16, decimal_places=2)
+    credit = serializers.DecimalField(max_digits=16, decimal_places=2)

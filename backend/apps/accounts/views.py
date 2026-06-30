@@ -18,6 +18,8 @@ from .serializers import (
     CreateAccountSerializer,
     CreateJournalEntrySerializer,
     JournalEntrySerializer,
+    LedgerRowSerializer,
+    TrialBalanceRowSerializer,
     UpdateAccountSerializer,
     UpdateJournalEntrySerializer,
 )
@@ -294,3 +296,84 @@ class PostJournalView(APIView):
             return Response({"detail": "Journal entry not found."}, status=status.HTTP_404_NOT_FOUND)
         entry = services.post_journal_entry(entry, request.user)
         return Response(JournalEntrySerializer(entry).data, status=status.HTTP_200_OK)
+
+
+def _parse_date(value):
+    from datetime import date as _date
+    if not value:
+        return None
+    try:
+        return _date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+class LedgerView(APIView):
+    def get_permissions(self):
+        return [IsAuthenticated(), require_permission("accounts.ledger.view")()]
+
+    def get(self, request: Request, account_id) -> Response:
+        shop_ids, is_wide = _shop_ids_from_token(request)
+        qs = Account.objects.select_related("shop")
+        if not is_wide:
+            qs = qs.filter(shop_id__in=shop_ids)
+        account = qs.filter(id=account_id).first()
+        if account is None:
+            return Response({"detail": "Account not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        date_from = _parse_date(request.query_params.get("date_from"))
+        date_to = _parse_date(request.query_params.get("date_to"))
+        ledger = services.account_ledger(account, date_from, date_to)
+
+        payload = {
+            "account": AccountSerializer(account).data,
+            "opening_balance": ledger["opening_balance"],
+            "closing_balance": ledger["closing_balance"],
+            "rows": LedgerRowSerializer(ledger["rows"], many=True).data,
+        }
+
+        if request.query_params.get("format") == "csv":
+            from authentication.permissions import HasPermission
+            if not HasPermission("accounts.ledger.export").has_permission(request, self):
+                return Response(
+                    {"detail": "You do not have permission to export."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            return _ledger_csv_response(account, payload)
+
+        return Response(payload)
+
+
+def _ledger_csv_response(account, payload):
+    import csv
+    import io
+
+    from django.http import HttpResponse
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["Date", "Entry", "Narration", "Debit", "Credit", "Running Balance"])
+    for row in payload["rows"]:
+        writer.writerow([
+            row["date"], row["entry_number"], row["narration"],
+            row["debit"], row["credit"], row["running_balance"],
+        ])
+    resp = HttpResponse(buffer.getvalue(), content_type="text/csv")
+    resp["Content-Disposition"] = f'attachment; filename="ledger_{account.code}.csv"'
+    return resp
+
+
+class TrialBalanceView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("accounts.ledger.view")]
+
+    def get(self, request: Request) -> Response:
+        shop, err = _resolve_shop(request, request.query_params.get("shop_id"))
+        if err:
+            return err
+        as_of = _parse_date(request.query_params.get("as_of"))
+        result = services.trial_balance(shop, as_of)
+        return Response({
+            "rows": TrialBalanceRowSerializer(result["rows"], many=True).data,
+            "total_debit": result["total_debit"],
+            "total_credit": result["total_credit"],
+        })

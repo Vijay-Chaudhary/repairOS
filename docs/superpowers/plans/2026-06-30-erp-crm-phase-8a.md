@@ -81,14 +81,14 @@
 
 **Files:** `apps/accounts/views.py`, `serializers.py`, `urls.py`, `services.py`; `apps/accounts/tests/test_ledger.py`.
 
-- [ ] **Step 1: Failing test** (seed 2 accounts, post a couple of balanced entries):
+- [x] **Step 1: Failing test** (seed 2 accounts, post a couple of balanced entries):
   - `test_ledger_running_balance` — GET `/api/v1/accounts/ledger/<account_id>/` (`accounts.ledger.view`) returns posted lines ordered by date with a correct running balance + opening/closing.
   - `test_ledger_excludes_draft` — draft entries don't appear.
   - `test_trial_balance_balances` — GET `/accounts/trial-balance/` returns per-account totals where Σdebit == Σcredit.
-- [ ] **Step 2: Run → FAIL**.
-- [ ] **Step 3: Implement** — `services.account_ledger(account, date_from, date_to)` (DB aggregation, running balance respecting `normal_balance`) and `services.trial_balance(shop, as_of)` (`annotate(Sum())`, no N+1). `LedgerView` (GET, `accounts.ledger.view`; CSV path gated `accounts.ledger.export`), `TrialBalanceView` (GET, `accounts.ledger.view`). Routes.
-- [ ] **Step 4: Run → PASS** + full `apps/accounts` suite.
-- [ ] **Step 5: Commit** — `git commit -m "feat(accounts): General Ledger + Trial Balance endpoints"`
+- [x] **Step 2: Run → FAIL**.
+- [x] **Step 3: Implement** — `services.account_ledger(account, date_from, date_to)` (DB aggregation, running balance respecting `normal_balance`) and `services.trial_balance(shop, as_of)` (`annotate(Sum())`, no N+1). `LedgerView` (GET, `accounts.ledger.view`; CSV path gated `accounts.ledger.export`), `TrialBalanceView` (GET, `accounts.ledger.view`). Routes.
+- [x] **Step 4: Run → PASS** + full `apps/accounts` suite.
+- [x] **Step 5: Commit** — `git commit -m "feat(accounts): General Ledger + Trial Balance endpoints"`
 
 ---
 
