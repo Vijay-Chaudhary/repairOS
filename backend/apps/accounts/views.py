@@ -12,8 +12,15 @@ from authentication.permissions import require_permission
 from core.pagination import RepairOSPageNumberPagination
 
 from . import services
-from .models import Account
-from .serializers import AccountSerializer, CreateAccountSerializer, UpdateAccountSerializer
+from .models import Account, JournalEntry
+from .serializers import (
+    AccountSerializer,
+    CreateAccountSerializer,
+    CreateJournalEntrySerializer,
+    JournalEntrySerializer,
+    UpdateAccountSerializer,
+    UpdateJournalEntrySerializer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +176,8 @@ class AccountDetailView(APIView):
 
         if account.is_system:
             raise BusinessRuleViolation("System accounts cannot be deleted.")
+        if account.journal_lines.filter(entry__status=JournalEntry.Status.POSTED).exists():
+            raise BusinessRuleViolation("Accounts with posted journal lines cannot be deleted.")
 
         account.is_active = False
         account.save(update_fields=["is_active", "updated_at"])
@@ -187,3 +196,101 @@ class SeedChartView(APIView):
             {"created": created},
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
+
+
+def _journal_queryset(request):
+    shop_ids, is_wide = _shop_ids_from_token(request)
+    qs = JournalEntry.objects.select_related("shop").prefetch_related("lines__account")
+    if not is_wide:
+        qs = qs.filter(shop_id__in=shop_ids)
+    return qs
+
+
+class JournalListCreateView(APIView):
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated(), require_permission("accounts.journal.create")()]
+        return [IsAuthenticated(), require_permission("accounts.journal.view")()]
+
+    def get(self, request: Request) -> Response:
+        qs = _journal_queryset(request)
+        qp = request.query_params
+        if shop_id := qp.get("shop_id"):
+            qs = qs.filter(shop_id=shop_id)
+        if status_filter := qp.get("status"):
+            qs = qs.filter(status=status_filter)
+        if date_from := qp.get("date_from"):
+            qs = qs.filter(date__gte=date_from)
+        if date_to := qp.get("date_to"):
+            qs = qs.filter(date__lte=date_to)
+
+        qs = qs.order_by("-date", "-entry_number")
+        paginator = RepairOSPageNumberPagination()
+        page = paginator.paginate_queryset(qs, request)
+        return paginator.get_paginated_response(JournalEntrySerializer(page, many=True).data)
+
+    def post(self, request: Request) -> Response:
+        serializer = CreateJournalEntrySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        shop, err = _resolve_shop(request, data.get("shop_id"))
+        if err:
+            return err
+
+        entry = services.create_journal_entry(shop, data)
+        return Response(JournalEntrySerializer(entry).data, status=status.HTTP_201_CREATED)
+
+
+class JournalDetailView(APIView):
+    def get_permissions(self):
+        if self.request.method in ("PATCH", "DELETE"):
+            return [IsAuthenticated(), require_permission("accounts.journal.create")()]
+        return [IsAuthenticated(), require_permission("accounts.journal.view")()]
+
+    def _get_object(self, request, entry_id):
+        return _journal_queryset(request).filter(id=entry_id).first()
+
+    def get(self, request: Request, entry_id) -> Response:
+        entry = self._get_object(request, entry_id)
+        if entry is None:
+            return Response({"detail": "Journal entry not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(JournalEntrySerializer(entry).data)
+
+    def patch(self, request: Request, entry_id) -> Response:
+        from core.exceptions import BusinessRuleViolation
+
+        entry = self._get_object(request, entry_id)
+        if entry is None:
+            return Response({"detail": "Journal entry not found."}, status=status.HTTP_404_NOT_FOUND)
+        if entry.is_posted:
+            raise BusinessRuleViolation("Posted entries are immutable.")
+
+        serializer = UpdateJournalEntrySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        for field, value in serializer.validated_data.items():
+            setattr(entry, field, value)
+        entry.save()
+        return Response(JournalEntrySerializer(entry).data)
+
+    def delete(self, request: Request, entry_id) -> Response:
+        from core.exceptions import BusinessRuleViolation
+
+        entry = self._get_object(request, entry_id)
+        if entry is None:
+            return Response({"detail": "Journal entry not found."}, status=status.HTTP_404_NOT_FOUND)
+        if entry.is_posted:
+            raise BusinessRuleViolation("Posted entries cannot be deleted.")
+        entry.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PostJournalView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("accounts.journal.post")]
+
+    def post(self, request: Request, entry_id) -> Response:
+        entry = _journal_queryset(request).filter(id=entry_id).first()
+        if entry is None:
+            return Response({"detail": "Journal entry not found."}, status=status.HTTP_404_NOT_FOUND)
+        entry = services.post_journal_entry(entry, request.user)
+        return Response(JournalEntrySerializer(entry).data, status=status.HTTP_200_OK)

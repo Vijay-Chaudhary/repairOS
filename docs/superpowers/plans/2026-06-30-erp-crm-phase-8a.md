@@ -62,18 +62,18 @@
 
 **Files:** `apps/accounts/models.py`, `serializers.py`, `views.py`, `urls.py`, `services.py`; migration; `apps/accounts/tests/test_journal.py`.
 
-- [ ] **Step 1: Failing test:**
+- [x] **Step 1: Failing test:**
   - `test_create_balanced_draft` — POST `/api/v1/accounts/journal/` (`accounts.journal.create`) with 2 balanced lines → 201, status `draft`.
   - `test_unbalanced_entry_rejected` — Σdebit ≠ Σcredit → 422 (or 400).
   - `test_line_requires_debit_xor_credit` — a line with both/neither → 422.
   - `test_post_sets_status_and_immutable` — POST `/journal/<id>/post/` (`accounts.journal.post`) → 200 status `posted`; subsequent PATCH/DELETE → 422.
   - `test_post_requires_post_perm` — posting without `accounts.journal.post` → 403.
-- [ ] **Step 2: Run → FAIL**.
-- [ ] **Step 3: Models** — `JournalEntry(BaseModel)`: `shop` FK; `entry_number` (per-shop sequence — allocate on create); `date`; `narration`; `reference` (blank); `status` (TextChoices draft/posted, default draft); `posted_by` (FK user, null), `posted_at` (null). `JournalLine(BaseModel)`: `entry` FK (CASCADE, related_name `lines`); `account` FK (PROTECT); `debit`/`credit` (Decimal 14,2 default 0); `line_narration` (blank). Migration.
-- [ ] **Step 4: Services** — `create_journal_entry(shop, data)` validates line debit-xor-credit + balance (Σdebit==Σcredit, ≥2 lines, total>0) → creates draft. `post_journal_entry(entry, user)` re-validates, sets posted/posted_by/posted_at. Mutations of a posted entry raise. (Design `post_journal_entry` to accept an optional `source_ref` for future auto-posting.)
-- [ ] **Step 5: Serializers + views + routes** — `JournalEntrySerializer` (with nested lines) + `CreateJournalEntrySerializer` (lines list). `JournalListCreateView` (GET `accounts.journal.view` + date/status filters, POST `accounts.journal.create`), `JournalDetailView` (GET read / PATCH+DELETE draft-only `accounts.journal.create` → 422 if posted), `PostJournalView` (POST `accounts.journal.post`). Validation failures → 422.
-- [ ] **Step 6: Run → PASS** + `python -m pytest apps/accounts -p no:cacheprovider -o addopts="" --create-db -q`.
-- [ ] **Step 7: Commit** — `git commit -m "feat(accounts): Journal Entries — balanced double-entry + post workflow"`
+- [x] **Step 2: Run → FAIL**.
+- [x] **Step 3: Models** — `JournalEntry(BaseModel)`: `shop` FK; `entry_number` (per-shop sequence — allocate on create); `date`; `narration`; `reference` (blank); `status` (TextChoices draft/posted, default draft); `posted_by` (FK user, null), `posted_at` (null). `JournalLine(BaseModel)`: `entry` FK (CASCADE, related_name `lines`); `account` FK (PROTECT); `debit`/`credit` (Decimal 14,2 default 0); `line_narration` (blank). Migration.
+- [x] **Step 4: Services** — `create_journal_entry(shop, data)` validates line debit-xor-credit + balance (Σdebit==Σcredit, ≥2 lines, total>0) → creates draft. `post_journal_entry(entry, user)` re-validates, sets posted/posted_by/posted_at. Mutations of a posted entry raise. (Design `post_journal_entry` to accept an optional `source_ref` for future auto-posting.)
+- [x] **Step 5: Serializers + views + routes** — `JournalEntrySerializer` (with nested lines) + `CreateJournalEntrySerializer` (lines list). `JournalListCreateView` (GET `accounts.journal.view` + date/status filters, POST `accounts.journal.create`), `JournalDetailView` (GET read / PATCH+DELETE draft-only `accounts.journal.create` → 422 if posted), `PostJournalView` (POST `accounts.journal.post`). Validation failures → 422.
+- [x] **Step 6: Run → PASS** + `python -m pytest apps/accounts -p no:cacheprovider -o addopts="" --create-db -q`.
+- [x] **Step 7: Commit** — `git commit -m "feat(accounts): Journal Entries — balanced double-entry + post workflow"`
 
 ---
 

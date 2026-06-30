@@ -6,4 +6,7 @@ urlpatterns = [
     path("chart/", views.AccountListCreateView.as_view(), name="account-list-create"),
     path("chart/seed/", views.SeedChartView.as_view(), name="account-seed"),
     path("chart/<uuid:account_id>/", views.AccountDetailView.as_view(), name="account-detail"),
+    path("journal/", views.JournalListCreateView.as_view(), name="journal-list-create"),
+    path("journal/<uuid:entry_id>/", views.JournalDetailView.as_view(), name="journal-detail"),
+    path("journal/<uuid:entry_id>/post/", views.PostJournalView.as_view(), name="journal-post"),
 ]
