@@ -33,36 +33,36 @@
 
 **Files:** `apps/hr/models.py`, `apps/hr/serializers.py`, `apps/hr/views.py`, `apps/hr/urls.py`; migrations (schema + data); `apps/hr/tests/test_departments.py`.
 
-- [ ] **Step 1: Failing test** — `apps/hr/tests/test_departments.py` (reuse the shop + JWT `client_with_perms` fixtures from `apps/hr/tests/test_hr.py`):
+- [x] **Step 1: Failing test** — `apps/hr/tests/test_departments.py` (reuse the shop + JWT `client_with_perms` fixtures from `apps/hr/tests/test_hr.py`):
   - `test_create_department_requires_manage_perm` — POST `/api/v1/hr/departments/` without `hr.departments.manage` → 403.
   - `test_create_and_list_department` — with `["hr.departments.manage"]`, POST `{name, code}` → 201; GET list (read perm `hr.employees.view`) returns it; `.json()["data"]`.
   - `test_department_code_unique_per_shop` — duplicate `code` in same shop → 400.
   - `test_deactivate_department` — PATCH `is_active=false` → 200; stays listable with `is_active=false`.
   - `test_employee_assign_department_fk` — create employee with `department_id` → `department_ref` set.
 
-- [ ] **Step 2: Run → FAIL** (404/no route). From `backend/`:
+- [x] **Step 2: Run → FAIL** (404/no route). From `backend/`:
   `python -m pytest apps/hr/tests/test_departments.py -p no:cacheprovider -o addopts="" --create-db -q`
 
-- [ ] **Step 3: Model** — `apps/hr/models.py`, add `Department(BaseModel)`:
+- [x] **Step 3: Model** — `apps/hr/models.py`, add `Department(BaseModel)`:
   - `shop` FK → `core.Shop` (PROTECT, `related_name="departments"`); `name` (CharField 100); `code` (CharField 30); `head` FK → `Employee` (null, blank, SET_NULL, `related_name="headed_departments"`); `is_active` (bool default True).
   - `Meta`: `unique_together = (("shop", "code"),)`, `indexes = [Index(fields=["shop"])]`, `ordering = ["name"]`.
   - Add `Employee.department_ref = FK("Department", null=True, blank=True, SET_NULL, related_name="employees")`. **Keep** the legacy `department` CharField (deprecated — do not drop).
 
-- [ ] **Step 4: Migrations** — `python manage.py makemigrations hr` (schema), then a **data migration** (`RunPython`) backfilling: per shop, create a `Department` for each distinct non-empty `Employee.department`, set `employee.department_ref`. Reverse: null `department_ref` (and delete the auto-created rows). Confirm both directions run.
+- [x] **Step 4: Migrations** — `python manage.py makemigrations hr` (schema), then a **data migration** (`RunPython`) backfilling: per shop, create a `Department` for each distinct non-empty `Employee.department`, set `employee.department_ref`. Reverse: null `department_ref` (and delete the auto-created rows). Confirm both directions run.
 
-- [ ] **Step 5: Serializers** — in `apps/hr/serializers.py`:
+- [x] **Step 5: Serializers** — in `apps/hr/serializers.py`:
   - `DepartmentSerializer(ModelSerializer)` — `id, name, code, head, head_name, is_active, employee_count` (annotate count in the view; `head_name` via `source`).
   - `CreateDepartmentSerializer` / `UpdateDepartmentSerializer` (`Serializer`) — `name`, `code`, `head_id` (optional), `is_active`.
   - Add `department_id` (optional UUID) to `CreateEmployeeSerializer` + `UpdateEmployeeSerializer`; wire it in `EmployeeListCreateView.post` / `EmployeeDetailView.patch` (set `department_ref`).
 
-- [ ] **Step 6: Views + routes** — `apps/hr/views.py`:
+- [x] **Step 6: Views + routes** — `apps/hr/views.py`:
   - `DepartmentListCreateView(APIView)` — `get_permissions`: POST → `hr.departments.manage`, GET → `hr.employees.view`. GET: `Department.objects.filter` scoped via `_shop_ids_for_request`, `select_related("head")`, `annotate(employee_count=Count("employees"))`, paginated. POST: resolve `shop`, enforce per-shop unique `code` → 400 on dup.
   - `DepartmentDetailView(APIView)` — `hr.departments.manage` for PATCH/DELETE, `hr.employees.view` for GET. DELETE → **deactivate** (`is_active=False`), never hard-delete when employees reference it.
   - `apps/hr/urls.py`: `path("departments/", ...)`, `path("departments/<uuid:department_id>/", ...)`.
 
-- [ ] **Step 7: Run → PASS** + `python -m pytest apps/hr -p no:cacheprovider -o addopts="" --create-db -q` (no regressions).
+- [x] **Step 7: Run → PASS** + `python -m pytest apps/hr -p no:cacheprovider -o addopts="" --create-db -q` (no regressions).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 ```bash
 git add backend/apps/hr/models.py backend/apps/hr/serializers.py backend/apps/hr/views.py backend/apps/hr/urls.py backend/apps/hr/migrations/ backend/apps/hr/tests/test_departments.py
 git commit -m "feat(hr): structured Department model + endpoints + Employee FK backfill"
