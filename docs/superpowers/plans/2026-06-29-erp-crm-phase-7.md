@@ -96,11 +96,11 @@ git commit -m "feat(hr): Departments CRUD page + employee department Select"
 
 **Files:** `frontend/src/app/(app)/hr/page.tsx` (replace redirect); test alongside.
 
-- [ ] **Step 1: Hub** — replace `redirect('/hr/employees')` with a KPI hub mirroring `crm/page.tsx`: cards for **Headcount** (active employees), **Present today** (today's attendance), **Pending leave** (open `LeaveRequest`s), **Last payroll run** (latest `SalarySlip` period) — all from existing endpoints, no new backend. Quick links to each sub-page. Tokens, skeletons, empty states; gate on `hr.employees.view`, degrade per-card when a permission is absent.
+- [x] **Step 1: Hub** — replace `redirect('/hr/employees')` with a KPI hub mirroring `crm/page.tsx`: cards for **Headcount** (active employees), **Present today** (today's attendance), **Pending leave** (open `LeaveRequest`s), **Last payroll run** (latest `SalarySlip` period) — all from existing endpoints, no new backend. Quick links to each sub-page. Tokens, skeletons, empty states; gate on `hr.employees.view`, degrade per-card when a permission is absent.
 
-- [ ] **Step 2: Verify** — `npx tsc --noEmit` (0); `npx vitest run` (pass).
+- [x] **Step 2: Verify** — `npx tsc --noEmit` (0); `npx vitest run` (pass).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```bash
 git add "frontend/src/app/(app)/hr/page.tsx"
 git commit -m "feat(hr): HR Overview hub (replaces /hr redirect stub)"
