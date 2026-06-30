@@ -96,14 +96,14 @@
 
 **Files:** create `frontend/src/lib/api/accounts.ts`; modify `frontend/src/lib/query/keys.ts`, `frontend/src/app/(app)/finance/layout.tsx`; create pages `finance/chart-of-accounts/page.tsx`, `finance/journal/page.tsx`, `finance/ledger/page.tsx`; tests under each `__tests__`.
 
-- [ ] **Step 1: API + keys** — `accounts.ts`: types (`Account`, `JournalEntry`, `JournalLine`, `LedgerRow`, `TrialBalanceRow`) + methods (`listAccounts`, `createAccount`, `updateAccount`, `deactivateAccount`, `seedChart`; `listJournal`, `getJournal`, `createJournal`, `postJournal`; `getLedger`, `getTrialBalance`). Add `qk.accounts`, `qk.journal`, `qk.ledger`, `qk.trialBalance` to `keys.ts`.
-- [ ] **Step 2: Layout tabs** — add **Chart of Accounts** (`/finance/chart-of-accounts`, `accounts.ledger.view`), **Journal** (`/finance/journal`, `accounts.journal.view`), **Ledger** (`/finance/ledger`, `accounts.ledger.view`) to `finance/layout.tsx`; add a `permission?` field to the TABS entries and filter visible tabs with `useAuthStore((s) => s.hasPermission)`.
-- [ ] **Step 3: Chart of Accounts page** — grouped-by-type list + create/edit dialog (code, name, type, parent, active) + "Seed default chart" when empty; `Can permission="accounts.chart.manage"` on writes.
-- [ ] **Step 4: Journal page** — list (number, date, narration, total, status) + create form with a **multi-row debit/credit grid** (account Select + debit/credit), a **live balance** indicator, submit disabled until balanced; detail with **Post** action (`Can permission="accounts.journal.post"`); posted entries read-only.
-- [ ] **Step 5: Ledger page** — account picker → ledger table (date, entry #, debit, credit, running balance) with date range; **Trial Balance** sub-view with a balancing totals row.
-- [ ] **Step 6: Tests** — vitest smoke per page (mock `accounts` api + stores): chart row renders + dialog opens; journal create form balance gating; ledger/trial-balance render. Mirror the HR departments test (ResizeObserver shim already global).
-- [ ] **Step 7: Verify** — from `frontend/`: `npx tsc --noEmit` (0); `npx vitest run` (pass); `npm run lint -- --no-cache` (clean).
-- [ ] **Step 8: Commit** — `git commit -m "feat(accounts): Accounts tabs — Chart of Accounts, Journal, Ledger/Trial Balance"`
+- [x] **Step 1: API + keys** — `accounts.ts`: types (`Account`, `JournalEntry`, `JournalLine`, `LedgerRow`, `TrialBalanceRow`) + methods (`listAccounts`, `createAccount`, `updateAccount`, `deactivateAccount`, `seedChart`; `listJournal`, `getJournal`, `createJournal`, `postJournal`; `getLedger`, `getTrialBalance`). Add `qk.accounts`, `qk.journal`, `qk.ledger`, `qk.trialBalance` to `keys.ts`.
+- [x] **Step 2: Layout tabs** — add **Chart of Accounts** (`/finance/chart-of-accounts`, `accounts.ledger.view`), **Journal** (`/finance/journal`, `accounts.journal.view`), **Ledger** (`/finance/ledger`, `accounts.ledger.view`) to `finance/layout.tsx`; add a `permission?` field to the TABS entries and filter visible tabs with `useAuthStore((s) => s.hasPermission)`.
+- [x] **Step 3: Chart of Accounts page** — grouped-by-type list + create/edit dialog (code, name, type, parent, active) + "Seed default chart" when empty; `Can permission="accounts.chart.manage"` on writes.
+- [x] **Step 4: Journal page** — list (number, date, narration, total, status) + create form with a **multi-row debit/credit grid** (account Select + debit/credit), a **live balance** indicator, submit disabled until balanced; detail with **Post** action (`Can permission="accounts.journal.post"`); posted entries read-only.
+- [x] **Step 5: Ledger page** — account picker → ledger table (date, entry #, debit, credit, running balance) with date range; **Trial Balance** sub-view with a balancing totals row.
+- [x] **Step 6: Tests** — vitest smoke per page (mock `accounts` api + stores): chart row renders + dialog opens; journal create form balance gating; ledger/trial-balance render. Mirror the HR departments test (ResizeObserver shim already global).
+- [x] **Step 7: Verify** — from `frontend/`: `npx tsc --noEmit` (0); `npx vitest run` (pass); `npm run lint -- --no-cache` (clean).
+- [x] **Step 8: Commit** — `git commit -m "feat(accounts): Accounts tabs — Chart of Accounts, Journal, Ledger/Trial Balance"`
 
 ---
 

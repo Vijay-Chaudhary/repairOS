@@ -50,6 +50,13 @@ export const qk = {
   // Finance / Accounts
   cashBook:       (params?: Record<string, unknown>) => ['finance', 'cash-book', params ?? {}] as const,
 
+  // Accounts — Chart / Journal / Ledger / Trial Balance
+  accounts:       (params?: Record<string, unknown>) => ['accounts', 'chart', params ?? {}] as const,
+  journal:        (params?: Record<string, unknown>) => ['accounts', 'journal', params ?? {}] as const,
+  journalEntry:   (id: string) => ['accounts', 'journal', id] as const,
+  ledger:         (accountId: string, params?: Record<string, unknown>) => ['accounts', 'ledger', accountId, params ?? {}] as const,
+  trialBalance:   (params?: Record<string, unknown>) => ['accounts', 'trial-balance', params ?? {}] as const,
+
   // CRM
   customers:       listKey('customers'),
   customer:        (id: string) => ['customer', id] as const,
