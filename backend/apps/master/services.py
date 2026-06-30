@@ -413,6 +413,7 @@ def _seed_roles_and_permissions() -> None:
         ("accounts.ledger.view", "accounts"), ("accounts.ledger.export", "accounts"),
         ("accounts.journal.view", "accounts"), ("accounts.journal.create", "accounts"),
         ("accounts.journal.post", "accounts"),
+        ("accounts.chart.manage", "accounts"),
         # tasks — Phase-0 new global module
         ("tasks.tasks.view", "tasks"), ("tasks.tasks.manage", "tasks"),
         # hr — Phase-0 additions

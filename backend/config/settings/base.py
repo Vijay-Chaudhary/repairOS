@@ -52,6 +52,7 @@ LOCAL_APPS = [
     "commissions",
     "hr",
     "finance",
+    "accounts",
     "reports",
 ]
 

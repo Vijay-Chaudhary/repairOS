@@ -24,6 +24,7 @@ NEW_SLUGS = [
     "accounts.bank.view", "accounts.bank.manage",
     "accounts.ledger.view", "accounts.ledger.export",
     "accounts.journal.view", "accounts.journal.create", "accounts.journal.post",
+    "accounts.chart.manage",
     # tasks
     "tasks.tasks.view", "tasks.tasks.manage",
     # hr
