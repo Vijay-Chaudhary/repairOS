@@ -112,13 +112,13 @@ git commit -m "feat(hr): HR Overview hub (replaces /hr redirect stub)"
 
 **Files:** `frontend/src/components/shared/AppShell.tsx`, `frontend/src/components/shared/__tests__/navItems.test.ts`.
 
-- [ ] **Step 1: Leaf→group** — replace the Management leaf `{ label: 'HR', href: '/hr', permission: 'hr.employees.view' }` with a `group` (label `HR`, icon `Users`) whose children are: Overview `/hr` (`hr.employees.view`), Employees `/hr/employees` (`hr.employees.view`), Attendance `/hr/attendance` (`hr.attendance.view`), Leave `/hr/leave` (`hr.leaves.manage`), Payroll `/hr/salary` (`hr.salary.view`), Departments `/hr/departments` (`hr.departments.manage`). Keep it in the **Management** section; pick per-leaf icons consistent with existing imports.
+- [x] **Step 1: Leaf→group** — replace the Management leaf `{ label: 'HR', href: '/hr', permission: 'hr.employees.view' }` with a `group` (label `HR`, icon `Users`) whose children are: Overview `/hr` (`hr.employees.view`), Employees `/hr/employees` (`hr.employees.view`), Attendance `/hr/attendance` (`hr.attendance.view`), Leave `/hr/leave` (`hr.leaves.manage`), Payroll `/hr/salary` (`hr.salary.view`), Departments `/hr/departments` (`hr.departments.manage`). Keep it in the **Management** section; pick per-leaf icons consistent with existing imports.
 
-- [ ] **Step 2: Update nav test** — `navItems.test.ts`: assert the HR group, its six children, hrefs, and per-leaf permissions; remove the old single-leaf assertion.
+- [x] **Step 2: Update nav test** — `navItems.test.ts`: assert the HR group, its six children, hrefs, and per-leaf permissions; remove the old single-leaf assertion.
 
-- [ ] **Step 3: Verify** — `npx tsc --noEmit` (0); `npx vitest run` (pass); `npm run lint -- --no-cache` (clean). Manually confirm the HR group expands and active-route highlighting works (mirror Repair/CRM groups).
+- [x] **Step 3: Verify** — `npx tsc --noEmit` (0); `npx vitest run` (pass); `npm run lint -- --no-cache` (clean). Manually confirm the HR group expands and active-route highlighting works (mirror Repair/CRM groups).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 ```bash
 git add frontend/src/components/shared/AppShell.tsx frontend/src/components/shared/__tests__/navItems.test.ts
 git commit -m "feat(hr): HR nav group (Overview/Employees/Attendance/Leave/Payroll/Departments)"
