@@ -74,17 +74,17 @@ git commit -m "feat(hr): structured Department model + endpoints + Employee FK b
 
 **Files:** `frontend/src/lib/api/hr.ts`, `frontend/src/lib/query/keys.ts`; create `frontend/src/app/(app)/hr/departments/page.tsx`; modify `frontend/src/app/(app)/hr/employees/[id]/page.tsx`; test `frontend/src/app/(app)/hr/departments/__tests__/departments.test.tsx`.
 
-- [ ] **Step 1: API + keys** — in `hr.ts` add `Department` type (`id, name, code, head, head_name, is_active, employee_count`) and `listDepartments()`, `createDepartment(body)`, `updateDepartment(id, body)`, `deactivateDepartment(id)`. Add `department_id?: string` to the employee create/update payload types. In `keys.ts` add `departments: (f?) => ['departments', f] as const`.
+- [x] **Step 1: API + keys** — in `hr.ts` add `Department` type (`id, name, code, head, head_name, is_active, employee_count`) and `listDepartments()`, `createDepartment(body)`, `updateDepartment(id, body)`, `deactivateDepartment(id)`. Add `department_id?: string` to the employee create/update payload types. In `keys.ts` add `departments: (f?) => ['departments', f] as const`.
 
-- [ ] **Step 2: Departments page** — `/hr/departments/page.tsx`, mirror `crm/segments/page.tsx`: table (name, code, head, employee_count, active) + create/edit dialog (name, code, head `Select` over employees, active toggle). React Query (`qk.departments`), tokens, skeletons, `EmptyState`, `Can permission="hr.departments.manage"` on write controls. Default-export only.
+- [x] **Step 2: Departments page** — `/hr/departments/page.tsx`, mirror `crm/segments/page.tsx`: table (name, code, head, employee_count, active) + create/edit dialog (name, code, head `Select` over employees, active toggle). React Query (`qk.departments`), tokens, skeletons, `EmptyState`, `Can permission="hr.departments.manage"` on write controls. Default-export only.
 
-- [ ] **Step 3: Employee form Select** — in `hr/employees/[id]/page.tsx`, replace the free-text *Department* `Input` (~line 175) with a `Select` over active departments writing `department_id`; fall back to showing the legacy `department` text when no FK is set.
+- [x] **Step 3: Employee form Select** — in `hr/employees/[id]/page.tsx`, replace the free-text *Department* `Input` (~line 175) with a `Select` over active departments writing `department_id`; fall back to showing the legacy `department` text when no FK is set.
 
-- [ ] **Step 4: Test** — `departments.test.tsx`: mock `hr` api; assert the table renders a department row and the create dialog opens. Mock any heavy child as needed (mirror existing HR page tests).
+- [x] **Step 4: Test** — `departments.test.tsx`: mock `hr` api; assert the table renders a department row and the create dialog opens. Mock any heavy child as needed (mirror existing HR page tests).
 
-- [ ] **Step 5: Verify** — from `frontend/`: `npx tsc --noEmit` (0); `npx vitest run` (pass).
+- [x] **Step 5: Verify** — from `frontend/`: `npx tsc --noEmit` (0); `npx vitest run` (pass).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 ```bash
 git add frontend/src/lib/api/hr.ts frontend/src/lib/query/keys.ts "frontend/src/app/(app)/hr/departments" "frontend/src/app/(app)/hr/employees/[id]/page.tsx"
 git commit -m "feat(hr): Departments CRUD page + employee department Select"
