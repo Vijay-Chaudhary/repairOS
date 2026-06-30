@@ -2,6 +2,19 @@
 
 import logging
 
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from authentication.permissions import require_permission
+from core.pagination import RepairOSPageNumberPagination
+
+from . import services
+from .models import Account
+from .serializers import AccountSerializer, CreateAccountSerializer, UpdateAccountSerializer
+
 logger = logging.getLogger(__name__)
 
 
@@ -11,3 +24,166 @@ def _shop_ids_from_token(request):
     is_wide = bool(token.get("is_tenant_wide") or token.get("is_platform_admin"))
     shop_ids = token.get("shop_ids", [])
     return shop_ids, is_wide
+
+
+def _resolve_shop(request, explicit_shop_id=None):
+    """Resolve the target Shop for a write, from an explicit id or the token scope.
+
+    Returns (shop, error_response). Exactly one is non-None.
+    """
+    from core.models import Shop
+
+    shop_ids, is_wide = _shop_ids_from_token(request)
+    scope = [str(s) for s in shop_ids]
+
+    if explicit_shop_id:
+        if not is_wide and str(explicit_shop_id) not in scope:
+            return None, Response({"detail": "Shop not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            return Shop.objects.get(id=explicit_shop_id), None
+        except Shop.DoesNotExist:
+            return None, Response({"detail": "Shop not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    if len(scope) == 1:
+        try:
+            return Shop.objects.get(id=scope[0]), None
+        except Shop.DoesNotExist:
+            return None, Response({"detail": "Shop not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    return None, Response(
+        {"detail": "shop_id is required when multiple shops are in scope."},
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+class AccountListCreateView(APIView):
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated(), require_permission("accounts.chart.manage")()]
+        return [IsAuthenticated(), require_permission("accounts.ledger.view")()]
+
+    def get(self, request: Request) -> Response:
+        shop_ids, is_wide = _shop_ids_from_token(request)
+        qs = Account.objects.select_related("shop", "parent")
+        if not is_wide:
+            qs = qs.filter(shop_id__in=shop_ids)
+
+        qp = request.query_params
+        if shop_id := qp.get("shop_id"):
+            qs = qs.filter(shop_id=shop_id)
+        if account_type := qp.get("account_type"):
+            qs = qs.filter(account_type=account_type)
+        is_active_param = qp.get("is_active")
+        if is_active_param is not None and is_active_param.lower() == "true":
+            qs = qs.filter(is_active=True)
+
+        qs = qs.order_by("code")
+        paginator = RepairOSPageNumberPagination()
+        page = paginator.paginate_queryset(qs, request)
+        return paginator.get_paginated_response(AccountSerializer(page, many=True).data)
+
+    def post(self, request: Request) -> Response:
+        serializer = CreateAccountSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        shop, err = _resolve_shop(request, data.get("shop_id"))
+        if err:
+            return err
+
+        if Account.objects.filter(shop=shop, code=data["code"]).exists():
+            return Response(
+                {"detail": "An account with this code already exists for this shop."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        parent = None
+        if parent_id := data.get("parent_id"):
+            try:
+                parent = Account.objects.get(id=parent_id, shop=shop)
+            except Account.DoesNotExist:
+                return Response({"detail": "Parent account not found."}, status=status.HTTP_400_BAD_REQUEST)
+
+        account = Account.objects.create(
+            shop=shop,
+            code=data["code"],
+            name=data["name"],
+            account_type=data["account_type"],
+            parent=parent,
+        )
+        return Response(AccountSerializer(account).data, status=status.HTTP_201_CREATED)
+
+
+class AccountDetailView(APIView):
+    def get_permissions(self):
+        if self.request.method in ("PATCH", "DELETE"):
+            return [IsAuthenticated(), require_permission("accounts.chart.manage")()]
+        return [IsAuthenticated(), require_permission("accounts.ledger.view")()]
+
+    def _get_object(self, request, account_id):
+        shop_ids, is_wide = _shop_ids_from_token(request)
+        qs = Account.objects.select_related("shop", "parent")
+        if not is_wide:
+            qs = qs.filter(shop_id__in=shop_ids)
+        return qs.filter(id=account_id).first()
+
+    def get(self, request: Request, account_id) -> Response:
+        account = self._get_object(request, account_id)
+        if account is None:
+            return Response({"detail": "Account not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(AccountSerializer(account).data)
+
+    def patch(self, request: Request, account_id) -> Response:
+        account = self._get_object(request, account_id)
+        if account is None:
+            return Response({"detail": "Account not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = UpdateAccountSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        if "parent_id" in data:
+            parent_id = data["parent_id"]
+            if parent_id is None:
+                account.parent = None
+            elif str(parent_id) == str(account.id):
+                return Response({"detail": "An account cannot be its own parent."}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                parent = Account.objects.filter(id=parent_id, shop=account.shop).first()
+                if parent is None:
+                    return Response({"detail": "Parent account not found."}, status=status.HTTP_400_BAD_REQUEST)
+                account.parent = parent
+        if "name" in data:
+            account.name = data["name"]
+        if "is_active" in data:
+            account.is_active = data["is_active"]
+        account.save()
+        return Response(AccountSerializer(account).data)
+
+    def delete(self, request: Request, account_id) -> Response:
+        from core.exceptions import BusinessRuleViolation
+
+        account = self._get_object(request, account_id)
+        if account is None:
+            return Response({"detail": "Account not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if account.is_system:
+            raise BusinessRuleViolation("System accounts cannot be deleted.")
+
+        account.is_active = False
+        account.save(update_fields=["is_active", "updated_at"])
+        return Response(AccountSerializer(account).data, status=status.HTTP_200_OK)
+
+
+class SeedChartView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("accounts.chart.manage")]
+
+    def post(self, request: Request) -> Response:
+        shop, err = _resolve_shop(request, request.data.get("shop_id"))
+        if err:
+            return err
+        created = services.seed_default_chart(shop)
+        return Response(
+            {"created": created},
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )

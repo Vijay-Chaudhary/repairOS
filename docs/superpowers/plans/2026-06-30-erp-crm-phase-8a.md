@@ -30,12 +30,12 @@
 
 **Files:** create `apps/accounts/` (app scaffold: `__init__.py`, `apps.py`, `models.py`, `serializers.py`, `views.py`, `urls.py`, `services.py`, `migrations/__init__.py`, `tests/__init__.py`); modify `config/settings*.py` (INSTALLED_APPS), `config/urls.py`; `apps/master/services.py`, `apps/master/tests/test_permission_seed.py`.
 
-- [ ] **Step 1: Failing test** — `apps/master/tests/test_permission_seed.py`: add `"accounts.chart.manage"` to the EXPECTED slug set (the existing test asserts seeded+granted-to-admin).
-- [ ] **Step 2: Run → FAIL** (slug not seeded). `python -m pytest apps/master/tests/test_permission_seed.py -p no:cacheprovider -o addopts="" --create-db -q`
-- [ ] **Step 3: Seed the perm** — add `("accounts.chart.manage", "accounts")` to the `accounts.*` block in `apps/master/services.py`.
-- [ ] **Step 4: Scaffold the app** — create `apps/accounts` with an `AppConfig` (label `accounts`); register in `INSTALLED_APPS` and add `path("api/v1/accounts/", include("accounts.urls"))` to `config/urls.py` (empty `urlpatterns = []` for now).
-- [ ] **Step 5: Run → PASS** (seed test) + `python -m pytest apps/master -p no:cacheprovider -o addopts="" --create-db -q`.
-- [ ] **Step 6: Commit** — `git commit -m "feat(accounts): scaffold accounts app + accounts.chart.manage permission"`
+- [x] **Step 1: Failing test** — `apps/master/tests/test_permission_seed.py`: add `"accounts.chart.manage"` to the EXPECTED slug set (the existing test asserts seeded+granted-to-admin).
+- [x] **Step 2: Run → FAIL** (slug not seeded). `python -m pytest apps/master/tests/test_permission_seed.py -p no:cacheprovider -o addopts="" --create-db -q`
+- [x] **Step 3: Seed the perm** — add `("accounts.chart.manage", "accounts")` to the `accounts.*` block in `apps/master/services.py`.
+- [x] **Step 4: Scaffold the app** — create `apps/accounts` with an `AppConfig` (label `accounts`); register in `INSTALLED_APPS` and add `path("api/v1/accounts/", include("accounts.urls"))` to `config/urls.py` (empty `urlpatterns = []` for now).
+- [x] **Step 5: Run → PASS** (seed test) + `python -m pytest apps/master -p no:cacheprovider -o addopts="" --create-db -q`.
+- [x] **Step 6: Commit** — `git commit -m "feat(accounts): scaffold accounts app + accounts.chart.manage permission"`
 
 ---
 
@@ -43,18 +43,18 @@
 
 **Files:** `apps/accounts/models.py`, `serializers.py`, `views.py`, `urls.py`, `services.py`; migration; `apps/accounts/tests/test_chart_of_accounts.py`.
 
-- [ ] **Step 1: Failing test** (copy `shop` + `client_with_perms` from `test_cash_book.py`):
+- [x] **Step 1: Failing test** (copy `shop` + `client_with_perms` from `test_cash_book.py`):
   - `test_create_account_requires_chart_manage` — POST `/api/v1/accounts/chart/` without `accounts.chart.manage` → 403.
   - `test_create_and_list_account` — with `["accounts.chart.manage","accounts.ledger.view"]`, POST `{code,name,account_type}` → 201; GET list (read `accounts.ledger.view`) returns it.
   - `test_account_code_unique_per_shop` — duplicate `code` same shop → 400.
   - `test_seed_default_chart_idempotent` — POST `/chart/seed/` creates the default chart; calling again is a no-op (count unchanged); seeded rows are `is_system=True`.
   - `test_cannot_delete_system_account` — DELETE a seeded account → deactivates/blocks (not hard delete).
-- [ ] **Step 2: Run → FAIL** (404).
-- [ ] **Step 3: Model** — `Account(BaseModel)`: `shop` FK (PROTECT, related_name `accounts`); `code` (CharField 20); `name` (CharField 120); `account_type` (TextChoices asset/liability/equity/income/expense); `parent` self-FK (null, SET_NULL, related_name `children`); `is_active` (default True); `is_system` (default False). `normal_balance` property (asset/expense→debit else credit). `Meta`: `unique_together=(("shop","code"),)`, index `(shop, account_type)`, `ordering=["code"]`. Migration.
-- [ ] **Step 4: Seed service** — `services.seed_default_chart(shop)`: idempotent; creates the standard Indian-SMB heads (Cash, Bank, Debtors, GST Input, Inventory / Creditors, GST Payable / Capital, Retained Earnings / Sales, Other Income / Purchases, Salaries, Rent, Utilities, Bank Charges, Misc) with `is_system=True`. No-op if the shop already has accounts.
-- [ ] **Step 5: Serializers + views + routes** — `AccountSerializer` (ModelSerializer: id, code, name, account_type, parent_id, is_active, is_system, normal_balance) + `CreateAccountSerializer`/`UpdateAccountSerializer`. `AccountListCreateView` (GET `accounts.ledger.view`, POST `accounts.chart.manage`, per-shop unique code → 400), `AccountDetailView` (GET read / PATCH+DELETE `accounts.chart.manage`; DELETE → deactivate, block when `is_system` or has posted lines), `SeedChartView` (POST `accounts.chart.manage`). Wire `urls.py`.
-- [ ] **Step 6: Run → PASS** + `python -m pytest apps/accounts -p no:cacheprovider -o addopts="" --create-db -q`.
-- [ ] **Step 7: Commit** — `git commit -m "feat(accounts): Chart of Accounts model + CRUD + seeded default chart"`
+- [x] **Step 2: Run → FAIL** (404).
+- [x] **Step 3: Model** — `Account(BaseModel)`: `shop` FK (PROTECT, related_name `accounts`); `code` (CharField 20); `name` (CharField 120); `account_type` (TextChoices asset/liability/equity/income/expense); `parent` self-FK (null, SET_NULL, related_name `children`); `is_active` (default True); `is_system` (default False). `normal_balance` property (asset/expense→debit else credit). `Meta`: `unique_together=(("shop","code"),)`, index `(shop, account_type)`, `ordering=["code"]`. Migration.
+- [x] **Step 4: Seed service** — `services.seed_default_chart(shop)`: idempotent; creates the standard Indian-SMB heads (Cash, Bank, Debtors, GST Input, Inventory / Creditors, GST Payable / Capital, Retained Earnings / Sales, Other Income / Purchases, Salaries, Rent, Utilities, Bank Charges, Misc) with `is_system=True`. No-op if the shop already has accounts.
+- [x] **Step 5: Serializers + views + routes** — `AccountSerializer` (ModelSerializer: id, code, name, account_type, parent_id, is_active, is_system, normal_balance) + `CreateAccountSerializer`/`UpdateAccountSerializer`. `AccountListCreateView` (GET `accounts.ledger.view`, POST `accounts.chart.manage`, per-shop unique code → 400), `AccountDetailView` (GET read / PATCH+DELETE `accounts.chart.manage`; DELETE → deactivate, block when `is_system` or has posted lines), `SeedChartView` (POST `accounts.chart.manage`). Wire `urls.py`.
+- [x] **Step 6: Run → PASS** + `python -m pytest apps/accounts -p no:cacheprovider -o addopts="" --create-db -q`.
+- [x] **Step 7: Commit** — `git commit -m "feat(accounts): Chart of Accounts model + CRUD + seeded default chart"`
 
 ---
 
