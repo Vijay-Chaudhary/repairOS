@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from .models import AttendanceRecord, Employee, LeaveRequest, SalarySlip
+from .models import AttendanceRecord, Department, Employee, LeaveRequest, SalarySlip
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
@@ -12,6 +12,8 @@ class EmployeeSerializer(serializers.ModelSerializer):
     """
     shop_id = serializers.UUIDField(read_only=True)
     user_id = serializers.UUIDField(read_only=True, allow_null=True)
+    department_id = serializers.UUIDField(source="department_ref_id", read_only=True, allow_null=True)
+    department_name = serializers.CharField(source="department_ref.name", read_only=True, default=None)
     is_active = serializers.SerializerMethodField()
     bank_account_masked = serializers.SerializerMethodField()
     pan_masked = serializers.SerializerMethodField()
@@ -21,6 +23,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
         model = Employee
         fields = [
             "id", "shop_id", "user_id", "employee_code", "full_name", "designation", "department",
+            "department_id", "department_name",
             "date_of_joining", "date_of_leaving", "employment_type",
             "basic_salary", "hra", "other_allowances", "gross_salary",
             "pf_employee", "pf_employer", "esic_employee", "esic_employer",
@@ -63,6 +66,7 @@ class CreateEmployeeSerializer(serializers.Serializer):
     bank_ifsc = serializers.CharField(max_length=11, required=False, default="", allow_blank=True)
     pan_number = serializers.CharField(max_length=10, required=False, default="", allow_blank=True)
     aadhar_number = serializers.CharField(max_length=12, required=False, default="", allow_blank=True)
+    department_id = serializers.UUIDField(required=False, allow_null=True)
 
 
 class AttendanceRecordSerializer(serializers.Serializer):
@@ -175,6 +179,36 @@ class UpdateEmployeeSerializer(serializers.Serializer):
     basic_salary = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
     hra = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
     other_allowances = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    is_active = serializers.BooleanField(required=False)
+    department_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class DepartmentSerializer(serializers.ModelSerializer):
+    shop_id = serializers.UUIDField(read_only=True)
+    head_id = serializers.UUIDField(read_only=True, allow_null=True)
+    head_name = serializers.CharField(source="head.full_name", read_only=True, default=None)
+    employee_count = serializers.IntegerField(read_only=True, default=0)
+
+    class Meta:
+        model = Department
+        fields = [
+            "id", "shop_id", "name", "code", "head_id", "head_name",
+            "is_active", "employee_count", "created_at",
+        ]
+
+
+class CreateDepartmentSerializer(serializers.Serializer):
+    shop_id = serializers.UUIDField()
+    name = serializers.CharField(max_length=100)
+    code = serializers.CharField(max_length=30)
+    head_id = serializers.UUIDField(required=False, allow_null=True)
+    is_active = serializers.BooleanField(required=False, default=True)
+
+
+class UpdateDepartmentSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=100, required=False)
+    code = serializers.CharField(max_length=30, required=False)
+    head_id = serializers.UUIDField(required=False, allow_null=True)
     is_active = serializers.BooleanField(required=False)
 
 

@@ -15,16 +15,19 @@ from authentication.permissions import require_permission
 from core.pagination import RepairOSCursorPagination, RepairOSPageNumberPagination
 
 from . import services
-from .models import AttendanceRecord, Employee, LeaveRequest, SalarySlip
+from .models import AttendanceRecord, Department, Employee, LeaveRequest, SalarySlip
 from .serializers import (
     AttendanceRecordOutputSerializer,
+    CreateDepartmentSerializer,
     CreateEmployeeSerializer,
     CreateLeaveRequestSerializer,
     DateRangeBulkAttendanceSerializer,
+    DepartmentSerializer,
     EmployeeSerializer,
     GenerateSlipsSerializer,
     LeaveRequestSerializer,
     SalarySlipSerializer,
+    UpdateDepartmentSerializer,
     UpdateEmployeeSerializer,
     UpdateLeaveStatusSerializer,
     UpdateSlipStatusSerializer,
@@ -101,6 +104,10 @@ class EmployeeListCreateView(APIView):
             esic_employer=data["esic_employer"],
             bank_ifsc=data.get("bank_ifsc", ""),
         )
+        if data.get("department_id"):
+            emp.department_ref = Department.objects.filter(
+                id=data["department_id"], shop=shop
+            ).first()
         if data.get("bank_account_number"):
             emp.set_bank_account(data["bank_account_number"])
         if data.get("pan_number"):
@@ -153,6 +160,13 @@ class EmployeeDetailView(APIView):
             if field in data:
                 setattr(emp, field, data[field])
 
+        if "department_id" in data:
+            dept_id = data["department_id"]
+            emp.department_ref = (
+                Department.objects.filter(id=dept_id, shop=emp.shop).first()
+                if dept_id else None
+            )
+
         if "is_active" in data:
             from django.utils import timezone
             emp.deleted_at = None if data["is_active"] else timezone.now()
@@ -163,6 +177,122 @@ class EmployeeDetailView(APIView):
 
         emp.save()
         return Response(EmployeeSerializer(emp).data)
+
+
+class DepartmentListCreateView(APIView):
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated(), require_permission("hr.departments.manage")()]
+        return [IsAuthenticated(), require_permission("hr.employees.view")()]
+
+    def get(self, request: Request) -> Response:
+        from django.db.models import Count
+
+        token = getattr(request, "auth", None)
+        shop_ids, is_wide = _shop_ids_for_request(token)
+
+        qs = (
+            Department.objects.select_related("head")
+            .annotate(employee_count=Count("employees"))
+            .order_by("name")
+        )
+        if not is_wide:
+            qs = qs.filter(shop_id__in=shop_ids)
+
+        paginator = RepairOSPageNumberPagination()
+        page = paginator.paginate_queryset(qs, request)
+        data = DepartmentSerializer(page, many=True).data
+        return paginator.get_paginated_response(data)
+
+    def post(self, request: Request) -> Response:
+        serializer = CreateDepartmentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        from core.models import Shop
+        try:
+            shop = Shop.objects.get(id=data["shop_id"])
+        except Shop.DoesNotExist:
+            return Response({"detail": "Shop not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if Department.objects.filter(shop=shop, code=data["code"]).exists():
+            return Response(
+                {"detail": "Department with this code already exists for this shop."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        dept = Department.objects.create(
+            shop=shop,
+            name=data["name"],
+            code=data["code"],
+            head_id=data.get("head_id"),
+            is_active=data.get("is_active", True),
+        )
+        return Response(DepartmentSerializer(dept).data, status=status.HTTP_201_CREATED)
+
+
+class DepartmentDetailView(APIView):
+
+    def get_permissions(self):
+        if self.request.method in ("PATCH", "DELETE"):
+            return [IsAuthenticated(), require_permission("hr.departments.manage")()]
+        return [IsAuthenticated(), require_permission("hr.employees.view")()]
+
+    def _get_department(self, request: Request, department_id):
+        from django.db.models import Count
+
+        qs = Department.objects.select_related("head").annotate(
+            employee_count=Count("employees")
+        )
+        token = getattr(request, "auth", None)
+        shop_ids, is_wide = _shop_ids_for_request(token)
+        if not is_wide:
+            qs = qs.filter(shop_id__in=shop_ids)
+        try:
+            return qs.get(id=department_id)
+        except Department.DoesNotExist:
+            return None
+
+    def get(self, request: Request, department_id) -> Response:
+        dept = self._get_department(request, department_id)
+        if not dept:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(DepartmentSerializer(dept).data)
+
+    def patch(self, request: Request, department_id) -> Response:
+        dept = self._get_department(request, department_id)
+        if not dept:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        ser = UpdateDepartmentSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+
+        if "code" in data and data["code"] != dept.code and Department.objects.filter(
+            shop=dept.shop, code=data["code"]
+        ).exclude(id=dept.id).exists():
+            return Response(
+                {"detail": "Department with this code already exists for this shop."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        for field in ("name", "code", "is_active"):
+            if field in data:
+                setattr(dept, field, data[field])
+        if "head_id" in data:
+            dept.head_id = data["head_id"]
+        dept.save()
+        return Response(DepartmentSerializer(dept).data)
+
+    def delete(self, request: Request, department_id) -> Response:
+        dept = self._get_department(request, department_id)
+        if not dept:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        # Deactivate rather than hard-delete so referencing employees keep their FK history.
+        dept.is_active = False
+        dept.save(update_fields=["is_active", "updated_at"])
+        return Response(DepartmentSerializer(dept).data)
 
 
 class AttendanceListView(APIView):

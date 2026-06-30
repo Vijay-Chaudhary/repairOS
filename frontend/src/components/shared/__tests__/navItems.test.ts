@@ -84,6 +84,33 @@ describe('NAV_ITEMS — Tasks is now a top-level Operations leaf', () => {
   });
 });
 
+describe('NAV_ITEMS — HR group', () => {
+  it('HR is now a group (no longer a single leaf)', () => {
+    const leafHr = NAV_ITEMS.find((e) => e.type === 'leaf' && e.href === '/hr');
+    expect(leafHr).toBeUndefined();
+    expect(group('HR').label).toBe('HR');
+  });
+
+  it('starts with Overview at /hr on hr.employees.view', () => {
+    const c = group('HR').children;
+    expect(c[0].href).toBe('/hr');
+    expect(c[0].label).toBe('Overview');
+    expect(c[0].permission).toBe('hr.employees.view');
+  });
+
+  it('surfaces all six leaves with their own permissions', () => {
+    const c = group('HR').children;
+    expect(c.map((x) => x.href)).toEqual([
+      '/hr', '/hr/employees', '/hr/attendance', '/hr/leave', '/hr/salary', '/hr/departments',
+    ]);
+    expect(leaf('/hr/employees').permission).toBe('hr.employees.view');
+    expect(leaf('/hr/attendance').permission).toBe('hr.attendance.view');
+    expect(leaf('/hr/leave').permission).toBe('hr.leaves.manage');
+    expect(leaf('/hr/salary').permission).toBe('hr.salary.view');
+    expect(leaf('/hr/departments').permission).toBe('hr.departments.manage');
+  });
+});
+
 describe('NAV_ITEMS — Inventory group', () => {
   it('is labelled "Inventory"', () => {
     expect(group('Inventory').label).toBe('Inventory');

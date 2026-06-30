@@ -9,6 +9,7 @@ import {
   Building, BarChart3, DollarSign, Menu, X, ChevronDown,
   Search, LogOut, User, UserCheck, Boxes, Receipt, ClipboardList, ListChecks, Filter, Activity, Send,
   Target, Contact, ShieldCheck, Tag, Truck, Undo2, Clock, FileMinus, ScrollText,
+  CalendarCheck, CalendarDays, Building2,
 } from 'lucide-react';
 import { useAuthStore } from '@/lib/stores/authStore';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
@@ -99,7 +100,14 @@ export const NAV_ITEMS: NavEntry[] = [
 
   { type: 'section', label: 'Management' },
   { type: 'leaf', label: 'Commissions', href: '/commissions', icon: TrendingUp, permission: 'hr.salary.view' },
-  { type: 'leaf', label: 'HR',          href: '/hr',          icon: Users,       permission: 'hr.employees.view' },
+  { type: 'group', label: 'HR', icon: Users, children: [
+    { type: 'leaf', label: 'Overview',    href: '/hr',             icon: LayoutDashboard, permission: 'hr.employees.view' },
+    { type: 'leaf', label: 'Employees',   href: '/hr/employees',   icon: Users,           permission: 'hr.employees.view' },
+    { type: 'leaf', label: 'Attendance',  href: '/hr/attendance',  icon: CalendarCheck,   permission: 'hr.attendance.view' },
+    { type: 'leaf', label: 'Leave',       href: '/hr/leave',       icon: CalendarDays,    permission: 'hr.leaves.manage' },
+    { type: 'leaf', label: 'Payroll',     href: '/hr/salary',      icon: Receipt,         permission: 'hr.salary.view' },
+    { type: 'leaf', label: 'Departments', href: '/hr/departments', icon: Building2,       permission: 'hr.departments.manage' },
+  ] },
   { type: 'leaf', label: 'Reports',     href: '/reports',     icon: BarChart3,   anyOf: ['reports.revenue.view', 'reports.repair.view'] },
   { type: 'leaf', label: 'Audit Log',   href: '/audit',       icon: ScrollText,  permission: 'settings.audit.view' },
 

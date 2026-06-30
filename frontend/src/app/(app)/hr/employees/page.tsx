@@ -31,7 +31,9 @@ const COLUMNS: Column<Employee>[] = [
   { key: 'role', header: 'Role', cell: (r) => (
     <div>
       <p className="text-body-sm text-[var(--text)]">{r.designation}</p>
-      {r.department && <p className="text-xs text-[var(--text-muted)]">{r.department}</p>}
+      {(r.department_name ?? r.department) && (
+        <p className="text-xs text-[var(--text-muted)]">{r.department_name ?? r.department}</p>
+      )}
     </div>
   )},
   { key: 'type', header: 'Type', cell: (r) => (
