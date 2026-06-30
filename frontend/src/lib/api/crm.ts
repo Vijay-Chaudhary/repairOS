@@ -6,7 +6,7 @@ export type LeadStatus = 'new' | 'contacted' | 'interested' | 'quoted' | 'conver
 export type LeadSource = 'walk_in' | 'whatsapp' | 'referral' | 'google' | 'facebook' | 'other';
 export type CommType = 'call' | 'whatsapp' | 'visit' | 'email' | 'sms' | 'note';
 export type CommDirection = 'inbound' | 'outbound';
-export type TaskStatus = 'pending' | 'completed' | 'cancelled' | 'overdue';
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'overdue';
 export type TaskPriority = 'low' | 'normal' | 'high';
 export type CustomerType = 'individual' | 'business';
 
@@ -498,3 +498,10 @@ export const COMM_TYPE_LABELS: Record<CommType, string> = {
 export const TASK_PRIORITY_LABELS: Record<TaskPriority, string> = {
   low: 'Low', normal: 'Normal', high: 'High',
 };
+
+export const TASK_KANBAN_COLS: Array<{ status: TaskStatus; label: string }> = [
+  { status: 'pending',     label: 'To-do' },
+  { status: 'in_progress', label: 'In Progress' },
+  { status: 'completed',   label: 'Done' },
+  { status: 'cancelled',   label: 'Cancelled' },
+];

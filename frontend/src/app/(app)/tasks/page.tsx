@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-  Plus, CheckCircle2, Clock, AlertCircle, Filter, List, CalendarDays,
+  Plus, CheckCircle2, Clock, AlertCircle, Filter, User, Users, CalendarDays, Columns3,
 } from 'lucide-react';
 import {
   addMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, format,
@@ -17,13 +17,15 @@ import { PaginationBar } from '@/components/shared/PaginationBar';
 import { Can } from '@/components/shared/Can';
 import { TaskComposer } from '@/components/crm/TaskComposer';
 import { TaskCalendar } from '@/components/crm/TaskCalendar';
-import { crmApi, TASK_PRIORITY_LABELS, type Task, type TaskStatus, type TaskPriority } from '@/lib/api/crm';
+import { TaskBoard, type TaskColumnData } from '@/components/crm/TaskBoard';
+import { crmApi, TASK_PRIORITY_LABELS, TASK_KANBAN_COLS, type Task, type TaskStatus, type TaskPriority } from '@/lib/api/crm';
 import { qk } from '@/lib/query/keys';
 import { ApiError } from '@/lib/api/client';
 import { formatDate, formatTime } from '@/lib/format/date';
+import { useAuthStore } from '@/lib/stores/authStore';
 import { cn } from '@/lib/utils';
 
-type TaskView = 'list' | 'calendar';
+type TaskView = 'my' | 'team' | 'calendar' | 'kanban';
 
 type StatusFilter = TaskStatus | 'all';
 type PriorityFilter = TaskPriority | 'all';
@@ -31,14 +33,23 @@ type PriorityFilter = TaskPriority | 'all';
 const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
   { value: 'all', label: 'All' },
   { value: 'pending', label: 'Pending' },
+  { value: 'in_progress', label: 'In Progress' },
   { value: 'overdue', label: 'Overdue' },
   { value: 'completed', label: 'Completed' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
+const VIEWS: Array<{ value: TaskView; label: string; icon: typeof User }> = [
+  { value: 'my', label: 'My tasks', icon: User },
+  { value: 'team', label: 'Team tasks', icon: Users },
+  { value: 'calendar', label: 'Calendar view', icon: CalendarDays },
+  { value: 'kanban', label: 'Kanban view', icon: Columns3 },
+];
+
 export default function TasksPage() {
   const queryClient = useQueryClient();
-  const [view, setView] = useState<TaskView>('list');
+  const myId = useAuthStore((s) => s.user?.id);
+  const [view, setView] = useState<TaskView>('my');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pending');
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
   const [composerOpen, setComposerOpen] = useState(false);
@@ -46,22 +57,28 @@ export default function TasksPage() {
   const [listPage, setListPage] = useState(1);
   const [month, setMonth] = useState(() => startOfMonth(new Date()));
 
-  useEffect(() => { setListPage(1); }, [statusFilter, priorityFilter]);
+  useEffect(() => { setListPage(1); }, [statusFilter, priorityFilter, view]);
 
+  const isList = view === 'my' || view === 'team';
   const sharedFilters = {
     status: statusFilter === 'all' ? undefined : statusFilter,
     priority: priorityFilter === 'all' ? undefined : priorityFilter,
   };
 
-  const listFilters = { ...sharedFilters, page: listPage };
+  // My / Team list
+  const listFilters = {
+    ...sharedFilters,
+    assigned_to: view === 'my' ? myId : undefined,
+    page: listPage,
+  };
   const { data, isLoading } = useQuery({
     queryKey: qk.tasks(listFilters),
     queryFn: () => crmApi.listTasks(listFilters),
-    enabled: view === 'list',
+    enabled: isList,
     staleTime: 30_000,
   });
 
-  // Calendar pulls the whole visible grid (incl. adjacent-month spill days) in one page.
+  // Calendar
   const calFilters = {
     ...sharedFilters,
     due_from: format(startOfWeek(startOfMonth(month), { weekStartsOn: 0 }), 'yyyy-MM-dd'),
@@ -74,6 +91,27 @@ export default function TasksPage() {
     enabled: view === 'calendar',
     staleTime: 30_000,
   });
+
+  // Kanban (team-wide, grouped by status)
+  const kanbanQueries = useQueries({
+    queries: TASK_KANBAN_COLS.map(({ status }) => ({
+      queryKey: qk.tasks({ kanban: true, status }),
+      queryFn: () => crmApi.listTasks({ status }),
+      enabled: view === 'kanban',
+      staleTime: 30_000,
+    })),
+  });
+  const kanbanColumns: TaskColumnData[] = TASK_KANBAN_COLS.map(({ status }, i) => ({
+    status,
+    tasks: kanbanQueries[i]?.data?.items ?? [],
+    isLoading: kanbanQueries[i]?.isLoading ?? false,
+    count: kanbanQueries[i]?.data?.meta?.count ?? (kanbanQueries[i]?.data?.items?.length ?? 0),
+  }));
+  const handleTaskMove = useCallback(async (taskId: string, _from: TaskStatus, to: TaskStatus) => {
+    await crmApi.updateTask(taskId, { status: to });
+    queryClient.invalidateQueries({ queryKey: qk.tasks() });
+    toast.success('Task moved');
+  }, [queryClient]);
 
   const openComposer = (date?: string) => {
     setComposerDefaultDate(date);
@@ -92,31 +130,24 @@ export default function TasksPage() {
   const tasks = data?.items ?? [];
 
   return (
-    <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-5">
+    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-h1 text-[var(--text)]">Tasks</h1>
         <div className="flex items-center gap-2">
-          {/* List ↔ calendar toggle */}
           <div className="flex rounded-md border border-[var(--border)] overflow-hidden">
-            <button
-              onClick={() => setView('list')}
-              aria-label="List view"
-              aria-pressed={view === 'list'}
-              className={cn('h-9 w-9 flex items-center justify-center transition-colors',
-                view === 'list' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--surface)] text-[var(--text-muted)] hover:bg-[var(--surface-2)]')}
-            >
-              <List className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setView('calendar')}
-              aria-label="Calendar view"
-              aria-pressed={view === 'calendar'}
-              className={cn('h-9 w-9 flex items-center justify-center transition-colors',
-                view === 'calendar' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--surface)] text-[var(--text-muted)] hover:bg-[var(--surface-2)]')}
-            >
-              <CalendarDays className="h-4 w-4" />
-            </button>
+            {VIEWS.map(({ value, label, icon: Icon }) => (
+              <button
+                key={value}
+                onClick={() => setView(value)}
+                aria-label={label}
+                aria-pressed={view === value}
+                className={cn('h-9 w-9 flex items-center justify-center transition-colors',
+                  view === value ? 'bg-[var(--accent)] text-white' : 'bg-[var(--surface)] text-[var(--text-muted)] hover:bg-[var(--surface-2)]')}
+              >
+                <Icon className="h-4 w-4" />
+              </button>
+            ))}
           </div>
           <Can permission="crm.tasks.manage">
             <Button onClick={() => openComposer()}>
@@ -127,38 +158,40 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-2 flex-wrap">
-        <div className="flex rounded-md border border-[var(--border)] overflow-hidden">
-          {STATUS_FILTERS.map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => setStatusFilter(value)}
-              className={cn(
-                'px-3 py-1.5 text-xs font-medium transition-colors',
-                statusFilter === value
-                  ? 'bg-[var(--accent)] text-white'
-                  : 'bg-[var(--surface)] text-[var(--text-muted)] hover:bg-[var(--surface-2)]',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <Select value={priorityFilter} onValueChange={(v) => setPriorityFilter(v as PriorityFilter)}>
-          <SelectTrigger className="h-8 w-[130px] text-xs">
-            <Filter className="h-3 w-3 text-[var(--text-muted)]" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All priorities</SelectItem>
-            {(Object.keys(TASK_PRIORITY_LABELS) as TaskPriority[]).map((p) => (
-              <SelectItem key={p} value={p}>{TASK_PRIORITY_LABELS[p]}</SelectItem>
+      {/* Filters (not for kanban, which groups by status) */}
+      {view !== 'kanban' && (
+        <div className="flex gap-2 flex-wrap">
+          <div className="flex rounded-md border border-[var(--border)] overflow-hidden">
+            {STATUS_FILTERS.map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => setStatusFilter(value)}
+                className={cn(
+                  'px-3 py-1.5 text-xs font-medium transition-colors',
+                  statusFilter === value
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'bg-[var(--surface)] text-[var(--text-muted)] hover:bg-[var(--surface-2)]',
+                )}
+              >
+                {label}
+              </button>
             ))}
-          </SelectContent>
-        </Select>
-      </div>
+          </div>
+
+          <Select value={priorityFilter} onValueChange={(v) => setPriorityFilter(v as PriorityFilter)}>
+            <SelectTrigger className="h-8 w-[130px] text-xs">
+              <Filter className="h-3 w-3 text-[var(--text-muted)]" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All priorities</SelectItem>
+              {(Object.keys(TASK_PRIORITY_LABELS) as TaskPriority[]).map((p) => (
+                <SelectItem key={p} value={p}>{TASK_PRIORITY_LABELS[p]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {view === 'calendar' ? (
         <TaskCalendar
@@ -171,9 +204,10 @@ export default function TasksPage() {
           onDayClick={(iso) => openComposer(iso)}
           onTaskClick={(t) => openComposer(t.due_date?.slice(0, 10))}
         />
+      ) : view === 'kanban' ? (
+        <TaskBoard columns={kanbanColumns} onCardMove={handleTaskMove} />
       ) : (
         <>
-          {/* Task list */}
           {isLoading ? (
             <div className="space-y-2">
               {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-16 rounded-lg" />)}
@@ -216,7 +250,7 @@ export default function TasksPage() {
 }
 
 function TaskRow({ task, onComplete, completing }: { task: Task; onComplete: () => void; completing: boolean }) {
-  const isActive = task.status === 'pending' || task.status === 'overdue';
+  const isActive = task.status === 'pending' || task.status === 'overdue' || task.status === 'in_progress';
 
   return (
     <div className={cn(
