@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPatch, type PageMeta } from './client';
+import { apiGet, apiPost, apiPatch, apiDelete, type PageMeta } from './client';
 
 export type EmploymentType = 'full_time' | 'part_time' | 'contract' | 'intern';
 export type AttendanceStatus = 'present' | 'absent' | 'half_day' | 'leave' | 'holiday' | 'weekend';
@@ -14,6 +14,8 @@ export interface Employee {
   full_name: string;
   designation: string;
   department?: string | null;
+  department_id?: string | null;
+  department_name?: string | null;
   date_of_joining: string;
   date_of_leaving?: string | null;
   employment_type: EmploymentType;
@@ -30,6 +32,18 @@ export interface Employee {
   pan_masked?: string | null;
   aadhar_masked?: string | null;
   is_active: boolean;
+}
+
+export interface Department {
+  id: string;
+  shop_id: string;
+  name: string;
+  code: string;
+  head_id?: string | null;
+  head_name?: string | null;
+  is_active: boolean;
+  employee_count: number;
+  created_at: string;
 }
 
 export interface AttendanceRecord {
@@ -102,6 +116,7 @@ export const hrApi = {
     full_name: string;
     designation: string;
     department?: string;
+    department_id?: string;
     date_of_joining: string;
     employment_type: EmploymentType;
     basic_salary: number;
@@ -119,10 +134,32 @@ export const hrApi = {
 
   updateEmployee: (id: string, body: Partial<{
     full_name: string; designation: string; department: string;
+    department_id: string | null;
     date_of_leaving: string; employment_type: EmploymentType;
     basic_salary: number; hra: number; other_allowances: number;
     is_active: boolean;
   }>) => apiPatch<Employee>(`/hr/employees/${id}/`, body),
+
+  listDepartments: (filters: { shop_id?: string; page?: number } = {}) =>
+    apiGet<{ items: Department[]; meta: PageMeta }>(
+      '/hr/departments/',
+      filters as Record<string, string | number | undefined>,
+    ),
+
+  createDepartment: (body: {
+    shop_id: string;
+    name: string;
+    code: string;
+    head_id?: string | null;
+    is_active?: boolean;
+  }) => apiPost<Department>('/hr/departments/', body),
+
+  updateDepartment: (id: string, body: Partial<{
+    name: string; code: string; head_id: string | null; is_active: boolean;
+  }>) => apiPatch<Department>(`/hr/departments/${id}/`, body),
+
+  deactivateDepartment: (id: string) =>
+    apiDelete<Department>(`/hr/departments/${id}/`),
 
   listAttendance: (filters: { shop_id?: string; month?: number; year?: number; employee_id?: string } = {}) =>
     apiGet<{ items: AttendanceRecord[] }>(

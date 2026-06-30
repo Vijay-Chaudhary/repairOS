@@ -102,6 +102,7 @@ export const qk = {
   // HR
   employees:   listKey('employees'),
   employee:    (id: string) => ['employee', id] as const,
+  departments: listKey('departments'),
   attendance:  listKey('attendance'),
   leaves:      listKey('leaves'),
   salarySlips: listKey('salary-slips'),

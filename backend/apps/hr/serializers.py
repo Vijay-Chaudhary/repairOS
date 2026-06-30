@@ -12,6 +12,8 @@ class EmployeeSerializer(serializers.ModelSerializer):
     """
     shop_id = serializers.UUIDField(read_only=True)
     user_id = serializers.UUIDField(read_only=True, allow_null=True)
+    department_id = serializers.UUIDField(source="department_ref_id", read_only=True, allow_null=True)
+    department_name = serializers.CharField(source="department_ref.name", read_only=True, default=None)
     is_active = serializers.SerializerMethodField()
     bank_account_masked = serializers.SerializerMethodField()
     pan_masked = serializers.SerializerMethodField()
@@ -21,6 +23,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
         model = Employee
         fields = [
             "id", "shop_id", "user_id", "employee_code", "full_name", "designation", "department",
+            "department_id", "department_name",
             "date_of_joining", "date_of_leaving", "employment_type",
             "basic_salary", "hra", "other_allowances", "gross_salary",
             "pf_employee", "pf_employer", "esic_employee", "esic_employer",

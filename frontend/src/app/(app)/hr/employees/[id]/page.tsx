@@ -18,6 +18,8 @@ import { Money } from '@/components/shared/Money';
 import { MoneyInput } from '@/components/shared/MoneyInput';
 import { Can } from '@/components/shared/Can';
 import { hrApi, EMPLOYMENT_TYPE_LABELS, type EmploymentType } from '@/lib/api/hr';
+
+const NO_DEPARTMENT = '__none__';
 import { qk } from '@/lib/query/keys';
 import { ApiError } from '@/lib/api/client';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
@@ -27,7 +29,7 @@ const schema = z.object({
   employee_code: z.string().min(1, 'Code required'),
   full_name: z.string().min(2, 'Name required'),
   designation: z.string().min(1, 'Designation required'),
-  department: z.string().optional(),
+  department_id: z.string().optional(),
   date_of_joining: z.string().min(1, 'Required'),
   employment_type: z.enum(['full_time', 'part_time', 'contract', 'intern']),
   basic_salary: z.number().min(0),
@@ -60,13 +62,20 @@ export default function EmployeeDetailPage() {
     staleTime: 60_000,
   });
 
+  const { data: deptData } = useQuery({
+    queryKey: qk.departments({ shop_id: activeShopId ?? undefined }),
+    queryFn: () => hrApi.listDepartments({ shop_id: activeShopId ?? undefined }),
+    staleTime: 60_000,
+  });
+  const departments = (deptData?.items ?? []).filter((d) => d.is_active);
+
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     values: employee ? {
       employee_code: employee.employee_code,
       full_name: employee.full_name,
       designation: employee.designation,
-      department: employee.department ?? '',
+      department_id: employee.department_id ?? NO_DEPARTMENT,
       date_of_joining: employee.date_of_joining,
       employment_type: employee.employment_type,
       basic_salary: employee.basic_salary,
@@ -79,7 +88,7 @@ export default function EmployeeDetailPage() {
       bank_ifsc: employee.bank_ifsc ?? '',
       bank_account_number: '', pan_number: '', aadhar_number: '',
     } : {
-      employee_code: '', full_name: '', designation: '', department: '',
+      employee_code: '', full_name: '', designation: '', department_id: NO_DEPARTMENT,
       date_of_joining: '', employment_type: 'full_time' as EmploymentType,
       basic_salary: 0, hra: 0, other_allowances: 0,
       pf_employee: 0, pf_employer: 0, esic_employee: 0, esic_employer: 0,
@@ -89,11 +98,12 @@ export default function EmployeeDetailPage() {
 
   const mutation = useMutation({
     mutationFn: (values: FormValues) => {
+      const departmentId =
+        values.department_id && values.department_id !== NO_DEPARTMENT ? values.department_id : null;
       const body = {
         employee_code: values.employee_code,
         full_name: values.full_name,
         designation: values.designation,
-        department: values.department || undefined,
         date_of_joining: values.date_of_joining,
         employment_type: values.employment_type,
         basic_salary: values.basic_salary,
@@ -109,8 +119,10 @@ export default function EmployeeDetailPage() {
         aadhar_number: values.aadhar_number || undefined,
       };
       return isNew
-        ? hrApi.createEmployee({ ...body, shop_id: activeShopId ?? '' })
-        : hrApi.updateEmployee(id, body);
+        ? hrApi.createEmployee({
+            ...body, shop_id: activeShopId ?? '', department_id: departmentId ?? undefined,
+          })
+        : hrApi.updateEmployee(id, { ...body, department_id: departmentId });
     },
     onSuccess: (emp) => {
       queryClient.invalidateQueries({ queryKey: qk.employees() });
@@ -172,10 +184,18 @@ export default function EmployeeDetailPage() {
                   <FormMessage />
                 </FormItem>
               )} />
-              <FormField control={form.control} name="department" render={({ field }) => (
+              <FormField control={form.control} name="department_id" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Department</FormLabel>
-                  <FormControl><Input {...field} /></FormControl>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="None" /></SelectTrigger></FormControl>
+                    <SelectContent>
+                      <SelectItem value={NO_DEPARTMENT}>None</SelectItem>
+                      {departments.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </FormItem>
               )} />
               <FormField control={form.control} name="employment_type" render={({ field }) => (
