@@ -109,11 +109,11 @@
 
 ## Task 6: Final verification
 
-- [ ] **Step 1: Backend** — `python -m pytest apps/accounts apps/master apps/authentication -p no:cacheprovider -o addopts="" --create-db -q` → PASS.
-- [ ] **Step 2: Migration reversibility** — `accounts` initial migrations apply forward cleanly (covered by `--create-db`); migrate the app down to zero and back up (container/CI if no local DB).
-- [ ] **Step 3: Frontend** — `npx tsc --noEmit`; `npx vitest run`; `npm run lint -- --no-cache` → all clean.
-- [ ] **Step 4: Production build** — `docker compose exec -e NODE_ENV=production frontend sh -c "npm run build"` → exit 0 (container/CI).
-- [ ] **Step 5: CI deny-list** — `grep -vc '^#\|^$' ci-known-failures.txt` → `0`.
+- [x] **Step 1: Backend** — `python -m pytest apps/accounts apps/master apps/authentication -p no:cacheprovider -o addopts="" --create-db -q` → PASS.
+- [x] **Step 2: Migration reversibility** — `accounts` initial migrations apply forward cleanly (covered by `--create-db`); migrate the app down to zero and back up (container/CI if no local DB).
+- [x] **Step 3: Frontend** — `npx tsc --noEmit`; `npx vitest run`; `npm run lint -- --no-cache` → all clean.
+- [x] **Step 4: Production build** — `docker compose exec -e NODE_ENV=production frontend sh -c "npm run build"` → exit 0 (container/CI).
+- [x] **Step 5: CI deny-list** — `grep -vc '^#\|^$' ci-known-failures.txt` → `0`.
 
 ---
 
