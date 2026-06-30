@@ -128,16 +128,16 @@ git commit -m "feat(hr): HR nav group (Overview/Employees/Attendance/Leave/Payro
 
 ## Task 5: Final verification
 
-- [ ] **Step 1: Backend** — from `backend/`:
+- [x] **Step 1: Backend** — from `backend/`:
 `python -m pytest apps/hr apps/authentication -p no:cacheprovider -o addopts="" --create-db -q` → PASS.
 
 - [ ] **Step 2: Migration reversibility** — schema + backfill migrations apply forward cleanly (covered by `--create-db`); migrate the `hr` app down past the data migration and back up, confirming backfill + reverse run cleanly (container/CI if no local DB).
 
-- [ ] **Step 3: Frontend** — from `frontend/`: `npx tsc --noEmit`; `npx vitest run`; `npm run lint -- --no-cache` → all clean.
+- [x] **Step 3: Frontend** — from `frontend/`: `npx tsc --noEmit`; `npx vitest run`; `npm run lint -- --no-cache` → all clean.
 
 - [ ] **Step 4: Production build** — `docker compose exec -e NODE_ENV=production frontend sh -c "npm run build"` → exit 0; `/hr/*` build (container/CI).
 
-- [ ] **Step 5: CI deny-list** — from `backend/`: `grep -vc '^#\|^$' ci-known-failures.txt` → `0`.
+- [x] **Step 5: CI deny-list** — from `backend/`: `grep -vc '^#\|^$' ci-known-failures.txt` → `0`.
 
 ---
 
