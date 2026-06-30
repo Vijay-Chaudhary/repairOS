@@ -5,6 +5,8 @@ from . import views
 urlpatterns = [
     path("employees/", views.EmployeeListCreateView.as_view(), name="employees"),
     path("employees/<uuid:employee_id>/", views.EmployeeDetailView.as_view(), name="employee-detail"),
+    path("departments/", views.DepartmentListCreateView.as_view(), name="departments"),
+    path("departments/<uuid:department_id>/", views.DepartmentDetailView.as_view(), name="department-detail"),
     path("attendance/", views.AttendanceListView.as_view(), name="attendance-list"),
     path("attendance/bulk/", views.BulkAttendanceView.as_view(), name="attendance-bulk"),
     path("leave-requests/", views.LeaveRequestListCreateView.as_view(), name="leave-requests"),

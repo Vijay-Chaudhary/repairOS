@@ -53,7 +53,15 @@ class Employee(SoftDeleteModel):
     employee_code = models.CharField(max_length=30, unique=True)
     full_name = models.CharField(max_length=200)
     designation = models.CharField(max_length=100)
+    # Legacy free-text department — deprecated in favour of department_ref (Phase 7). Kept for
+    # backwards compatibility; do not drop. Backfilled into department_ref by data migration.
     department = models.CharField(max_length=100, null=True, blank=True)
+    department_ref = models.ForeignKey(
+        "Department",
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name="employees",
+    )
     date_of_joining = models.DateField()
     date_of_leaving = models.DateField(null=True, blank=True)
     employment_type = models.CharField(
@@ -106,6 +114,35 @@ class Employee(SoftDeleteModel):
 
     def __str__(self) -> str:
         return f"{self.employee_code} — {self.full_name}"
+
+
+class Department(BaseModel):
+    """Structured department — tenant-scoped. Replaces Employee.department free-text (Phase 7)."""
+
+    shop = models.ForeignKey("core.Shop", on_delete=models.PROTECT, related_name="departments")
+    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=30)
+    head = models.ForeignKey(
+        "Employee",
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name="headed_departments",
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        app_label = "hr"
+        db_table = "departments"
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(fields=["shop", "code"], name="uniq_department_code_per_shop"),
+        ]
+        indexes = [
+            models.Index(fields=["shop"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.code} — {self.name}"
 
 
 class AttendanceRecord(BaseModel):
