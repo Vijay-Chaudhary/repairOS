@@ -30,7 +30,7 @@
 
 **Files:** Modify `apps/crm/models.py`; migration; test `apps/crm/tests/test_task_in_progress.py`.
 
-- [ ] **Step 1: Failing test** (reuse `shop` + a JWT `client_with_perms` like `apps/crm/tests/test_contacts_api.py`):
+- [x] **Step 1: Failing test** (reuse `shop` + a JWT `client_with_perms` like `apps/crm/tests/test_contacts_api.py`):
 
 ```python
 import uuid
@@ -63,10 +63,10 @@ def test_task_can_move_to_in_progress(shop, client_with_perms):
 > Confirm the `client_with_perms` signature used by the CRM tests (`(shop, perms)` returning the
 > client). `FollowUpTask.assigned_to` is required; `customer`/`lead` are optional (standalone task OK).
 
-- [ ] **Step 2: Run → FAIL** (400 — `in_progress` not a valid choice).
+- [x] **Step 2: Run → FAIL** (400 — `in_progress` not a valid choice).
 Run (from `backend/`): `python -m pytest apps/crm/tests/test_task_in_progress.py -p no:cacheprovider -o addopts="" --create-db -q`
 
-- [ ] **Step 3: Add the status** — in `apps/crm/models.py`, `FollowUpTask.Status`:
+- [x] **Step 3: Add the status** — in `apps/crm/models.py`, `FollowUpTask.Status`:
 
 ```python
         PENDING = "pending", "Pending"
@@ -76,13 +76,13 @@ Run (from `backend/`): `python -m pytest apps/crm/tests/test_task_in_progress.py
         OVERDUE = "overdue", "Overdue"
 ```
 
-- [ ] **Step 4: Migration** — `python manage.py makemigrations crm` (a no-op `AlterField` on `status` choices).
+- [x] **Step 4: Migration** — `python manage.py makemigrations crm` (a no-op `AlterField` on `status` choices).
 
-- [ ] **Step 5: Run → PASS** + `python -m pytest apps/crm -p no:cacheprovider -o addopts="" --create-db -q` (no regressions).
+- [x] **Step 5: Run → PASS** + `python -m pytest apps/crm -p no:cacheprovider -o addopts="" --create-db -q` (no regressions).
 
 > Note: local runs may need `--create-db` to pick up the new migration against the cached test DB.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 ```bash
 git add backend/apps/crm/models.py backend/apps/crm/migrations/ backend/apps/crm/tests/test_task_in_progress.py
 git commit -m "feat(tasks): add in_progress status to FollowUpTask"
@@ -94,7 +94,7 @@ git commit -m "feat(tasks): add in_progress status to FollowUpTask"
 
 **Files:** Modify `frontend/src/lib/api/crm.ts` (add `TASK_KANBAN_COLS` + ensure `in_progress` in `TaskStatus`); create `frontend/src/components/crm/TaskCard.tsx`, `frontend/src/components/crm/TaskBoard.tsx`.
 
-- [ ] **Step 1: Types/constants** — in `crm.ts`:
+- [x] **Step 1: Types/constants** — in `crm.ts`:
   - Ensure `TaskStatus` includes `'in_progress'`:
     `export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'overdue';`
   - Add:
@@ -107,7 +107,7 @@ git commit -m "feat(tasks): add in_progress status to FollowUpTask"
     ];
     ```
 
-- [ ] **Step 2: `TaskCard`** — create `frontend/src/components/crm/TaskCard.tsx`:
+- [x] **Step 2: `TaskCard`** — create `frontend/src/components/crm/TaskCard.tsx`:
 
 ```tsx
 import type { Task } from '@/lib/api/crm';
@@ -131,7 +131,7 @@ export function TaskCard({ task }: { task: Task }) {
 > Confirm `Task` field names (`assigned_to_name`, `due_date`, `priority`) and `TASK_PRIORITY_LABELS`
 > key type in `crm.ts`. Adjust if different.
 
-- [ ] **Step 3: `TaskBoard`** — create `frontend/src/components/crm/TaskBoard.tsx` (mirror `DealBoard.tsx`):
+- [x] **Step 3: `TaskBoard`** — create `frontend/src/components/crm/TaskBoard.tsx` (mirror `DealBoard.tsx`):
 
 ```tsx
 'use client';
@@ -208,9 +208,9 @@ export function TaskBoard({ columns, onCardMove }: TaskBoardProps) {
 }
 ```
 
-- [ ] **Step 4: Verify** — from `frontend/`: `npx tsc --noEmit` (exit 0).
+- [x] **Step 4: Verify** — from `frontend/`: `npx tsc --noEmit` (exit 0).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```bash
 git add frontend/src/lib/api/crm.ts frontend/src/components/crm/TaskCard.tsx frontend/src/components/crm/TaskBoard.tsx
 git commit -m "feat(tasks): TaskBoard kanban component + in_progress status"
@@ -222,11 +222,11 @@ git commit -m "feat(tasks): TaskBoard kanban component + in_progress status"
 
 **Files:** Modify `frontend/src/app/(app)/tasks/page.tsx`, `frontend/src/app/(app)/tasks/__tests__/tasksView.test.tsx`.
 
-- [ ] **Step 1: Expand the view switch** — change the `TaskView` type to
+- [x] **Step 1: Expand the view switch** — change the `TaskView` type to
 `'my' | 'team' | 'calendar' | 'kanban'` (default `'my'`). Replace the two-button toggle with four
 buttons (`aria-label`: "My tasks", "Team tasks", "Calendar view", "Kanban view"), each setting `view`.
 
-- [ ] **Step 2: Wire the views:**
+- [x] **Step 2: Wire the views:**
   - Determine `myId = useAuthStore((s) => s.user?.id)`.
   - **My**: existing list query, but `listFilters.assigned_to = myId` (enabled when `view === 'my'`).
   - **Team**: existing list query with no `assigned_to` (enabled when `view === 'team'`); render the
@@ -266,7 +266,7 @@ const handleTaskMove = useCallback(async (taskId: string, _from: TaskStatus, to:
 > Confirm `crmApi.listTasks` returns `{ items, meta }`. Keep the existing status/priority filters for
 > the My/Team list views; they don't apply to the Kanban (which is grouped by status).
 
-- [ ] **Step 3: Update the test** — `tasksView.test.tsx` currently exercises the List↔Calendar toggle.
+- [x] **Step 3: Update the test** — `tasksView.test.tsx` currently exercises the List↔Calendar toggle.
 Update it for the new buttons:
   - Default view is now **My** — assert task rows render (the mocked task title, e.g. "Call Ravi").
   - Update the calendar test to click the `"Calendar view"` button (unchanged label).
@@ -274,9 +274,9 @@ Update it for the new buttons:
     stub `data-testid="task-board"` to avoid dnd-kit in jsdom — mirror the Deals page smoke test), or
     keep the test minimal and just assert the Kanban button exists.
 
-- [ ] **Step 4: Verify** — from `frontend/`: `npx tsc --noEmit` (0); `npx vitest run` (all pass); `npm run lint -- --no-cache` (clean).
+- [x] **Step 4: Verify** — from `frontend/`: `npx tsc --noEmit` (0); `npx vitest run` (all pass); `npm run lint -- --no-cache` (clean).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```bash
 git add frontend/src/app/\(app\)/tasks/page.tsx frontend/src/app/\(app\)/tasks/__tests__/tasksView.test.tsx
 git commit -m "feat(tasks): /tasks page — My/Team/Calendar/Kanban views"
@@ -286,18 +286,23 @@ git commit -m "feat(tasks): /tasks page — My/Team/Calendar/Kanban views"
 
 ## Task 4: Final verification
 
-- [ ] **Step 1: Backend** — from `backend/`:
+- [x] **Step 1: Backend** — from `backend/`:
 `python -m pytest apps/crm apps/authentication -p no:cacheprovider -o addopts="" --create-db -q` → PASS.
 
 - [ ] **Step 2: Migration reversibility** — inside the backend container:
 `docker compose exec -T backend sh -c "python manage.py showmigrations crm | tail -3"`, then migrate the
 crm app down one and back up, confirming the `in_progress` `AlterField` migration applies/reverses cleanly.
+  > BLOCKED: no docker daemon in this env. Verified indirectly: pytest `--create-db` applied 0008 forward
+  > cleanly (162 passed), and 0008 is a pure `choices`-only `AlterField` (no DDL on Postgres), which Django
+  > reverses automatically — reversibility is structurally guaranteed. Re-run in CI/docker to formally tick.
 
-- [ ] **Step 3: Frontend** — from `frontend/`: `npx tsc --noEmit`; `npx vitest run`; `npm run lint -- --no-cache` → all clean.
+- [x] **Step 3: Frontend** — from `frontend/`: `npx tsc --noEmit`; `npx vitest run`; `npm run lint -- --no-cache` → all clean.
 
 - [ ] **Step 4: Production build** — `docker compose exec -e NODE_ENV=production frontend sh -c "npm run build"` → exit 0; `/tasks` builds.
+  > BLOCKED: no docker daemon in this env. `npx tsc --noEmit` and `npm run lint` are clean; re-run the
+  > containerised prod build in CI/docker to formally tick.
 
-- [ ] **Step 5: CI deny-list** — from `backend/`: `grep -vc '^#\|^$' ci-known-failures.txt` → `0`.
+- [x] **Step 5: CI deny-list** — from `backend/`: `grep -vc '^#\|^$' ci-known-failures.txt` → `0`.
 
 ---
 
