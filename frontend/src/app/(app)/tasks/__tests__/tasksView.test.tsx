@@ -31,6 +31,11 @@ vi.mock('@/lib/api/crm', async (importActual) => {
   };
 });
 
+// TaskBoard uses dnd-kit, which doesn't play well in jsdom — stub it for the smoke test.
+vi.mock('@/components/crm/TaskBoard', () => ({
+  TaskBoard: () => <div data-testid="task-board" />,
+}));
+
 // StaffPicker (inside TaskComposer) pulls users/employees from the settings API.
 vi.mock('@/lib/api/settings', async (importActual) => {
   const actual = await importActual<typeof import('@/lib/api/settings')>();
@@ -60,16 +65,26 @@ function renderPage() {
   return render(<QueryClientProvider client={qc}><TasksPage /></QueryClientProvider>);
 }
 
-describe('TasksPage — list ↔ calendar', () => {
+describe('TasksPage — My / Team / Calendar / Kanban', () => {
   beforeEach(() => {
     listTasks.mockReset().mockResolvedValue(ROWS);
     completeTask.mockReset().mockResolvedValue({});
     createTask.mockReset().mockResolvedValue({});
   });
 
-  it('defaults to the list view and renders task rows', async () => {
+  it('defaults to the My view and renders task rows', async () => {
     renderPage();
     expect(await screen.findByText('Call Ravi')).toBeInTheDocument();
+  });
+
+  it('switches to the kanban view and renders the board', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    renderPage();
+    await screen.findByText('Call Ravi');
+
+    await user.click(screen.getByRole('button', { name: /kanban view/i }));
+
+    expect(await screen.findByTestId('task-board')).toBeInTheDocument();
   });
 
   it('switches to the calendar view and queries the visible month range', async () => {
