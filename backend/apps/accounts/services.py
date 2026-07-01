@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from core.exceptions import BusinessRuleViolation
 
-from .models import Account, JournalEntry, JournalLine
+from .models import Account, AccountMapping, JournalEntry, JournalLine
 
 TWO_PLACES = Decimal("0.01")
 
@@ -53,7 +53,40 @@ def seed_default_chart(shop) -> int:
             for code, name, acct_type in DEFAULT_CHART
         ]
     )
+    seed_default_mappings(shop)
     return len(DEFAULT_CHART)
+
+
+# Semantic mapping keys → default-chart codes (Phase 8b auto-posting).
+DEFAULT_MAPPINGS: dict[str, str] = {
+    "cash": "1000",
+    "bank": "1010",
+    "debtors": "1100",
+    "creditors": "2000",
+    "gst_output": "2100",
+    "gst_input": "1200",
+    "sales": "4000",
+    "other_income": "4100",
+    "expense_default": "5900",
+}
+
+
+@transaction.atomic
+def seed_default_mappings(shop) -> int:
+    """Create the default account mappings for a shop. Idempotent — no-op if the
+    shop already has any mapping. Resolves each key to the shop's account by code;
+    silently skips a key whose account is absent. Returns the number created."""
+    if AccountMapping.objects.filter(shop=shop).exists():
+        return 0
+
+    by_code = {a.code: a for a in Account.objects.filter(shop=shop)}
+    to_create = [
+        AccountMapping(shop=shop, key=key, account=by_code[code])
+        for key, code in DEFAULT_MAPPINGS.items()
+        if code in by_code
+    ]
+    AccountMapping.objects.bulk_create(to_create)
+    return len(to_create)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

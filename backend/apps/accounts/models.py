@@ -2,6 +2,7 @@
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Q, UniqueConstraint
 
 from core.models import BaseModel
 
@@ -66,6 +67,12 @@ class JournalEntry(BaseModel):
         on_delete=models.SET_NULL, related_name="posted_journal_entries",
     )
     posted_at = models.DateTimeField(null=True, blank=True)
+    source_type = models.CharField(max_length=40, blank=True)
+    source_id = models.UUIDField(null=True, blank=True)
+    reverses = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="reversed_by",
+    )
 
     class Meta:
         unique_together = (("shop", "entry_number"),)
@@ -73,6 +80,13 @@ class JournalEntry(BaseModel):
         indexes = [
             models.Index(fields=["shop", "status"]),
             models.Index(fields=["shop", "date"]),
+        ]
+        constraints = [
+            UniqueConstraint(
+                fields=["shop", "source_type", "source_id"],
+                condition=Q(source_id__isnull=False),
+                name="uniq_journalentry_shop_source",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -100,3 +114,20 @@ class JournalLine(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.account_id}: Dr {self.debit} / Cr {self.credit}"
+
+
+class AccountMapping(BaseModel):
+    """Per-shop semantic key → account, used by the auto-posting engine."""
+
+    shop = models.ForeignKey(
+        "core.Shop", on_delete=models.PROTECT, related_name="account_mappings"
+    )
+    key = models.CharField(max_length=40)
+    account = models.ForeignKey(Account, on_delete=models.PROTECT, related_name="mappings")
+
+    class Meta:
+        unique_together = (("shop", "key"),)
+        ordering = ["key"]
+
+    def __str__(self) -> str:
+        return f"{self.key} → {self.account.code}"
