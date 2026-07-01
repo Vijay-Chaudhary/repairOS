@@ -10,6 +10,7 @@ import hmac
 import io
 import logging
 from decimal import ROUND_HALF_UP, Decimal
+from functools import partial
 
 from django.conf import settings
 from django.db import transaction
@@ -108,6 +109,17 @@ def create_repair_invoice(job, data: dict, user) -> RepairInvoice:
             )
 
         _update_crm_on_invoice(customer, grand_total)
+
+        from accounts import posting
+        if posting.accounting_enabled(shop):
+            resolve = partial(posting.resolve, shop)
+            posting.post_event(
+                shop, "billing.invoice", invoice.id,
+                date=timezone.now().date(),
+                narration=f"Repair invoice {invoice.invoice_number}",
+                lines=posting.lines_for_repair_invoice(invoice, resolve),
+                user=user,
+            )
 
     logger.info("Invoice %s created for job %s", invoice_number, job.job_number)
     _write_audit(user, AuditLog.Action.CREATE, "RepairInvoice", invoice.id)
@@ -263,6 +275,17 @@ def record_payment(invoice: RepairInvoice, data: dict, user) -> Payment:
         invoice.save(update_fields=["amount_paid", "amount_outstanding", "status"])
 
         _update_crm_on_payment(invoice.customer, amount)
+
+        from accounts import posting
+        if posting.accounting_enabled(invoice.shop):
+            resolve = partial(posting.resolve, invoice.shop)
+            posting.post_event(
+                invoice.shop, "billing.payment", payment.id,
+                date=payment.paid_at.date(),
+                narration=f"Payment for {invoice.invoice_number}",
+                lines=posting.lines_for_billing_payment(payment, resolve),
+                user=user,
+            )
 
     _write_audit(user, AuditLog.Action.CREATE, "Payment", payment.id)
 
@@ -510,6 +533,16 @@ def approve_credit_note(credit_note, user):
         credit_note.approved_by = user
         credit_note.approved_at = timezone.now()
         credit_note.save(update_fields=["status", "approved_by", "approved_at", "updated_at"])
+
+        from accounts import posting
+        posting.reverse_event(
+            invoice.shop,
+            original_source_type="billing.invoice", original_source_id=invoice.id,
+            new_source_type="billing.creditnote", new_source_id=credit_note.id,
+            date=(credit_note.approved_at.date() if credit_note.approved_at else timezone.now().date()),
+            narration=f"Credit note {credit_note.credit_note_number}",
+            amount=credit_note.amount, user=user,
+        )
     return credit_note
 
 
@@ -547,4 +580,30 @@ def approve_refund(refund, user):
         refund.approved_by = user
         refund.approved_at = timezone.now()
         refund.save(update_fields=["status", "approved_by", "approved_at", "updated_at"])
+
+        from accounts import posting
+        if posting.accounting_enabled(invoice.shop):
+            from accounts.models import JournalEntry
+            resolve = partial(posting.resolve, invoice.shop)
+            payment_ids = [str(p.id) for p in invoice.payments.all()]
+            # Best-effort audit link only: point `reverses` at the invoice's most
+            # recent posted payment entry. The refund's amounts come from
+            # lines_for_refund (independent of pay_entry), so a multi-payment/
+            # multi-refund invoice may link to a non-corresponding payment — the
+            # ledger stays correct regardless; this FK is lineage, not authority.
+            pay_entry = (
+                JournalEntry.objects.filter(
+                    shop=invoice.shop, source_type="billing.payment",
+                    source_id__in=payment_ids, status=JournalEntry.Status.POSTED,
+                )
+                .order_by("-created_at")
+                .first()
+            )
+            posting.post_event(
+                invoice.shop, "billing.refund", refund.id,
+                date=(refund.approved_at.date() if refund.approved_at else timezone.now().date()),
+                narration=f"Refund {refund.refund_number}",
+                lines=posting.lines_for_refund(refund, resolve),
+                user=user, reverses=pay_entry,
+            )
     return refund
