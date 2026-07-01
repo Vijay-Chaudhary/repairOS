@@ -164,6 +164,9 @@ def create_journal_entry(shop, data: dict) -> JournalEntry:
         narration=data.get("narration", "") or "",
         reference=data.get("reference", "") or "",
         status=JournalEntry.Status.DRAFT,
+        source_type=data.get("source_type", "") or "",
+        source_id=data.get("source_id"),
+        reverses=data.get("reverses"),
     )
     JournalLine.objects.bulk_create(
         [
