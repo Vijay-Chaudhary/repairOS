@@ -1,6 +1,6 @@
 # ERP/CRM Phase 8b — Auto-Posting Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Automatically generate **balanced, posted double-entry journal entries** in `apps/accounts` whenever a money-moving business event occurs (repair invoice, POS sale, customer/POS payment, expense) and **reversing entries** when they are undone (POS returns, billing credit notes, billing refunds) — synchronous, atomic, idempotent, and opt-in per shop.
 
@@ -45,7 +45,7 @@ python -m pytest <path> -p no:cacheprovider -o addopts="" --create-db -q
 - Create: `apps/accounts/migrations/0002_accountmapping_journalentry_source.py` (via `makemigrations`)
 - Create: `apps/accounts/tests/test_account_mapping.py`
 
-- [ ] **Step 1: Write the failing tests** — `apps/accounts/tests/test_account_mapping.py` (copy the `shop` fixture from `test_journal.py`):
+- [x] **Step 1: Write the failing tests** — `apps/accounts/tests/test_account_mapping.py` (copy the `shop` fixture from `test_journal.py`):
 
 ```python
 """Accounts › AccountMapping + JournalEntry source-of-truth fields (Phase 8b)."""
@@ -129,12 +129,12 @@ def test_journal_null_source_id_allows_many(shop, django_db_reset_sequences=None
     assert JournalEntry.objects.filter(shop=shop, source_id__isnull=True).count() == 2
 ```
 
-- [ ] **Step 2: Run → FAIL**
+- [x] **Step 2: Run → FAIL**
 
 Run: `python -m pytest apps/accounts/tests/test_account_mapping.py -p no:cacheprovider -o addopts="" --create-db -q`
 Expected: FAIL — `ImportError: cannot import name 'AccountMapping'` / `AttributeError: seed_default_mappings`.
 
-- [ ] **Step 3: Add the `AccountMapping` model + `JournalEntry` fields** — `apps/accounts/models.py`.
+- [x] **Step 3: Add the `AccountMapping` model + `JournalEntry` fields** — `apps/accounts/models.py`.
 
 At the top, ensure the imports include `Q`, `UniqueConstraint`:
 ```python
@@ -182,7 +182,7 @@ class AccountMapping(BaseModel):
         return f"{self.key} → {self.account.code}"
 ```
 
-- [ ] **Step 4: Add `DEFAULT_MAPPINGS` + `seed_default_mappings`; wire into `seed_default_chart`** — `apps/accounts/services.py`.
+- [x] **Step 4: Add `DEFAULT_MAPPINGS` + `seed_default_mappings`; wire into `seed_default_chart`** — `apps/accounts/services.py`.
 
 Add the import of the new model:
 ```python
@@ -235,18 +235,18 @@ At the **end** of `seed_default_chart(shop)`, before its `return`, seed mappings
     return len(DEFAULT_CHART)
 ```
 
-- [ ] **Step 5: Generate the migration**
+- [x] **Step 5: Generate the migration**
 
 Run: `python manage.py makemigrations accounts -n accountmapping_journalentry_source`
 Expected: creates `apps/accounts/migrations/0002_accountmapping_journalentry_source.py` adding `AccountMapping`, the 3 `JournalEntry` fields, and the constraint. Adds-only (reversible; no column drops).
 
-- [ ] **Step 6: Run → PASS**
+- [x] **Step 6: Run → PASS**
 
 Run: `python -m pytest apps/accounts/tests/test_account_mapping.py -p no:cacheprovider -o addopts="" --create-db -q`
 Then the whole app: `python -m pytest apps/accounts -p no:cacheprovider -o addopts="" --create-db -q`
 Expected: PASS (existing 8a tests still green).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/accounts/models.py apps/accounts/services.py apps/accounts/migrations/0002_accountmapping_journalentry_source.py apps/accounts/tests/test_account_mapping.py
@@ -262,7 +262,7 @@ git commit -m "feat(accounts): AccountMapping + JournalEntry source fields + see
 - Modify: `apps/accounts/services.py` (`create_journal_entry` persists `source_type`/`source_id`/`reverses`)
 - Create: `apps/accounts/tests/test_posting_engine.py`
 
-- [ ] **Step 1: Extend `create_journal_entry` to persist the source fields** — `apps/accounts/services.py`, in the `JournalEntry.objects.create(...)` call inside `create_journal_entry`:
+- [x] **Step 1: Extend `create_journal_entry` to persist the source fields** — `apps/accounts/services.py`, in the `JournalEntry.objects.create(...)` call inside `create_journal_entry`:
 
 ```python
     entry = JournalEntry.objects.create(
@@ -280,7 +280,7 @@ git commit -m "feat(accounts): AccountMapping + JournalEntry source fields + see
 
 (Manual 8a callers omit these keys → blank/null, unchanged behavior.)
 
-- [ ] **Step 2: Write the failing engine tests** — `apps/accounts/tests/test_posting_engine.py`:
+- [x] **Step 2: Write the failing engine tests** — `apps/accounts/tests/test_posting_engine.py`:
 
 ```python
 """Accounts › posting engine — recipes, post_event idempotency, reversals."""
@@ -441,12 +441,12 @@ def test_reverse_event_returns_none_when_original_absent(seeded_shop):
     assert rev is None
 ```
 
-- [ ] **Step 3: Run → FAIL**
+- [x] **Step 3: Run → FAIL**
 
 Run: `python -m pytest apps/accounts/tests/test_posting_engine.py -p no:cacheprovider -o addopts="" --create-db -q`
 Expected: FAIL — `ModuleNotFoundError: No module named 'accounts.posting'`.
 
-- [ ] **Step 4: Write `apps/accounts/posting.py`**
+- [x] **Step 4: Write `apps/accounts/posting.py`**
 
 ```python
 """Phase 8b auto-posting engine.
@@ -675,12 +675,12 @@ def _absorb_rounding(shop, lines: list[dict]) -> None:
             return
 ```
 
-- [ ] **Step 5: Run → PASS**
+- [x] **Step 5: Run → PASS**
 
 Run: `python -m pytest apps/accounts/tests/test_posting_engine.py apps/accounts/tests/test_journal.py -p no:cacheprovider -o addopts="" --create-db -q`
 Expected: PASS (8a journal tests unaffected by the `create_journal_entry` extension).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/accounts/posting.py apps/accounts/services.py apps/accounts/tests/test_posting_engine.py
@@ -697,7 +697,7 @@ git commit -m "feat(accounts): auto-posting engine — recipes, post_event, reve
 
 Each hook sits **inside** the service's existing `transaction.atomic()` block (so posting rolls back with the event). `create_repair_invoice`'s atomic block ends at `_update_crm_on_invoice(...)`; `record_payment`'s ends at `_update_crm_on_payment(...)`; add the hook as the **last statement inside** that `with transaction.atomic():` block.
 
-- [ ] **Step 1: Write the failing tests** — `apps/billing/tests/test_auto_posting.py`. Use the existing billing test setup to build a `job` + `invoice`; assert the journal side-effects. Sketch (adapt the job/shop factory from `apps/billing/tests/test_billing.py`):
+- [x] **Step 1: Write the failing tests** — `apps/billing/tests/test_auto_posting.py`. Use the existing billing test setup to build a `job` + `invoice`; assert the journal side-effects. Sketch (adapt the job/shop factory from `apps/billing/tests/test_billing.py`):
 
 ```python
 """Billing → accounts auto-posting hooks (Phase 8b)."""
@@ -788,12 +788,12 @@ def test_credit_note_reverses_invoice_scaled(db, shop, user, invoiceable_job):
 
 > If a shared billing `job`/`invoiceable_job` fixture does not already exist, add one to this file mirroring `apps/billing/tests/test_billing.py`'s setup (shop + customer + job with `service_charge`).
 
-- [ ] **Step 2: Run → FAIL**
+- [x] **Step 2: Run → FAIL**
 
 Run: `python -m pytest apps/billing/tests/test_auto_posting.py -p no:cacheprovider -o addopts="" --create-db -q`
 Expected: FAIL — no `billing.invoice` / `billing.payment` entries created.
 
-- [ ] **Step 3: Add the invoice + payment hooks** — `apps/billing/services.py`.
+- [x] **Step 3: Add the invoice + payment hooks** — `apps/billing/services.py`.
 
 In `create_repair_invoice`, as the last statement **inside** the `with transaction.atomic():` block (right after `_update_crm_on_invoice(customer, grand_total)`):
 ```python
@@ -826,7 +826,7 @@ In `record_payment`, as the last statement **inside** its `with transaction.atom
                 )
 ```
 
-- [ ] **Step 4: Add the reversal hooks** — `apps/billing/services.py`.
+- [x] **Step 4: Add the reversal hooks** — `apps/billing/services.py`.
 
 In `approve_credit_note`, inside its `with transaction.atomic():` block (after `credit_note.save(...)`):
 ```python
@@ -867,12 +867,12 @@ In `approve_refund`, inside its `with transaction.atomic():` block (after `refun
             )
 ```
 
-- [ ] **Step 5: Run → PASS**
+- [x] **Step 5: Run → PASS**
 
 Run: `python -m pytest apps/billing/tests/test_auto_posting.py apps/billing -p no:cacheprovider -o addopts="" --create-db -q`
 Expected: PASS — new hooks green, existing billing suite (`test_billing.py`, `test_credit_notes.py`, `test_refunds.py`, `test_outstanding.py`) still green.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/billing/services.py apps/billing/tests/test_auto_posting.py
@@ -887,7 +887,7 @@ git commit -m "feat(billing): auto-post invoices, payments, credit-note + refund
 - Modify: `apps/pos/services.py` (`create_sale`, `add_payment`, `approve_return`)
 - Create: `apps/pos/tests/test_auto_posting.py`
 
-- [ ] **Step 1: Write the failing tests** — `apps/pos/tests/test_auto_posting.py` (adapt the shop/user/items setup from `apps/pos/tests/test_sales.py`):
+- [x] **Step 1: Write the failing tests** — `apps/pos/tests/test_auto_posting.py` (adapt the shop/user/items setup from `apps/pos/tests/test_sales.py`):
 
 ```python
 """POS → accounts auto-posting hooks (Phase 8b)."""
@@ -942,12 +942,12 @@ def test_return_reverses_sale_scaled(db, shop, user, sale_data):
     assert sum(l.debit for l in entry.lines.all()) == sum(l.credit for l in entry.lines.all())
 ```
 
-- [ ] **Step 2: Run → FAIL**
+- [x] **Step 2: Run → FAIL**
 
 Run: `python -m pytest apps/pos/tests/test_auto_posting.py -p no:cacheprovider -o addopts="" --create-db -q`
 Expected: FAIL — no `pos.sale` entries.
 
-- [ ] **Step 3: Add the sale + payment hooks** — `apps/pos/services.py`.
+- [x] **Step 3: Add the sale + payment hooks** — `apps/pos/services.py`.
 
 In `create_sale`, as the last statement **inside** the `with transaction.atomic():` block (after the wholesale-outstanding update), gated on the paid status:
 ```python
@@ -986,7 +986,7 @@ In `add_payment`, capture the created payment and post inside the `with transact
             )
 ```
 
-- [ ] **Step 4: Add the return reversal hook** — `apps/pos/services.py`, in `approve_return`, inside its `with transaction.atomic():` block (after `ret.sale.save(...)` / the wholesale-outstanding update):
+- [x] **Step 4: Add the return reversal hook** — `apps/pos/services.py`, in `approve_return`, inside its `with transaction.atomic():` block (after `ret.sale.save(...)` / the wholesale-outstanding update):
 ```python
         from accounts import posting
         posting.reverse_event(
@@ -999,12 +999,12 @@ In `add_payment`, capture the created payment and post inside the `with transact
         )
 ```
 
-- [ ] **Step 5: Run → PASS**
+- [x] **Step 5: Run → PASS**
 
 Run: `python -m pytest apps/pos/tests/test_auto_posting.py apps/pos -p no:cacheprovider -o addopts="" --create-db -q`
 Expected: PASS — hooks green, existing `test_sales.py` still green.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/pos/services.py apps/pos/tests/test_auto_posting.py
@@ -1019,7 +1019,7 @@ git commit -m "feat(pos): auto-post sales, payments, and return reversals"
 - Modify: `apps/finance/services.py` (`create_expense`)
 - Create: `apps/finance/tests/test_expense_posting.py`
 
-- [ ] **Step 1: Write the failing tests** — `apps/finance/tests/test_expense_posting.py` (adapt the shop/user setup from `apps/finance/tests/test_finance.py`):
+- [x] **Step 1: Write the failing tests** — `apps/finance/tests/test_expense_posting.py` (adapt the shop/user setup from `apps/finance/tests/test_finance.py`):
 
 ```python
 """Finance → accounts auto-posting for expenses (Phase 8b)."""
@@ -1049,12 +1049,12 @@ def test_expense_skips_when_accounting_disabled(db, shop, user):
     assert not JournalEntry.objects.filter(shop=shop, source_type="finance.expense").exists()
 ```
 
-- [ ] **Step 2: Run → FAIL**
+- [x] **Step 2: Run → FAIL**
 
 Run: `python -m pytest apps/finance/tests/test_expense_posting.py -p no:cacheprovider -o addopts="" --create-db -q`
 Expected: FAIL — no `finance.expense` entry.
 
-- [ ] **Step 3: Add the expense hook** — `apps/finance/services.py`, in `create_expense`, as the last statement **inside** the `with transaction.atomic():` block (after the budget-allocation update):
+- [x] **Step 3: Add the expense hook** — `apps/finance/services.py`, in `create_expense`, as the last statement **inside** the `with transaction.atomic():` block (after the budget-allocation update):
 ```python
         from accounts import posting
         if posting.accounting_enabled(shop):
@@ -1069,12 +1069,12 @@ Expected: FAIL — no `finance.expense` entry.
             )
 ```
 
-- [ ] **Step 4: Run → PASS**
+- [x] **Step 4: Run → PASS**
 
 Run: `python -m pytest apps/finance/tests/test_expense_posting.py apps/finance -p no:cacheprovider -o addopts="" --create-db -q`
 Expected: PASS — existing finance suite (`test_finance.py`, `test_cash_book.py`) still green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/finance/services.py apps/finance/tests/test_expense_posting.py
@@ -1088,7 +1088,7 @@ git commit -m "feat(finance): auto-post expenses to the default expense account"
 **Files:**
 - Create: `apps/accounts/tests/test_auto_posting_integration.py`
 
-- [ ] **Step 1: Write the integration tests** — full cycle, trial balance, atomic rollback:
+- [x] **Step 1: Write the integration tests** — full cycle, trial balance, atomic rollback:
 
 ```python
 """Phase 8b integration — full cycle balances; atomic rollback on misconfig."""
@@ -1130,27 +1130,27 @@ def test_missing_mapping_rolls_back_the_whole_event(db, shop, user, invoiceable_
 
 > Confirm the `trial_balance(shop)` return shape against `apps/accounts/services.py` (Task 4 of 8a) and adjust the row-key access (`r["debit"]`/`r["credit"]`) to match.
 
-- [ ] **Step 2: Run the integration tests → PASS**
+- [x] **Step 2: Run the integration tests → PASS**
 
 Run: `python -m pytest apps/accounts/tests/test_auto_posting_integration.py -p no:cacheprovider -o addopts="" --create-db -q`
 Expected: PASS.
 
-- [ ] **Step 3: Full backend regression** across every touched app:
+- [x] **Step 3: Full backend regression** across every touched app:
 
 Run: `python -m pytest apps/accounts apps/billing apps/pos apps/finance apps/master -p no:cacheprovider -o addopts="" --create-db -q`
 Expected: PASS.
 
-- [ ] **Step 4: Migration reversibility** — the new `0002` migration is adds-only. Apply forward (covered by `--create-db`); then verify the down/up cycle:
+- [x] **Step 4: Migration reversibility** — the new `0002` migration is adds-only. Apply forward (covered by `--create-db`); then verify the down/up cycle:
 
 Run: `python manage.py migrate accounts 0001 && python manage.py migrate accounts`
 Expected: both directions succeed with no errors (run in the container/CI if no local DB).
 
-- [ ] **Step 5: CI deny-list** — no new known-failures introduced:
+- [x] **Step 5: CI deny-list** — no new known-failures introduced:
 
 Run: `grep -vc '^#\|^$' ci-known-failures.txt`
 Expected: `0`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/accounts/tests/test_auto_posting_integration.py
