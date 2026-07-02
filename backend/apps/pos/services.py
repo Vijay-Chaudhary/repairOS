@@ -4,6 +4,7 @@ POS business logic.
 
 import logging
 from decimal import ROUND_DOWN, ROUND_HALF_UP, Decimal
+from functools import partial
 from typing import Optional
 
 from django.db import transaction
@@ -123,6 +124,18 @@ def create_sale(shop, data: dict, user) -> Sale:
         if sale_type == Sale.SaleType.WHOLESALE and customer and amount_outstanding > 0:
             _update_customer_outstanding(customer, amount_outstanding)
 
+        from accounts import posting
+        if sale_status in (Sale.Status.COMPLETED, Sale.Status.PARTIALLY_PAID) and \
+                posting.accounting_enabled(shop):
+            resolve = partial(posting.resolve, shop)
+            posting.post_event(
+                shop, "pos.sale", sale.id,
+                date=timezone.now().date(),
+                narration=f"POS sale {sale.sale_number}",
+                lines=posting.lines_for_pos_sale(sale, resolve),
+                user=user,
+            )
+
     _write_audit(user, AuditLog.Action.CREATE, "Sale", sale.id)
     _broadcast(shop.id, "sale.completed", {
         "sale_id": str(sale.id),
@@ -142,7 +155,7 @@ def add_payment(sale: Sale, payment_data: dict, user) -> Sale:
         raise BusinessRuleViolation(f"Cannot add payment to a {sale.status} sale.")
 
     with transaction.atomic():
-        _record_payment(sale, payment_data, user)
+        payment = _record_payment(sale, payment_data, user)
 
         # Recalculate amount_paid from DB to avoid race conditions
         from django.db.models import Sum
@@ -159,6 +172,17 @@ def add_payment(sale: Sale, payment_data: dict, user) -> Sale:
             sale.status = Sale.Status.PARTIALLY_PAID
 
         sale.save(update_fields=["amount_paid", "amount_outstanding", "status", "updated_at"])
+
+        from accounts import posting
+        if payment is not None and posting.accounting_enabled(sale.shop):
+            resolve = partial(posting.resolve, sale.shop)
+            posting.post_event(
+                sale.shop, "pos.payment", payment.id,
+                date=payment.paid_at.date(),
+                narration=f"POS payment for {sale.sale_number}",
+                lines=posting.lines_for_pos_payment(payment, resolve),
+                user=user,
+            )
 
     return sale
 
@@ -227,6 +251,16 @@ def approve_return(ret: SalesReturn, user) -> SalesReturn:
         # Update customer outstanding for wholesale credit sales
         if ret.sale.sale_type == Sale.SaleType.WHOLESALE and ret.sale.customer:
             _update_customer_outstanding(ret.sale.customer, -ret.total_refund_amount)
+
+        from accounts import posting
+        posting.reverse_event(
+            ret.sale.shop,
+            original_source_type="pos.sale", original_source_id=ret.sale.id,
+            new_source_type="pos.return", new_source_id=ret.id,
+            date=(ret.approved_at.date() if ret.approved_at else timezone.now().date()),
+            narration=f"POS return {ret.return_number}",
+            amount=ret.total_refund_amount, user=user,
+        )
 
     send_whatsapp(
         phone=ret.sale.customer.phone if ret.sale.customer else None,
