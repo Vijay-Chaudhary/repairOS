@@ -469,7 +469,10 @@ class TestGSTR1:
     def test_gstr1_csv_columns(self, rpt_client, shop, repair_invoice):
         res = rpt_client.get(self.url, {
             "shop_id": str(shop.id),
-            "month": 6, "year": 2026,
+            # Query the invoice's own period so the test is date-independent
+            # (GSTR-1 filters by created_at month/year).
+            "month": repair_invoice.created_at.month,
+            "year": repair_invoice.created_at.year,
         })
         assert res.status_code == status.HTTP_200_OK
         assert "text/csv" in res["Content-Type"]
@@ -481,7 +484,8 @@ class TestGSTR1:
     def test_gstr1_contains_invoice_row(self, rpt_client, shop, repair_invoice):
         res = rpt_client.get(self.url, {
             "shop_id": str(shop.id),
-            "month": 6, "year": 2026,
+            "month": repair_invoice.created_at.month,
+            "year": repair_invoice.created_at.year,
         })
         content = res.content.decode()
         assert repair_invoice.invoice_number in content
