@@ -8,6 +8,7 @@ Assets: condition lifecycle (disposed → is_active=False).
 
 import logging
 from decimal import Decimal
+from functools import partial
 
 from django.db import transaction
 
@@ -129,6 +130,17 @@ def create_expense(shop, data: dict, user) -> Expense:
 
         if budget_head:
             _update_budget_allocation(budget_head, expense_date.month, expense_date.year, amount)
+
+        from accounts import posting
+        if posting.accounting_enabled(shop):
+            resolve = partial(posting.resolve, shop)
+            posting.post_event(
+                shop, "finance.expense", expense.id,
+                date=expense.date,
+                narration=expense.description or f"Expense {expense.category}".strip(),
+                lines=posting.lines_for_expense(expense, resolve),
+                user=user,
+            )
 
     return expense
 
