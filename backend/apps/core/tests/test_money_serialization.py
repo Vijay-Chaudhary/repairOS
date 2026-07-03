@@ -251,7 +251,11 @@ class TestReportDecimalStrings:
         assert data["net_profit"] == "0.00"
 
     def test_budget_vs_actual_totals_are_strings(self, client_all, allocation):
-        res = client_all.get("/api/v1/reports/budget-vs-actual/")
+        # Query the allocation's own period; the endpoint otherwise defaults to
+        # date.today(), which makes this test pass only during that month.
+        res = client_all.get("/api/v1/reports/budget-vs-actual/", {
+            "month": allocation.month, "year": allocation.year,
+        })
         assert res.status_code == status.HTTP_200_OK
         data = res.json()["data"]
         for field in ("total_budgeted", "total_actual", "total_variance"):
