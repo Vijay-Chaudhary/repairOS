@@ -1,0 +1,122 @@
+import { apiGet, apiPost, apiPatch, apiDelete, type PageMeta } from './client';
+
+export type AccountType = 'asset' | 'liability' | 'equity' | 'income' | 'expense';
+export type NormalBalance = 'debit' | 'credit';
+export type JournalStatus = 'draft' | 'posted';
+
+export interface Account {
+  id: string;
+  code: string;
+  name: string;
+  account_type: AccountType;
+  parent_id: string | null;
+  is_active: boolean;
+  is_system: boolean;
+  normal_balance: NormalBalance;
+}
+
+export interface JournalLine {
+  id: string;
+  account_id: string;
+  account_code: string;
+  account_name: string;
+  debit: string;
+  credit: string;
+  line_narration: string;
+}
+
+export interface JournalEntry {
+  id: string;
+  entry_number: string;
+  date: string;
+  narration: string;
+  reference: string;
+  status: JournalStatus;
+  posted_by: string | null;
+  posted_at: string | null;
+  lines: JournalLine[];
+}
+
+export interface LedgerRow {
+  line_id: string;
+  entry_id: string;
+  entry_number: string;
+  date: string;
+  narration: string;
+  debit: string;
+  credit: string;
+  running_balance: string;
+}
+
+export interface AccountLedger {
+  account: Account;
+  opening_balance: string;
+  closing_balance: string;
+  rows: LedgerRow[];
+}
+
+export interface TrialBalanceRow {
+  account_id: string;
+  code: string;
+  name: string;
+  account_type: AccountType;
+  debit: string;
+  credit: string;
+}
+
+export interface TrialBalance {
+  rows: TrialBalanceRow[];
+  total_debit: string;
+  total_credit: string;
+}
+
+export interface CreateJournalLineInput {
+  account_id: string;
+  debit?: string | number;
+  credit?: string | number;
+  line_narration?: string;
+}
+
+export const accountsApi = {
+  // Chart of Accounts
+  listAccounts: (params?: { shop_id?: string; account_type?: AccountType; is_active?: boolean; page?: number }) =>
+    apiGet<{ items: Account[]; meta: PageMeta }>('/accounts/chart/', params),
+
+  createAccount: (body: {
+    code: string;
+    name: string;
+    account_type: AccountType;
+    parent_id?: string;
+    shop_id?: string;
+  }) => apiPost<Account>('/accounts/chart/', body),
+
+  updateAccount: (id: string, body: { name?: string; parent_id?: string | null; is_active?: boolean }) =>
+    apiPatch<Account>(`/accounts/chart/${id}/`, body),
+
+  deactivateAccount: (id: string) => apiDelete<Account>(`/accounts/chart/${id}/`),
+
+  seedChart: (shopId?: string) => apiPost<{ created: number }>('/accounts/chart/seed/', { shop_id: shopId }),
+
+  // Journal
+  listJournal: (params?: { shop_id?: string; status?: JournalStatus; date_from?: string; date_to?: string; page?: number }) =>
+    apiGet<{ items: JournalEntry[]; meta: PageMeta }>('/accounts/journal/', params),
+
+  getJournal: (id: string) => apiGet<JournalEntry>(`/accounts/journal/${id}/`),
+
+  createJournal: (body: {
+    date: string;
+    narration?: string;
+    reference?: string;
+    shop_id?: string;
+    lines: CreateJournalLineInput[];
+  }) => apiPost<JournalEntry>('/accounts/journal/', body),
+
+  postJournal: (id: string) => apiPost<JournalEntry>(`/accounts/journal/${id}/post/`, {}),
+
+  // Ledger + Trial Balance
+  getLedger: (accountId: string, params?: { date_from?: string; date_to?: string }) =>
+    apiGet<AccountLedger>(`/accounts/ledger/${accountId}/`, params),
+
+  getTrialBalance: (params?: { shop_id?: string; as_of?: string }) =>
+    apiGet<TrialBalance>('/accounts/trial-balance/', params),
+};
