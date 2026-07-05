@@ -301,6 +301,9 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "core.pagination.RepairOSCursorPagination",
     "PAGE_SIZE": 20,
     "EXCEPTION_HANDLER": "core.exceptions.repairosException_handler",
+    # Views handle ?format=csv manually (ledger/statement exports); without this,
+    # DRF content negotiation 404s any format it has no renderer for.
+    "URL_FORMAT_OVERRIDE": None,
 }
 
 # ──────────────────────────────────────────────────────────────────────────────

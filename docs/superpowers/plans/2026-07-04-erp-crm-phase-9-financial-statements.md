@@ -68,16 +68,16 @@ The whole phase hangs on getting the accounting right. These are the locked rule
 
 **Files:** `apps/accounts/services.py`, `serializers.py`, `views.py`, `urls.py`; `apps/accounts/tests/test_financial_statements.py` (new).
 
-- [ ] **Step 1: Failing tests** (copy `shop` + `client_with_perms` + the balanced-`_entry` helper from `test_ledger.py`). Build a small fixture: seed the default chart, post a sale (Dr Cash / Cr Sales 1000) and an expense (Dr Rent / Cr Cash 300), one of them dated outside the query window.
+- [x] **Step 1: Failing tests** (copy `shop` + `client_with_perms` + the balanced-`_entry` helper from `test_ledger.py`). Build a small fixture: seed the default chart, post a sale (Dr Cash / Cr Sales 1000) and an expense (Dr Rent / Cr Cash 300), one of them dated outside the query window.
   - `test_pnl_requires_reports_view` — GET `/api/v1/accounts/reports/pnl/` without `accounts.reports.view` → 403.
   - `test_pnl_income_expense_and_net` — with `accounts.reports.view`: income section subtotal == 1000, expense subtotal == 300, `net_profit` == 700; each section lists only non-zero accounts, ordered by code.
   - `test_pnl_date_window_excludes_out_of_range` — `date_from`/`date_to` excludes the out-of-window entry (subtotal reflects only in-window lines).
   - `test_pnl_ignores_draft_entries` — a draft entry in range does not affect any subtotal.
   - `test_pnl_reversal_reduces_income` — a reversing entry (Dr Sales / Cr Cash) nets the income figure back down.
   - `test_pnl_csv_export_requires_export_perm` — `?format=csv` without `accounts.reports.export` → 403; with it → `text/csv` attachment.
-- [ ] **Step 2: Run → FAIL** (404 / route missing).
+- [x] **Step 2: Run → FAIL** (404 / route missing).
   `cd backend && python -m pytest apps/accounts/tests/test_financial_statements.py -p no:cacheprovider -o addopts="" --create-db -q`
-- [ ] **Step 3: Service** — add `profit_and_loss(shop, date_from=None, date_to=None) -> dict` to `services.py`. Aggregate posted `JournalLine` per account with a `Q(journal_lines__entry__status=POSTED)` filter plus optional `date__gte`/`date__lte`, restricted to `account_type in {income, expense}`. Build two sections:
+- [x] **Step 3: Service** — add `profit_and_loss(shop, date_from=None, date_to=None) -> dict` to `services.py`. Aggregate posted `JournalLine` per account with a `Q(journal_lines__entry__status=POSTED)` filter plus optional `date__gte`/`date__lte`, restricted to `account_type in {income, expense}`. Build two sections:
   ```
   {
     "income":  {"rows": [{account_id, code, name, amount}], "subtotal": Decimal},
@@ -87,10 +87,10 @@ The whole phase hangs on getting the accounting right. These are the locked rule
   }
   ```
   Income amount = `Σcredit − Σdebit`; expense amount = `Σdebit − Σcredit`; skip zero rows; quantize to `TWO_PLACES`; order rows by `code`. Single aggregated query (no N+1), same construction as `trial_balance`.
-- [ ] **Step 4: Serializers** — `StatementRowSerializer` (account_id, code, name, amount) and `StatementSectionSerializer` (rows, subtotal). Add to `serializers.py`.
-- [ ] **Step 5: View + route** — `ProfitLossView(APIView)` with `permission_classes = [IsAuthenticated, require_permission("accounts.reports.view")]`; resolve shop via `_resolve_shop`, parse `date_from`/`date_to` via `_parse_date`, call the service, serialize sections. Add `format=csv` branch gated on `HasPermission("accounts.reports.export")` (mirror `_ledger_csv_response`) writing a two-section CSV with a Net Profit footer. Wire `path("reports/pnl/", views.ProfitLossView.as_view(), name="report-pnl")` in `urls.py`.
-- [ ] **Step 6: Run → PASS** + `python -m pytest apps/accounts -p no:cacheprovider -o addopts="" --create-db -q`.
-- [ ] **Step 7: Commit** — `git commit -m "feat(accounts): Profit & Loss statement — service + API + CSV export"`
+- [x] **Step 4: Serializers** — `StatementRowSerializer` (account_id, code, name, amount) and `StatementSectionSerializer` (rows, subtotal). Add to `serializers.py`.
+- [x] **Step 5: View + route** — `ProfitLossView(APIView)` with `permission_classes = [IsAuthenticated, require_permission("accounts.reports.view")]`; resolve shop via `_resolve_shop`, parse `date_from`/`date_to` via `_parse_date`, call the service, serialize sections. Add `format=csv` branch gated on `HasPermission("accounts.reports.export")` (mirror `_ledger_csv_response`) writing a two-section CSV with a Net Profit footer. Wire `path("reports/pnl/", views.ProfitLossView.as_view(), name="report-pnl")` in `urls.py`.
+- [x] **Step 6: Run → PASS** + `python -m pytest apps/accounts -p no:cacheprovider -o addopts="" --create-db -q`.
+- [x] **Step 7: Commit** — `git commit -m "feat(accounts): Profit & Loss statement — service + API + CSV export"`
 
 ---
 

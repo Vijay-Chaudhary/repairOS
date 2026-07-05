@@ -84,6 +84,19 @@ class LedgerRowSerializer(serializers.Serializer):
     running_balance = serializers.DecimalField(max_digits=16, decimal_places=2)
 
 
+class StatementRowSerializer(serializers.Serializer):
+    # account_id/code are null for synthetic rows (e.g. Current Period Earnings).
+    account_id = serializers.UUIDField(allow_null=True)
+    code = serializers.CharField(allow_null=True)
+    name = serializers.CharField()
+    amount = serializers.DecimalField(max_digits=16, decimal_places=2)
+
+
+class StatementSectionSerializer(serializers.Serializer):
+    rows = StatementRowSerializer(many=True)
+    subtotal = serializers.DecimalField(max_digits=16, decimal_places=2)
+
+
 class TrialBalanceRowSerializer(serializers.Serializer):
     account_id = serializers.UUIDField()
     code = serializers.CharField()
