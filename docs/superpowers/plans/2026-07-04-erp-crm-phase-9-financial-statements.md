@@ -55,12 +55,12 @@ The whole phase hangs on getting the accounting right. These are the locked rule
 
 **Files:** `apps/master/services.py`, `apps/master/tests/test_permission_seed.py`.
 
-- [ ] **Step 1: Failing test** — `apps/master/tests/test_permission_seed.py`: add `"accounts.reports.view"` and `"accounts.reports.export"` to the EXPECTED slug set (the existing test asserts each slug is seeded **and** granted to Tenant Admin).
-- [ ] **Step 2: Run → FAIL** (slugs not seeded).
+- [x] **Step 1: Failing test** — `apps/master/tests/test_permission_seed.py`: add `"accounts.reports.view"` and `"accounts.reports.export"` to the EXPECTED slug set (the existing test asserts each slug is seeded **and** granted to Tenant Admin).
+- [x] **Step 2: Run → FAIL** (slugs not seeded).
   `cd backend && python -m pytest apps/master/tests/test_permission_seed.py -p no:cacheprovider -o addopts="" --create-db -q`
-- [ ] **Step 3: Seed the perms** — add `("accounts.reports.view", "accounts")` and `("accounts.reports.export", "accounts")` to the `accounts.*` block in `apps/master/services.py`.
-- [ ] **Step 4: Run → PASS** — the seed test, then `python -m pytest apps/master -p no:cacheprovider -o addopts="" --create-db -q`.
-- [ ] **Step 5: Commit** — `git commit -m "feat(accounts): accounts.reports.view + accounts.reports.export permissions"`
+- [x] **Step 3: Seed the perms** — add `("accounts.reports.view", "accounts")` and `("accounts.reports.export", "accounts")` to the `accounts.*` block in `apps/master/services.py`.
+- [x] **Step 4: Run → PASS** — the seed test, then `python -m pytest apps/master -p no:cacheprovider -o addopts="" --create-db -q`.
+- [x] **Step 5: Commit** — `git commit -m "feat(accounts): accounts.reports.view + accounts.reports.export permissions"`
 
 ---
 
