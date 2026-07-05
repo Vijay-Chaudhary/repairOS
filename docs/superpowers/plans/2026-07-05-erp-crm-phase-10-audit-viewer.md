@@ -490,7 +490,7 @@ Replaces the ComingSoon stub. Filter bar (user, action, model, date range) → p
 - Modify: `frontend/src/app/(app)/audit/page.tsx` (full rewrite of the stub)
 - Test: `frontend/src/app/(app)/audit/__tests__/audit.test.tsx`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `frontend/src/app/(app)/audit/__tests__/audit.test.tsx`:
 
@@ -580,7 +580,7 @@ describe('AuditPage', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 cd frontend && npx vitest run "src/app/(app)/audit"
@@ -588,7 +588,7 @@ cd frontend && npx vitest run "src/app/(app)/audit"
 
 Expected: FAIL (page still renders ComingSoon).
 
-- [ ] **Step 3: Implement the page**
+- [x] **Step 3: Implement the page**
 
 Replace `frontend/src/app/(app)/audit/page.tsx` entirely:
 
@@ -818,7 +818,7 @@ export default function AuditPage() {
 }
 ```
 
-- [ ] **Step 4: Run the page tests**
+- [x] **Step 4: Run the page tests**
 
 ```bash
 cd frontend && npx vitest run "src/app/(app)/audit"
@@ -826,7 +826,7 @@ cd frontend && npx vitest run "src/app/(app)/audit"
 
 Expected: ALL PASS. If the Radix `Select` throws in jsdom about missing `hasPointerCapture`/`scrollIntoView`, check `frontend/vitest.setup.ts` — the shims used by other filter-page tests should already cover it.
 
-- [ ] **Step 5: Typecheck + lint**
+- [x] **Step 5: Typecheck + lint**
 
 ```bash
 cd frontend && npx tsc --noEmit && npx next lint --dir "src/app/(app)/audit" 2>/dev/null || npx eslint "src/app/(app)/audit"
@@ -834,7 +834,7 @@ cd frontend && npx tsc --noEmit && npx next lint --dir "src/app/(app)/audit" 2>/
 
 Expected: clean.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add "frontend/src/app/(app)/audit"
