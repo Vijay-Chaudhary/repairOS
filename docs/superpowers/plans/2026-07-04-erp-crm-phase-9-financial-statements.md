@@ -98,15 +98,15 @@ The whole phase hangs on getting the accounting right. These are the locked rule
 
 **Files:** `apps/accounts/services.py`, `views.py`, `urls.py`; extend `apps/accounts/tests/test_financial_statements.py`.
 
-- [ ] **Step 1: Failing tests** (reuse the fixture chart). Post opening capital (Dr Cash / Cr Capital), a sale, and an expense.
+- [x] **Step 1: Failing tests** (reuse the fixture chart). Post opening capital (Dr Cash / Cr Capital), a sale, and an expense.
   - `test_balance_sheet_requires_reports_view` — GET `/reports/balance-sheet/` without perm → 403.
   - `test_balance_sheet_sections` — assets / liabilities / equity sections each list non-zero accounts ordered by code, with correct signs (assets `Σdebit−Σcredit`, liab+equity `Σcredit−Σdebit`).
   - `test_balance_sheet_current_period_earnings` — the synthetic "Current Period Earnings" line in Equity == `Σincome − Σexpense` up to `as_of`; income/expense accounts themselves do **not** appear as rows.
   - `test_balance_sheet_is_balanced` — `total_assets == total_liabilities + total_equity` and `is_balanced is True` on the posted data.
   - `test_balance_sheet_as_of_snapshot` — an entry dated after `as_of` is excluded from every section and from current-period earnings.
-- [ ] **Step 2: Run → FAIL.**
+- [x] **Step 2: Run → FAIL.**
   `cd backend && python -m pytest apps/accounts/tests/test_financial_statements.py -p no:cacheprovider -o addopts="" --create-db -q`
-- [ ] **Step 3: Service** — add `balance_sheet(shop, as_of=None) -> dict`:
+- [x] **Step 3: Service** — add `balance_sheet(shop, as_of=None) -> dict`:
   - Aggregate posted lines per account up to `as_of` (`date__lte` when given), grouped into asset / liability / equity sections (signed per `normal_balance`), skip zero rows, order by `code`.
   - Compute `current_period_earnings = Σ(income credit−debit) − Σ(expense debit−credit)` up to `as_of` and append it as a synthetic row (no real `account_id`; `code=None`, `name="Current Period Earnings"`) into the **equity** section, folded into `equity.subtotal`.
   - Return:
@@ -123,9 +123,9 @@ The whole phase hangs on getting the accounting right. These are the locked rule
     }
     ```
   - Keep it to a small, fixed number of aggregate queries (one per grouping is fine; no per-account query loop).
-- [ ] **Step 4: View + route** — `BalanceSheetView(APIView)` (`accounts.reports.view`), `_resolve_shop` + `_parse_date("as_of")`, serialize the three sections with the Task-2 serializers (the synthetic earnings row serializes fine — `account_id`/`code` nullable in `StatementRowSerializer`). Add `format=csv` gated on `accounts.reports.export`. Wire `path("reports/balance-sheet/", views.BalanceSheetView.as_view(), name="report-balance-sheet")`.
-- [ ] **Step 5: Run → PASS** + full `apps/accounts` suite.
-- [ ] **Step 6: Commit** — `git commit -m "feat(accounts): Balance Sheet — service + API + CSV export"`
+- [x] **Step 4: View + route** — `BalanceSheetView(APIView)` (`accounts.reports.view`), `_resolve_shop` + `_parse_date("as_of")`, serialize the three sections with the Task-2 serializers (the synthetic earnings row serializes fine — `account_id`/`code` nullable in `StatementRowSerializer`). Add `format=csv` gated on `accounts.reports.export`. Wire `path("reports/balance-sheet/", views.BalanceSheetView.as_view(), name="report-balance-sheet")`.
+- [x] **Step 5: Run → PASS** + full `apps/accounts` suite.
+- [x] **Step 6: Commit** — `git commit -m "feat(accounts): Balance Sheet — service + API + CSV export"`
 
 ---
 

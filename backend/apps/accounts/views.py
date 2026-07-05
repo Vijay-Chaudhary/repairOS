@@ -434,6 +434,46 @@ class ProfitLossView(APIView):
         })
 
 
+class BalanceSheetView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("accounts.reports.view")]
+
+    def get(self, request: Request) -> Response:
+        shop, err = _resolve_shop(request, request.query_params.get("shop_id"))
+        if err:
+            return err
+        as_of = _parse_date(request.query_params.get("as_of"))
+        result = services.balance_sheet(shop, as_of)
+
+        if request.query_params.get("format") == "csv":
+            if forbidden := _require_export_or_403(request, self):
+                return forbidden
+            return _statement_csv_response(
+                "balance_sheet.csv",
+                [
+                    ("Assets", result["assets"]),
+                    ("Liabilities", result["liabilities"]),
+                    ("Equity", result["equity"]),
+                ],
+                [
+                    ("Total Assets", result["total_assets"]),
+                    ("Total Liabilities", result["total_liabilities"]),
+                    ("Total Equity", result["total_equity"]),
+                    ("Balanced", "yes" if result["is_balanced"] else "no"),
+                ],
+            )
+
+        return Response({
+            "assets": StatementSectionSerializer(result["assets"]).data,
+            "liabilities": StatementSectionSerializer(result["liabilities"]).data,
+            "equity": StatementSectionSerializer(result["equity"]).data,
+            "total_assets": result["total_assets"],
+            "total_liabilities": result["total_liabilities"],
+            "total_equity": result["total_equity"],
+            "is_balanced": result["is_balanced"],
+            "as_of": result["as_of"],
+        })
+
+
 class TrialBalanceView(APIView):
     permission_classes = [IsAuthenticated, require_permission("accounts.ledger.view")]
 

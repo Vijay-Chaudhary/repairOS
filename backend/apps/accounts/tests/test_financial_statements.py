@@ -6,6 +6,7 @@ import pytest
 from rest_framework import status
 
 PNL_URL = "/api/v1/accounts/reports/pnl/"
+BS_URL = "/api/v1/accounts/reports/balance-sheet/"
 
 
 @pytest.fixture
@@ -148,6 +149,108 @@ def test_pnl_reversal_reduces_income(shop, pnl_data, entry_factory, client_with_
     data = client.get(PNL_URL).json()["data"]
     assert Decimal(data["income"]["subtotal"]) == Decimal("800.00")
     assert Decimal(data["net_profit"]) == Decimal("500.00")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Balance Sheet
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def bs_data(chart, entry_factory):
+    """Opening capital, a sale, a cash expense, and an expense on credit (June)."""
+    entry_factory("2026-06-01", chart["cash"], chart["capital"], "5000.00")
+    entry_factory("2026-06-10", chart["cash"], chart["sales"], "1000.00")
+    entry_factory("2026-06-12", chart["rent"], chart["cash"], "300.00")
+    entry_factory("2026-06-14", chart["rent"], chart["creditors"], "200.00")
+    return chart
+
+
+@pytest.mark.django_db
+def test_balance_sheet_requires_reports_view(shop, bs_data, client_with_perms):
+    client = client_with_perms(shop, ["accounts.ledger.view"])
+    assert client.get(BS_URL).status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_balance_sheet_sections(shop, bs_data, client_with_perms):
+    client = client_with_perms(shop, ["accounts.reports.view"])
+    resp = client.get(BS_URL)
+    assert resp.status_code == status.HTTP_200_OK, resp.content
+    data = resp.json()["data"]
+
+    assets = {r["code"]: r for r in data["assets"]["rows"]}
+    liabilities = {r["code"]: r for r in data["liabilities"]["rows"]}
+    # Cash = 5000 + 1000 - 300 (debit-normal); Creditors = 200 (credit-normal).
+    assert Decimal(assets["1000"]["amount"]) == Decimal("5700.00")
+    assert Decimal(liabilities["2000"]["amount"]) == Decimal("200.00")
+    assert Decimal(data["assets"]["subtotal"]) == Decimal("5700.00")
+    assert Decimal(data["liabilities"]["subtotal"]) == Decimal("200.00")
+
+
+@pytest.mark.django_db
+def test_balance_sheet_current_period_earnings(shop, bs_data, client_with_perms):
+    client = client_with_perms(shop, ["accounts.reports.view"])
+    data = client.get(BS_URL).json()["data"]
+
+    equity_rows = data["equity"]["rows"]
+    by_name = {r["name"]: r for r in equity_rows}
+    earnings = by_name["Current Period Earnings"]
+    # income 1000 − expenses (300 + 200) = 500; synthetic row has no account.
+    assert Decimal(earnings["amount"]) == Decimal("500.00")
+    assert earnings["account_id"] is None
+    assert earnings["code"] is None
+    # Income/expense accounts never appear on the balance sheet.
+    all_codes = {
+        r["code"]
+        for section in ("assets", "liabilities", "equity")
+        for r in data[section]["rows"]
+    }
+    assert "4000" not in all_codes
+    assert "5200" not in all_codes
+    # Equity = Capital 5000 + earnings 500.
+    assert Decimal(data["equity"]["subtotal"]) == Decimal("5500.00")
+
+
+@pytest.mark.django_db
+def test_balance_sheet_is_balanced(shop, bs_data, client_with_perms):
+    client = client_with_perms(shop, ["accounts.reports.view"])
+    data = client.get(BS_URL).json()["data"]
+    assert Decimal(data["total_assets"]) == Decimal("5700.00")
+    assert Decimal(data["total_liabilities"]) == Decimal("200.00")
+    assert Decimal(data["total_equity"]) == Decimal("5500.00")
+    assert Decimal(data["total_assets"]) == (
+        Decimal(data["total_liabilities"]) + Decimal(data["total_equity"])
+    )
+    assert data["is_balanced"] is True
+
+
+@pytest.mark.django_db
+def test_balance_sheet_as_of_snapshot(shop, bs_data, entry_factory, client_with_perms):
+    # A July sale must be invisible at as_of 2026-06-30 — in assets and in earnings.
+    entry_factory("2026-07-01", bs_data["cash"], bs_data["sales"], "400.00")
+    client = client_with_perms(shop, ["accounts.reports.view"])
+
+    june = client.get(BS_URL, {"as_of": "2026-06-30"}).json()["data"]
+    assert Decimal(june["total_assets"]) == Decimal("5700.00")
+    by_name = {r["name"]: r for r in june["equity"]["rows"]}
+    assert Decimal(by_name["Current Period Earnings"]["amount"]) == Decimal("500.00")
+    assert june["is_balanced"] is True
+
+    latest = client.get(BS_URL).json()["data"]
+    assert Decimal(latest["total_assets"]) == Decimal("6100.00")
+    assert latest["is_balanced"] is True
+
+
+@pytest.mark.django_db
+def test_balance_sheet_csv_export_requires_export_perm(shop, bs_data, client_with_perms):
+    view_only = client_with_perms(shop, ["accounts.reports.view"])
+    assert view_only.get(BS_URL, {"format": "csv"}).status_code == status.HTTP_403_FORBIDDEN
+
+    exporter = client_with_perms(shop, ["accounts.reports.view", "accounts.reports.export"])
+    resp = exporter.get(BS_URL, {"format": "csv"})
+    assert resp.status_code == status.HTTP_200_OK, resp.content
+    assert resp["Content-Type"].startswith("text/csv")
 
 
 @pytest.mark.django_db

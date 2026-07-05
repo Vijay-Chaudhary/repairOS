@@ -12,4 +12,5 @@ urlpatterns = [
     path("ledger/<uuid:account_id>/", views.LedgerView.as_view(), name="ledger"),
     path("trial-balance/", views.TrialBalanceView.as_view(), name="trial-balance"),
     path("reports/pnl/", views.ProfitLossView.as_view(), name="report-pnl"),
+    path("reports/balance-sheet/", views.BalanceSheetView.as_view(), name="report-balance-sheet"),
 ]

@@ -393,3 +393,53 @@ def profit_and_loss(shop, date_from=None, date_to=None) -> dict:
         "date_from": date_from,
         "date_to": date_to,
     }
+
+
+def balance_sheet(shop, as_of=None) -> dict:
+    """Balance sheet snapshot at `as_of` (inclusive; None = latest).
+
+    Income/expense accounts never appear as rows — their net up to `as_of` rolls
+    into Equity as a synthetic "Current Period Earnings" line, which is what makes
+    total_assets == total_liabilities + total_equity hold.
+    """
+    sections: dict[str, list[dict]] = {
+        Account.AccountType.ASSET: [],
+        Account.AccountType.LIABILITY: [],
+        Account.AccountType.EQUITY: [],
+    }
+    for acct in _statement_accounts(shop, list(sections.keys()), date_to=as_of):
+        if row := _statement_row(acct):
+            sections[acct.account_type].append(row)
+
+    earnings = Decimal("0.00")
+    pnl_types = [Account.AccountType.INCOME, Account.AccountType.EXPENSE]
+    for acct in _statement_accounts(shop, pnl_types, date_to=as_of):
+        signed = _signed_movement(acct, acct.sum_debit, acct.sum_credit)
+        if acct.account_type == Account.AccountType.INCOME:
+            earnings += signed
+        else:
+            earnings -= signed
+    if earnings != 0:
+        sections[Account.AccountType.EQUITY].append({
+            "account_id": None,
+            "code": None,
+            "name": "Current Period Earnings",
+            "amount": earnings.quantize(TWO_PLACES),
+        })
+
+    def _subtotal(rows):
+        return sum((r["amount"] for r in rows), Decimal("0.00")).quantize(TWO_PLACES)
+
+    total_assets = _subtotal(sections[Account.AccountType.ASSET])
+    total_liabilities = _subtotal(sections[Account.AccountType.LIABILITY])
+    total_equity = _subtotal(sections[Account.AccountType.EQUITY])
+    return {
+        "assets": {"rows": sections[Account.AccountType.ASSET], "subtotal": total_assets},
+        "liabilities": {"rows": sections[Account.AccountType.LIABILITY], "subtotal": total_liabilities},
+        "equity": {"rows": sections[Account.AccountType.EQUITY], "subtotal": total_equity},
+        "total_assets": total_assets,
+        "total_liabilities": total_liabilities,
+        "total_equity": total_equity,
+        "is_balanced": total_assets == total_liabilities + total_equity,
+        "as_of": as_of,
+    }
