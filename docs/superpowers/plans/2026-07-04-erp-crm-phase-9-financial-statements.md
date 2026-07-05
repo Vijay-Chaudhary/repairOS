@@ -144,10 +144,10 @@ The whole phase hangs on getting the accounting right. These are the locked rule
 
 ## Task 5: Verify
 
-- [ ] **Step 1: Backend full suite** — `cd backend && python -m pytest apps/accounts apps/master -p no:cacheprovider --create-db -q`. All green.
-- [ ] **Step 2: Cross-check invariants** — in a shell/test, assert on seeded data that: P&L `net_profit` for all-time == the Balance-Sheet `current_period_earnings` at the latest `as_of`; and Balance Sheet `is_balanced is True`. These two ties are the accounting acceptance gate.
-- [ ] **Step 3: Frontend** — `cd frontend && npx tsc --noEmit && npx vitest run`.
-- [ ] **Step 4: Commit** (if any verify-driven fixes) — `git commit -m "test(accounts): financial-statements verification — P&L↔BS earnings tie + balance check"`
+- [x] **Step 1: Backend full suite** — `cd backend && python -m pytest apps/accounts apps/master -p no:cacheprovider --create-db -q`. All green.
+- [x] **Step 2: Cross-check invariants** — in a shell/test, assert on seeded data that: P&L `net_profit` for all-time == the Balance-Sheet `current_period_earnings` at the latest `as_of`; and Balance Sheet `is_balanced is True`. These two ties are the accounting acceptance gate.
+- [x] **Step 3: Frontend** — `cd frontend && npx tsc --noEmit && npx vitest run`.
+- [x] **Step 4: Commit** (if any verify-driven fixes) — `git commit -m "test(accounts): financial-statements verification — P&L↔BS earnings tie + balance check"`
 
 ---
 

@@ -152,6 +152,34 @@ def test_pnl_reversal_reduces_income(shop, pnl_data, entry_factory, client_with_
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Acceptance invariants — the two statements must tie together
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_pnl_net_ties_to_balance_sheet_earnings(shop, chart, entry_factory):
+    """All-time P&L net_profit == Balance Sheet Current Period Earnings, and the
+    Balance Sheet balances — the Phase-9 accounting acceptance gate."""
+    from accounts import services
+
+    entry_factory("2026-06-01", chart["cash"], chart["capital"], "5000.00")
+    entry_factory("2026-06-10", chart["cash"], chart["sales"], "1000.00")
+    entry_factory("2026-06-12", chart["rent"], chart["cash"], "300.00")
+    entry_factory("2026-06-14", chart["rent"], chart["creditors"], "200.00")
+    entry_factory("2026-06-20", chart["sales"], chart["cash"], "150.00")  # refund
+
+    pnl = services.profit_and_loss(shop)
+    bs = services.balance_sheet(shop)
+
+    earnings = next(
+        r for r in bs["equity"]["rows"] if r["name"] == "Current Period Earnings"
+    )
+    assert pnl["net_profit"] == earnings["amount"]
+    assert bs["is_balanced"] is True
+    assert bs["total_assets"] == bs["total_liabilities"] + bs["total_equity"]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Balance Sheet
 # ──────────────────────────────────────────────────────────────────────────────
 
