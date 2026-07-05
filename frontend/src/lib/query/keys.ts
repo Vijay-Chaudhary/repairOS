@@ -59,6 +59,10 @@ export const qk = {
   profitLoss:     (params?: Record<string, unknown>) => ['accounts', 'reports', 'pnl', params ?? {}] as const,
   balanceSheet:   (params?: Record<string, unknown>) => ['accounts', 'reports', 'balance-sheet', params ?? {}] as const,
 
+  // Audit
+  auditLogs:      (params?: Record<string, unknown>) => ['audit', 'list', params ?? {}] as const,
+  auditFacets:    () => ['audit', 'facets'] as const,
+
   // CRM
   customers:       listKey('customers'),
   customer:        (id: string) => ['customer', id] as const,
