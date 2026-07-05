@@ -7,6 +7,8 @@ urlpatterns = [
     path("api/v1/auth/", include("authentication.urls")),
     # Settings — users, roles, permissions
     path("api/v1/", include("authentication.settings_urls")),
+    # Audit log viewer (read-only)
+    path("api/v1/audit/", include("authentication.audit_urls")),
     # Settings — tenant branding, WhatsApp, notification templates
     path("api/v1/", include("core.settings_urls")),
     # Shops (list + detail)

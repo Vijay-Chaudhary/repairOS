@@ -29,13 +29,13 @@
 **Files:**
 - Create: this plan file (already saved)
 
-- [ ] **Step 1: Create feature branch**
+- [x] **Step 1: Create feature branch**
 
 ```bash
 git checkout -b feature/erp-crm-phase-10-audit-viewer
 ```
 
-- [ ] **Step 2: Commit the plan**
+- [x] **Step 2: Commit the plan**
 
 ```bash
 git add docs/superpowers/plans/2026-07-05-erp-crm-phase-10-audit-viewer.md
@@ -52,7 +52,7 @@ git commit -m "docs(plan): ERP/CRM Phase 10 — audit log read API + viewer"
 - Modify: `backend/config/urls.py` (add one include after the `authentication.settings_urls` line)
 - Test: `backend/apps/authentication/tests/test_audit_api.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `backend/apps/authentication/tests/test_audit_api.py`:
 
@@ -189,7 +189,7 @@ class TestAuditList:
         assert res.status_code == status.HTTP_403_FORBIDDEN
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 ```bash
 cd backend && python3 -m pytest apps/authentication/tests/test_audit_api.py --no-cov -q
@@ -197,7 +197,7 @@ cd backend && python3 -m pytest apps/authentication/tests/test_audit_api.py --no
 
 Expected: all FAIL/ERROR (404 — route doesn't exist).
 
-- [ ] **Step 3: Implement the view**
+- [x] **Step 3: Implement the view**
 
 Create `backend/apps/authentication/audit_views.py`:
 
@@ -262,7 +262,7 @@ class AuditLogListView(APIView):
         return paginator.get_paginated_response(data)
 ```
 
-- [ ] **Step 4: Wire URLs**
+- [x] **Step 4: Wire URLs**
 
 Create `backend/apps/authentication/audit_urls.py`:
 
@@ -282,7 +282,7 @@ In `backend/config/urls.py`, after the line `path("api/v1/", include("authentica
     path("api/v1/audit/", include("authentication.audit_urls")),
 ```
 
-- [ ] **Step 5: Run the list tests — expect facets tests absent, list tests pass**
+- [x] **Step 5: Run the list tests — expect facets tests absent, list tests pass**
 
 ```bash
 cd backend && python3 -m pytest apps/authentication/tests/test_audit_api.py --no-cov -q
@@ -290,7 +290,7 @@ cd backend && python3 -m pytest apps/authentication/tests/test_audit_api.py --no
 
 Expected: all `TestAuditList` tests PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/apps/authentication/audit_views.py backend/apps/authentication/audit_urls.py backend/config/urls.py backend/apps/authentication/tests/test_audit_api.py
