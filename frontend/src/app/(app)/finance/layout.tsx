@@ -20,6 +20,8 @@ const TABS: Tab[] = [
   { label: 'Chart of Accounts', href: '/finance/chart-of-accounts', permission: 'accounts.ledger.view' },
   { label: 'Journal',    href: '/finance/journal', permission: 'accounts.journal.view' },
   { label: 'Ledger',     href: '/finance/ledger', permission: 'accounts.ledger.view' },
+  { label: 'P&L',        href: '/finance/pnl', permission: 'accounts.reports.view' },
+  { label: 'Balance Sheet', href: '/finance/balance-sheet', permission: 'accounts.reports.view' },
 ];
 
 export default function FinanceLayout({ children }: { children: React.ReactNode }) {

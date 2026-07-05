@@ -19,6 +19,7 @@ from .serializers import (
     CreateJournalEntrySerializer,
     JournalEntrySerializer,
     LedgerRowSerializer,
+    StatementSectionSerializer,
     TrialBalanceRowSerializer,
     UpdateAccountSerializer,
     UpdateJournalEntrySerializer,
@@ -361,6 +362,116 @@ def _ledger_csv_response(account, payload):
     resp = HttpResponse(buffer.getvalue(), content_type="text/csv")
     resp["Content-Disposition"] = f'attachment; filename="ledger_{account.code}.csv"'
     return resp
+
+
+def _require_export_or_403(request, view):
+    """Return a 403 when the caller lacks the reports-export permission, else None.
+
+    Plain JsonResponse (not DRF Response): with ?format=csv in the URL, DRF content
+    negotiation would 404 a DRF Response because no csv renderer is registered.
+    """
+    from django.http import JsonResponse
+
+    from authentication.permissions import HasPermission
+
+    if not HasPermission("accounts.reports.export").has_permission(request, view):
+        return JsonResponse(
+            {"detail": "You do not have permission to export."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return None
+
+
+def _statement_csv_response(filename, sections, footer_rows):
+    """CSV attachment with one block per (title, section) plus footer total rows."""
+    import csv
+    import io
+
+    from django.http import HttpResponse
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    for title, section in sections:
+        writer.writerow([title])
+        writer.writerow(["Code", "Account", "Amount"])
+        for row in section["rows"]:
+            writer.writerow([row["code"] or "", row["name"], row["amount"]])
+        writer.writerow(["", "Subtotal", section["subtotal"]])
+        writer.writerow([])
+    for label, value in footer_rows:
+        writer.writerow(["", label, value])
+    resp = HttpResponse(buffer.getvalue(), content_type="text/csv")
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return resp
+
+
+class ProfitLossView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("accounts.reports.view")]
+
+    def get(self, request: Request) -> Response:
+        shop, err = _resolve_shop(request, request.query_params.get("shop_id"))
+        if err:
+            return err
+        date_from = _parse_date(request.query_params.get("date_from"))
+        date_to = _parse_date(request.query_params.get("date_to"))
+        result = services.profit_and_loss(shop, date_from, date_to)
+
+        if request.query_params.get("format") == "csv":
+            if forbidden := _require_export_or_403(request, self):
+                return forbidden
+            return _statement_csv_response(
+                "profit_and_loss.csv",
+                [("Income", result["income"]), ("Expenses", result["expense"])],
+                [("Net Profit", result["net_profit"])],
+            )
+
+        return Response({
+            "income": StatementSectionSerializer(result["income"]).data,
+            "expense": StatementSectionSerializer(result["expense"]).data,
+            "net_profit": result["net_profit"],
+            "date_from": result["date_from"],
+            "date_to": result["date_to"],
+        })
+
+
+class BalanceSheetView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("accounts.reports.view")]
+
+    def get(self, request: Request) -> Response:
+        shop, err = _resolve_shop(request, request.query_params.get("shop_id"))
+        if err:
+            return err
+        as_of = _parse_date(request.query_params.get("as_of"))
+        result = services.balance_sheet(shop, as_of)
+
+        if request.query_params.get("format") == "csv":
+            if forbidden := _require_export_or_403(request, self):
+                return forbidden
+            return _statement_csv_response(
+                "balance_sheet.csv",
+                [
+                    ("Assets", result["assets"]),
+                    ("Liabilities", result["liabilities"]),
+                    ("Equity", result["equity"]),
+                ],
+                [
+                    ("Total Assets", result["total_assets"]),
+                    ("Total Liabilities", result["total_liabilities"]),
+                    ("Total Equity", result["total_equity"]),
+                    ("Balanced", "yes" if result["is_balanced"] else "no"),
+                ],
+            )
+
+        return Response({
+            "assets": StatementSectionSerializer(result["assets"]).data,
+            "liabilities": StatementSectionSerializer(result["liabilities"]).data,
+            "equity": StatementSectionSerializer(result["equity"]).data,
+            "total_assets": result["total_assets"],
+            "total_liabilities": result["total_liabilities"],
+            "total_equity": result["total_equity"],
+            "is_balanced": result["is_balanced"],
+            "as_of": result["as_of"],
+        })
 
 
 class TrialBalanceView(APIView):

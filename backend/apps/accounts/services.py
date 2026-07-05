@@ -317,3 +317,129 @@ def trial_balance(shop, as_of=None) -> dict:
         "total_debit": total_debit.quantize(TWO_PLACES),
         "total_credit": total_credit.quantize(TWO_PLACES),
     }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Financial Statements — Profit & Loss + Balance Sheet
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def _statement_accounts(shop, account_types, date_from=None, date_to=None):
+    """Accounts of the given types annotated with posted debit/credit sums for the
+    window, ordered by code. Single aggregated query (same shape as trial_balance)."""
+    from django.db.models import DecimalField, Q, Sum
+    from django.db.models.functions import Coalesce
+
+    line_q = Q(journal_lines__entry__status=JournalEntry.Status.POSTED)
+    if date_from:
+        line_q &= Q(journal_lines__entry__date__gte=date_from)
+    if date_to:
+        line_q &= Q(journal_lines__entry__date__lte=date_to)
+
+    zero = Decimal("0.00")
+    dec = DecimalField(max_digits=16, decimal_places=2)
+    return (
+        Account.objects.filter(shop=shop, account_type__in=account_types)
+        .annotate(
+            sum_debit=Coalesce(Sum("journal_lines__debit", filter=line_q), zero, output_field=dec),
+            sum_credit=Coalesce(Sum("journal_lines__credit", filter=line_q), zero, output_field=dec),
+        )
+        .order_by("code")
+    )
+
+
+def _statement_row(acct) -> dict | None:
+    """Signed, quantized row for a statement section; None when the balance is zero."""
+    amount = _signed_movement(acct, acct.sum_debit, acct.sum_credit)
+    if amount == 0:
+        return None
+    return {
+        "account_id": acct.id,
+        "code": acct.code,
+        "name": acct.name,
+        "amount": amount.quantize(TWO_PLACES),
+    }
+
+
+def profit_and_loss(shop, date_from=None, date_to=None) -> dict:
+    """Income statement over an inclusive date window (both bounds optional).
+
+    Income amounts are Σcredit−Σdebit, expenses Σdebit−Σcredit (per normal_balance);
+    zero-balance accounts are skipped, rows ordered by code.
+    """
+    sections: dict[str, list[dict]] = {
+        Account.AccountType.INCOME: [],
+        Account.AccountType.EXPENSE: [],
+    }
+    accounts = _statement_accounts(
+        shop, list(sections.keys()), date_from=date_from, date_to=date_to
+    )
+    for acct in accounts:
+        if row := _statement_row(acct):
+            sections[acct.account_type].append(row)
+
+    income_subtotal = sum((r["amount"] for r in sections[Account.AccountType.INCOME]), Decimal("0.00"))
+    expense_subtotal = sum((r["amount"] for r in sections[Account.AccountType.EXPENSE]), Decimal("0.00"))
+    return {
+        "income": {
+            "rows": sections[Account.AccountType.INCOME],
+            "subtotal": income_subtotal.quantize(TWO_PLACES),
+        },
+        "expense": {
+            "rows": sections[Account.AccountType.EXPENSE],
+            "subtotal": expense_subtotal.quantize(TWO_PLACES),
+        },
+        "net_profit": (income_subtotal - expense_subtotal).quantize(TWO_PLACES),
+        "date_from": date_from,
+        "date_to": date_to,
+    }
+
+
+def balance_sheet(shop, as_of=None) -> dict:
+    """Balance sheet snapshot at `as_of` (inclusive; None = latest).
+
+    Income/expense accounts never appear as rows — their net up to `as_of` rolls
+    into Equity as a synthetic "Current Period Earnings" line, which is what makes
+    total_assets == total_liabilities + total_equity hold.
+    """
+    sections: dict[str, list[dict]] = {
+        Account.AccountType.ASSET: [],
+        Account.AccountType.LIABILITY: [],
+        Account.AccountType.EQUITY: [],
+    }
+    for acct in _statement_accounts(shop, list(sections.keys()), date_to=as_of):
+        if row := _statement_row(acct):
+            sections[acct.account_type].append(row)
+
+    earnings = Decimal("0.00")
+    pnl_types = [Account.AccountType.INCOME, Account.AccountType.EXPENSE]
+    for acct in _statement_accounts(shop, pnl_types, date_to=as_of):
+        signed = _signed_movement(acct, acct.sum_debit, acct.sum_credit)
+        if acct.account_type == Account.AccountType.INCOME:
+            earnings += signed
+        else:
+            earnings -= signed
+    if earnings != 0:
+        sections[Account.AccountType.EQUITY].append({
+            "account_id": None,
+            "code": None,
+            "name": "Current Period Earnings",
+            "amount": earnings.quantize(TWO_PLACES),
+        })
+
+    def _subtotal(rows):
+        return sum((r["amount"] for r in rows), Decimal("0.00")).quantize(TWO_PLACES)
+
+    total_assets = _subtotal(sections[Account.AccountType.ASSET])
+    total_liabilities = _subtotal(sections[Account.AccountType.LIABILITY])
+    total_equity = _subtotal(sections[Account.AccountType.EQUITY])
+    return {
+        "assets": {"rows": sections[Account.AccountType.ASSET], "subtotal": total_assets},
+        "liabilities": {"rows": sections[Account.AccountType.LIABILITY], "subtotal": total_liabilities},
+        "equity": {"rows": sections[Account.AccountType.EQUITY], "subtotal": total_equity},
+        "total_assets": total_assets,
+        "total_liabilities": total_liabilities,
+        "total_equity": total_equity,
+        "is_balanced": total_assets == total_liabilities + total_equity,
+        "as_of": as_of,
+    }
