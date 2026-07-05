@@ -847,7 +847,7 @@ git commit -m "feat(audit): audit log viewer page — filters, pagination, detai
 
 **Files:** none new — verification only, plus plan checkbox ticks.
 
-- [ ] **Step 1: Full backend suite**
+- [x] **Step 1: Full backend suite**
 
 ```bash
 cd backend && python3 -m pytest --no-cov -q
@@ -855,7 +855,7 @@ cd backend && python3 -m pytest --no-cov -q
 
 Expected: pass except the known weasyprint salary-slip failure (local-only; passes in CI).
 
-- [ ] **Step 2: Full frontend suite**
+- [x] **Step 2: Full frontend suite**
 
 ```bash
 cd frontend && npx vitest run
@@ -863,14 +863,14 @@ cd frontend && npx vitest run
 
 Expected: ALL PASS.
 
-- [ ] **Step 3: Tick remaining plan checkboxes, commit docs**
+- [x] **Step 3: Tick remaining plan checkboxes, commit docs**
 
 ```bash
 git add docs/superpowers/plans/2026-07-05-erp-crm-phase-10-audit-viewer.md
 git commit -m "docs(plan): tick Phase 10 tasks"
 ```
 
-- [ ] **Step 4: Push + PR**
+- [x] **Step 4: Push + PR**
 
 ```bash
 git push -u origin feature/erp-crm-phase-10-audit-viewer
