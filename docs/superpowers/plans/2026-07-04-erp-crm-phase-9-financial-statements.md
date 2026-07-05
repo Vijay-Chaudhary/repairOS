@@ -133,12 +133,12 @@ The whole phase hangs on getting the accounting right. These are the locked rule
 
 **Files:** `frontend/src/app/(app)/finance/pnl/page.tsx`, `frontend/src/app/(app)/finance/balance-sheet/page.tsx` (new); `frontend/src/app/(app)/finance/layout.tsx`; `frontend/src/lib/query/keys.ts`; API client module under `frontend/src/lib/api/` (mirror the ledger/trial-balance client); Vitest specs alongside.
 
-- [ ] **Step 1: Failing test (Vitest)** — a render test per page: mock the API to return a two/three-section statement and assert section subtotals + Net Profit / Is-Balanced badge render. (Mirror the existing finance page test style.)
-- [ ] **Step 2: Run → FAIL.** `cd frontend && npx vitest run src/app/\(app\)/finance/pnl src/app/\(app\)/finance/balance-sheet`
-- [ ] **Step 3: Add tabs** — in `finance/layout.tsx` `TABS`, add `{ label: 'P&L', href: '/finance/pnl', permission: 'accounts.reports.view' }` and `{ label: 'Balance Sheet', href: '/finance/balance-sheet', permission: 'accounts.reports.view' }`.
-- [ ] **Step 4: Pages** — each a client page: date filter(s) (P&L: from/to; BS: as-of), React Query fetch (add keys to `keys.ts`), sectioned table with subtotals, and a footer (P&L: Net Profit; BS: an "In balance ✓ / Out of balance ✗" badge from `is_balanced`). TS strict, no `any`, Tailwind, mobile-first. Add a "Export CSV" link that hits `?format=csv`, shown only when `hasPermission('accounts.reports.export')`.
-- [ ] **Step 5: Run → PASS** (Vitest) + `cd frontend && npx tsc --noEmit`.
-- [ ] **Step 6: Commit** — `git commit -m "feat(finance): P&L + Balance Sheet report pages"`
+- [x] **Step 1: Failing test (Vitest)** — a render test per page: mock the API to return a two/three-section statement and assert section subtotals + Net Profit / Is-Balanced badge render. (Mirror the existing finance page test style.)
+- [x] **Step 2: Run → FAIL.** `cd frontend && npx vitest run src/app/\(app\)/finance/pnl src/app/\(app\)/finance/balance-sheet`
+- [x] **Step 3: Add tabs** — in `finance/layout.tsx` `TABS`, add `{ label: 'P&L', href: '/finance/pnl', permission: 'accounts.reports.view' }` and `{ label: 'Balance Sheet', href: '/finance/balance-sheet', permission: 'accounts.reports.view' }`.
+- [x] **Step 4: Pages** — each a client page: date filter(s) (P&L: from/to; BS: as-of), React Query fetch (add keys to `keys.ts`), sectioned table with subtotals, and a footer (P&L: Net Profit; BS: an "In balance ✓ / Out of balance ✗" badge from `is_balanced`). TS strict, no `any`, Tailwind, mobile-first. Add a "Export CSV" link that hits `?format=csv`, shown only when `hasPermission('accounts.reports.export')`.
+- [x] **Step 5: Run → PASS** (Vitest) + `cd frontend && npx tsc --noEmit`.
+- [x] **Step 6: Commit** — `git commit -m "feat(finance): P&L + Balance Sheet report pages"`
 
 ---
 

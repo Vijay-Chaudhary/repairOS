@@ -56,6 +56,8 @@ export const qk = {
   journalEntry:   (id: string) => ['accounts', 'journal', id] as const,
   ledger:         (accountId: string, params?: Record<string, unknown>) => ['accounts', 'ledger', accountId, params ?? {}] as const,
   trialBalance:   (params?: Record<string, unknown>) => ['accounts', 'trial-balance', params ?? {}] as const,
+  profitLoss:     (params?: Record<string, unknown>) => ['accounts', 'reports', 'pnl', params ?? {}] as const,
+  balanceSheet:   (params?: Record<string, unknown>) => ['accounts', 'reports', 'balance-sheet', params ?? {}] as const,
 
   // CRM
   customers:       listKey('customers'),

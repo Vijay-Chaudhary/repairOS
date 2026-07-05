@@ -1,4 +1,5 @@
 import { apiGet, apiPost, apiPatch, apiDelete, type PageMeta } from './client';
+import { useAuthStore } from '@/lib/stores/authStore';
 
 export type AccountType = 'asset' | 'liability' | 'equity' | 'income' | 'expense';
 export type NormalBalance = 'debit' | 'credit';
@@ -70,6 +71,38 @@ export interface TrialBalance {
   total_credit: string;
 }
 
+export interface StatementRow {
+  // Null for synthetic rows (e.g. the Balance Sheet's "Current Period Earnings").
+  account_id: string | null;
+  code: string | null;
+  name: string;
+  amount: string;
+}
+
+export interface StatementSection {
+  rows: StatementRow[];
+  subtotal: string;
+}
+
+export interface ProfitLoss {
+  income: StatementSection;
+  expense: StatementSection;
+  net_profit: string;
+  date_from: string | null;
+  date_to: string | null;
+}
+
+export interface BalanceSheet {
+  assets: StatementSection;
+  liabilities: StatementSection;
+  equity: StatementSection;
+  total_assets: string;
+  total_liabilities: string;
+  total_equity: string;
+  is_balanced: boolean;
+  as_of: string | null;
+}
+
 export interface CreateJournalLineInput {
   account_id: string;
   debit?: string | number;
@@ -119,4 +152,42 @@ export const accountsApi = {
 
   getTrialBalance: (params?: { shop_id?: string; as_of?: string }) =>
     apiGet<TrialBalance>('/accounts/trial-balance/', params),
+
+  // Financial statements
+  getProfitLoss: (params?: { shop_id?: string; date_from?: string; date_to?: string }) =>
+    apiGet<ProfitLoss>('/accounts/reports/pnl/', params),
+
+  getBalanceSheet: (params?: { shop_id?: string; as_of?: string }) =>
+    apiGet<BalanceSheet>('/accounts/reports/balance-sheet/', params),
+
+  /**
+   * Downloads a statement as CSV (?format=csv); not JSON — bypasses apiFetch,
+   * same pattern as billingApi.tallyExport.
+   */
+  downloadStatementCsv: async (
+    report: 'pnl' | 'balance-sheet',
+    params: Record<string, string | undefined>,
+  ): Promise<void> => {
+    const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+    const DEV_TENANT_SLUG = process.env.NEXT_PUBLIC_TENANT_SLUG ?? '';
+    const qs = new URLSearchParams({ format: 'csv' });
+    for (const [key, value] of Object.entries(params)) {
+      if (value) qs.set(key, value);
+    }
+    const token = useAuthStore.getState().accessToken;
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (DEV_TENANT_SLUG) headers['X-Tenant-Slug'] = DEV_TENANT_SLUG;
+
+    const res = await fetch(`${BASE_URL}/api/v1/accounts/reports/${report}/?${qs}`, { headers });
+    if (!res.ok) throw new Error(`Statement export failed (${res.status})`);
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = report === 'pnl' ? 'profit_and_loss.csv' : 'balance_sheet.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 };
