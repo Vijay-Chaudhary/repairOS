@@ -404,7 +404,7 @@ git commit -m "feat(audit): facets endpoint for viewer filter dropdowns"
 - Create: `frontend/src/lib/api/audit.ts`
 - Modify: `frontend/src/lib/query/keys.ts` (append two keys inside the `qk` object)
 
-- [ ] **Step 1: Create the API module**
+- [x] **Step 1: Create the API module**
 
 Create `frontend/src/lib/api/audit.ts`:
 
@@ -455,7 +455,7 @@ export const auditApi = {
 };
 ```
 
-- [ ] **Step 2: Add query keys**
+- [x] **Step 2: Add query keys**
 
 In `frontend/src/lib/query/keys.ts`, append inside the `qk` object (near the accounts keys, keeping alignment style):
 
@@ -465,7 +465,7 @@ In `frontend/src/lib/query/keys.ts`, append inside the `qk` object (near the acc
   auditFacets:    () => ['audit', 'facets'] as const,
 ```
 
-- [ ] **Step 3: Typecheck**
+- [x] **Step 3: Typecheck**
 
 ```bash
 cd frontend && npx tsc --noEmit
@@ -473,7 +473,7 @@ cd frontend && npx tsc --noEmit
 
 Expected: no errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/lib/api/audit.ts frontend/src/lib/query/keys.ts
