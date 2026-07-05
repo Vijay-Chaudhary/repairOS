@@ -308,7 +308,7 @@ Powers the viewer's filter dropdowns (distinct model names + users seen in the l
 - Modify: `backend/apps/authentication/audit_urls.py` (add route)
 - Test: `backend/apps/authentication/tests/test_audit_api.py` (append class)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `backend/apps/authentication/tests/test_audit_api.py`:
 
@@ -334,7 +334,7 @@ class TestAuditFacets:
         assert res.status_code == status.HTTP_403_FORBIDDEN
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 ```bash
 cd backend && python3 -m pytest apps/authentication/tests/test_audit_api.py::TestAuditFacets --no-cov -q
@@ -342,7 +342,7 @@ cd backend && python3 -m pytest apps/authentication/tests/test_audit_api.py::Tes
 
 Expected: FAIL (404).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Append to `backend/apps/authentication/audit_views.py`:
 
@@ -381,7 +381,7 @@ Add to `backend/apps/authentication/audit_urls.py` (import `AuditLogFacetsView` 
     path("facets/", AuditLogFacetsView.as_view(), name="audit-facets"),
 ```
 
-- [ ] **Step 4: Run the whole audit test file**
+- [x] **Step 4: Run the whole audit test file**
 
 ```bash
 cd backend && python3 -m pytest apps/authentication/tests/test_audit_api.py --no-cov -q
@@ -389,7 +389,7 @@ cd backend && python3 -m pytest apps/authentication/tests/test_audit_api.py --no
 
 Expected: ALL PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/authentication/audit_views.py backend/apps/authentication/audit_urls.py backend/apps/authentication/tests/test_audit_api.py

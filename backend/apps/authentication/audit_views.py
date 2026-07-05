@@ -56,3 +56,31 @@ class AuditLogListView(APIView):
         )
         data = AuditLogSerializer(page, many=True, context={"user_names": user_names}).data
         return paginator.get_paginated_response(data)
+
+
+class AuditLogFacetsView(APIView):
+    permission_classes = [IsAuthenticated, require_permission("settings.audit.view")]
+
+    def get(self, request: Request) -> Response:
+        model_names = list(
+            AuditLog.objects.exclude(model_name="")
+            .order_by("model_name")
+            .values_list("model_name", flat=True)
+            .distinct()
+        )
+        user_ids = list(
+            AuditLog.objects.filter(user_id__isnull=False)
+            .values_list("user_id", flat=True)
+            .distinct()
+        )
+        users = [
+            {"id": str(uid), "full_name": name}
+            for uid, name in User.objects.filter(id__in=user_ids)
+            .order_by("full_name")
+            .values_list("id", "full_name")
+        ]
+        return Response({
+            "actions": [choice[0] for choice in AuditLog.Action.choices],
+            "model_names": model_names,
+            "users": users,
+        })

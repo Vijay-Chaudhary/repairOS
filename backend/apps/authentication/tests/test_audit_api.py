@@ -128,3 +128,24 @@ class TestAuditList:
         client = _make_client(api_client, admin, ["repair.jobs.view"])
         res = client.get(AUDIT_URL)
         assert res.status_code == status.HTTP_403_FORBIDDEN
+
+
+# ── Facets ────────────────────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+class TestAuditFacets:
+    def test_returns_actions_models_and_users(self, audit_client, admin):
+        _log(user_id=admin.id, model_name="Invoice")
+        _log(user_id=admin.id, model_name="Customer")
+        _log(user_id=None, model_name="Customer")
+        res = audit_client.get(FACETS_URL)
+        assert res.status_code == status.HTTP_200_OK
+        data = res.json()["data"]
+        assert data["model_names"] == ["Customer", "Invoice"]
+        assert data["users"] == [{"id": str(admin.id), "full_name": "Audit Admin"}]
+        assert "create" in data["actions"] and "permission_denied" in data["actions"]
+
+    def test_wrong_permission_is_denied(self, api_client, admin):
+        client = _make_client(api_client, admin, ["repair.jobs.view"])
+        res = client.get(FACETS_URL)
+        assert res.status_code == status.HTTP_403_FORBIDDEN
