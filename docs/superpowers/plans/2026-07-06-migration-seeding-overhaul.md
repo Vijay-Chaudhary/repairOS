@@ -708,7 +708,7 @@ git commit -m "feat(core): seeding framework — Seeder base, SeedContext, regis
 - Modify: `backend/apps/core/seeding/__init__.py` (export runner)
 - Test: `backend/apps/core/tests/test_seeding_runner.py` (new)
 
-- [ ] **Step 1: Add the model**
+- [x] **Step 1: Add the model** *(as-built: also sets `app_label`/`db_table = "seed_runs"` per repo convention)*
 
 Append to `backend/apps/core/models.py`:
 
@@ -729,7 +729,7 @@ class SeedRun(models.Model):
 Run: `cd backend && python3 manage.py makemigrations core --name seedrun`
 Expected: creates `backend/apps/core/migrations/0009_seedrun.py`. Verify it is reversible (a plain `CreateModel` is).
 
-- [ ] **Step 2: Write the failing runner tests**
+- [x] **Step 2: Write the failing runner tests**
 
 Create `backend/apps/core/tests/test_seeding_runner.py`:
 
@@ -817,12 +817,12 @@ def test_failure_is_isolated_and_reported():
     assert not SeedRun.objects.filter(seeder_name="boom").exists()
 ```
 
-- [ ] **Step 3: Run to verify failure**
+- [x] **Step 3: Run to verify failure**
 
 Run: `cd backend && python3 -m pytest apps/core/tests/test_seeding_runner.py --no-cov -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'core.seeding.runner'`.
 
-- [ ] **Step 4: Implement the runner**
+- [x] **Step 4: Implement the runner**
 
 Create `backend/apps/core/seeding/runner.py`:
 
@@ -891,7 +891,7 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 5: Run to verify pass, then commit**
+- [x] **Step 5: Run to verify pass, then commit** *(core suite 112 passed)*
 
 Run: `cd backend && python3 -m pytest apps/core/tests/test_seeding_runner.py apps/core --no-cov -q`
 Expected: all PASS.
