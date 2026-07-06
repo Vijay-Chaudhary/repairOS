@@ -471,7 +471,7 @@ git commit -m "feat(master): check_tenant_migrations drift doctor with --fail-on
 - Create: `backend/apps/core/seeding/registry.py`
 - Test: `backend/apps/core/tests/test_seeding_registry.py` (new)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `backend/apps/core/tests/test_seeding_registry.py`:
 
@@ -560,12 +560,12 @@ def _make(name, scope="demo", depends_on=()):
 
 (Use this second `_make` variant — delete the decorator variant.)
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd backend && python3 -m pytest apps/core/tests/test_seeding_registry.py --no-cov -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'core.seeding'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Create `backend/apps/core/seeding/base.py`:
 
@@ -685,12 +685,12 @@ from .registry import autodiscover, ordered, register
 __all__ = ["SeedContext", "Seeder", "autodiscover", "ordered", "register"]
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass** *(5 passed)*
 
 Run: `cd backend && python3 -m pytest apps/core/tests/test_seeding_registry.py --no-cov -v`
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/core/seeding/ backend/apps/core/tests/test_seeding_registry.py
