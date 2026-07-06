@@ -40,6 +40,18 @@ Plus one provisioning gap found during the audit: **`master.SubscriptionPlan` is
   plant wrong prices. **Intentionally excluded.**
 - **Document counters**: created on demand (`DocumentCounter.next` does `get_or_create`). No gap.
 
+### UI-side sweep (every `<select>`/combobox verified)
+
+Entity pickers are API-fed; every other dropdown is a code enum; the check-in damage checklist
+is fixed boolean model fields. Two findings:
+
+- **Indian states**: fixed statutory data — stays in **code**, but `INDIA_STATES` is duplicated
+  in `onboarding/page.tsx` and `settings/shop/page.tsx` with no GST state-code mapping. →
+  §5 adds a shared `frontend/src/lib/constants/indiaStates.ts` exporting `{name, gst_code}`
+  pairs; both pages consume it (and can auto-fill `state_code` from the selected state).
+- **Onboarding role dropdown** hardcodes 3 of the 7 seeded system roles instead of using the
+  roles API — frontend wiring quirk, not a data gap. Observation only; not fixed here.
+
 ## Decisions (locked during brainstorming)
 
 - Build the **configurable-lists feature** (not defaults-only, not a doc).
@@ -135,6 +147,10 @@ Plus, master-DB side:
 - **Settings → Lists** (`/settings/lists`): the five lists on one screen — add, rename,
   reorder, activate/deactivate; system rows show a lock instead of delete. Follows the existing
   settings-page patterns (React Query, permission gate, Tailwind, PWA).
+- **Shared India-states constant**: `frontend/src/lib/constants/indiaStates.ts` exporting
+  `INDIA_STATES: {name, gst_code}[]` (statutory list, 36 states/UTs with GST codes);
+  `onboarding/page.tsx` and `settings/shop/page.tsx` drop their duplicated inline arrays and
+  auto-fill `state_code` from the selection.
 
 ## 6. Testing
 
