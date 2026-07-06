@@ -348,47 +348,96 @@ def _statement_accounts(shop, account_types, date_from=None, date_to=None):
     )
 
 
-def _statement_row(acct) -> dict | None:
-    """Signed, quantized row for a statement section; None when the balance is zero."""
-    amount = _signed_movement(acct, acct.sum_debit, acct.sum_credit)
-    if amount == 0:
-        return None
-    return {
-        "account_id": acct.id,
-        "code": acct.code,
-        "name": acct.name,
-        "amount": amount.quantize(TWO_PLACES),
+def _section_tree_rows(accounts: list) -> list[dict]:
+    """Depth-first statement rows for one section, nesting children under parents.
+
+    `accounts` are code-ordered annotated Account instances of a single section.
+    A subtree is emitted only if it has any non-zero balance; a parent with zero
+    own balance but active children appears as a 0.00 header row. `amount` is
+    always the account's own movement (so Σ amount == subtotal); `total` is
+    own + descendants, set only on rows with emitted children. A parent outside
+    the section makes the account a root; parent cycles fall back to flat rows.
+    """
+    ids_in_section = {acct.id for acct in accounts}
+    children: dict = {}
+    roots = []
+    for acct in accounts:
+        if acct.parent_id and acct.parent_id != acct.id and acct.parent_id in ids_in_section:
+            children.setdefault(acct.parent_id, []).append(acct)
+        else:
+            roots.append(acct)
+
+    own_amounts = {
+        acct.id: _signed_movement(acct, acct.sum_debit, acct.sum_credit)
+        for acct in accounts
     }
+
+    def build(acct, level: int) -> tuple[list[dict], Decimal]:
+        own = own_amounts[acct.id]
+        child_rows: list[dict] = []
+        total = own
+        for child in children.get(acct.id, ()):
+            rows, child_total = build(child, level + 1)
+            child_rows.extend(rows)
+            total += child_total
+        if own == 0 and not child_rows:
+            return [], Decimal("0.00")
+        row = {
+            "account_id": acct.id,
+            "code": acct.code,
+            "name": acct.name,
+            "amount": own.quantize(TWO_PLACES),
+            "level": level,
+            "total": total.quantize(TWO_PLACES) if child_rows else None,
+        }
+        return [row, *child_rows], total
+
+    out: list[dict] = []
+    for root in roots:
+        rows, _ = build(root, 0)
+        out.extend(rows)
+
+    # Parent cycles are unreachable from any root (every cycle member's parent is
+    # in-section, so none lands in `roots`). Append survivors flat so no balance
+    # silently disappears from the statement.
+    emitted = {row["account_id"] for row in out}
+    for acct in accounts:
+        if acct.id not in emitted and own_amounts[acct.id] != 0:
+            out.append({
+                "account_id": acct.id,
+                "code": acct.code,
+                "name": acct.name,
+                "amount": own_amounts[acct.id].quantize(TWO_PLACES),
+                "level": 0,
+                "total": None,
+            })
+    return out
 
 
 def profit_and_loss(shop, date_from=None, date_to=None) -> dict:
     """Income statement over an inclusive date window (both bounds optional).
 
     Income amounts are Σcredit−Σdebit, expenses Σdebit−Σcredit (per normal_balance);
-    zero-balance accounts are skipped, rows ordered by code.
+    fully-zero subtrees are skipped, rows are depth-first with children nested
+    under their parent account, siblings ordered by code.
     """
-    sections: dict[str, list[dict]] = {
+    by_type: dict[str, list] = {
         Account.AccountType.INCOME: [],
         Account.AccountType.EXPENSE: [],
     }
     accounts = _statement_accounts(
-        shop, list(sections.keys()), date_from=date_from, date_to=date_to
+        shop, list(by_type.keys()), date_from=date_from, date_to=date_to
     )
     for acct in accounts:
-        if row := _statement_row(acct):
-            sections[acct.account_type].append(row)
+        by_type[acct.account_type].append(acct)
 
-    income_subtotal = sum((r["amount"] for r in sections[Account.AccountType.INCOME]), Decimal("0.00"))
-    expense_subtotal = sum((r["amount"] for r in sections[Account.AccountType.EXPENSE]), Decimal("0.00"))
+    income_rows = _section_tree_rows(by_type[Account.AccountType.INCOME])
+    expense_rows = _section_tree_rows(by_type[Account.AccountType.EXPENSE])
+    income_subtotal = sum((r["amount"] for r in income_rows), Decimal("0.00"))
+    expense_subtotal = sum((r["amount"] for r in expense_rows), Decimal("0.00"))
     return {
-        "income": {
-            "rows": sections[Account.AccountType.INCOME],
-            "subtotal": income_subtotal.quantize(TWO_PLACES),
-        },
-        "expense": {
-            "rows": sections[Account.AccountType.EXPENSE],
-            "subtotal": expense_subtotal.quantize(TWO_PLACES),
-        },
+        "income": {"rows": income_rows, "subtotal": income_subtotal.quantize(TWO_PLACES)},
+        "expense": {"rows": expense_rows, "subtotal": expense_subtotal.quantize(TWO_PLACES)},
         "net_profit": (income_subtotal - expense_subtotal).quantize(TWO_PLACES),
         "date_from": date_from,
         "date_to": date_to,
@@ -402,14 +451,17 @@ def balance_sheet(shop, as_of=None) -> dict:
     into Equity as a synthetic "Current Period Earnings" line, which is what makes
     total_assets == total_liabilities + total_equity hold.
     """
-    sections: dict[str, list[dict]] = {
+    by_type: dict[str, list] = {
         Account.AccountType.ASSET: [],
         Account.AccountType.LIABILITY: [],
         Account.AccountType.EQUITY: [],
     }
-    for acct in _statement_accounts(shop, list(sections.keys()), date_to=as_of):
-        if row := _statement_row(acct):
-            sections[acct.account_type].append(row)
+    for acct in _statement_accounts(shop, list(by_type.keys()), date_to=as_of):
+        by_type[acct.account_type].append(acct)
+    sections = {
+        acct_type: _section_tree_rows(accounts)
+        for acct_type, accounts in by_type.items()
+    }
 
     earnings = Decimal("0.00")
     pnl_types = [Account.AccountType.INCOME, Account.AccountType.EXPENSE]
@@ -425,6 +477,8 @@ def balance_sheet(shop, as_of=None) -> dict:
             "code": None,
             "name": "Current Period Earnings",
             "amount": earnings.quantize(TWO_PLACES),
+            "level": 0,
+            "total": None,
         })
 
     def _subtotal(rows):

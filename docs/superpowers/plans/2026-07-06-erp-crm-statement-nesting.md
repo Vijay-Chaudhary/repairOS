@@ -23,13 +23,13 @@
 
 ### Task 0: Branch
 
-- [ ] **Step 1: Create the feature branch**
+- [x] **Step 1: Create the feature branch**
 
 ```bash
 git checkout -b feature/erp-crm-statement-nesting master
 ```
 
-- [ ] **Step 2: Commit this plan doc**
+- [x] **Step 2: Commit this plan doc**
 
 ```bash
 git add docs/superpowers/plans/2026-07-06-erp-crm-statement-nesting.md
@@ -44,7 +44,7 @@ git commit -m "docs(plan): statement section parent/child nesting"
 - Modify: `backend/apps/accounts/services.py` (replace `_statement_row` + section assembly in `profit_and_loss` / `balance_sheet`)
 - Test: `backend/apps/accounts/tests/test_financial_statements.py` (append a "Nesting" block)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `backend/apps/accounts/tests/test_financial_statements.py` (reuses the existing `shop`, `chart`, `entry_factory`, `client_with_perms` fixtures in that file):
 
@@ -177,7 +177,7 @@ def test_balance_sheet_nesting_and_earnings_row_shape(shop, chart, entry_factory
     assert earnings["total"] is None
 ```
 
-- [ ] **Step 2: Run the new tests to verify they fail**
+- [x] **Step 2: Run the new tests to verify they fail**
 
 ```bash
 cd backend && python3 -m pytest apps/accounts/tests/test_financial_statements.py -k "nest or cycle or cross_type or zero_subtree or earnings_row_shape" --no-cov -v
@@ -185,7 +185,7 @@ cd backend && python3 -m pytest apps/accounts/tests/test_financial_statements.py
 
 Expected: FAIL — rows have no `level` key (`KeyError: 'level'` / assertion mismatch).
 
-- [ ] **Step 3: Implement the tree builder in services.py**
+- [x] **Step 3: Implement the tree builder in services.py**
 
 In `backend/apps/accounts/services.py`, **delete** `_statement_row` and add in its place:
 
@@ -361,7 +361,7 @@ class StatementRowSerializer(serializers.Serializer):
     total = serializers.DecimalField(max_digits=16, decimal_places=2, allow_null=True)
 ```
 
-- [ ] **Step 4: Run the statement tests — new and old must all pass**
+- [x] **Step 4: Run the statement tests — new and old must all pass**
 
 ```bash
 cd backend && python3 -m pytest apps/accounts/tests/test_financial_statements.py --no-cov -v
@@ -369,7 +369,7 @@ cd backend && python3 -m pytest apps/accounts/tests/test_financial_statements.py
 
 Expected: all PASS (the Phase 9 tests assert row `code`/`amount`/subtotals, which are unchanged).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/accounts/services.py backend/apps/accounts/serializers.py backend/apps/accounts/tests/test_financial_statements.py

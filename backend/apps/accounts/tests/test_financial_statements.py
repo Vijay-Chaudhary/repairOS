@@ -292,3 +292,132 @@ def test_pnl_csv_export_requires_export_perm(shop, pnl_data, client_with_perms):
     assert resp.status_code == status.HTTP_200_OK, resp.content
     assert resp["Content-Type"].startswith("text/csv")
     assert "attachment" in resp["Content-Disposition"]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Parent/child nesting (Phase 9 follow-up)
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def nested_expenses(db, shop, chart):
+    """Expense head 5100 Salaries with two children; chart's flat 5200 Rent stays."""
+    from accounts.models import Account
+    parent = Account.objects.create(shop=shop, code="5100", name="Salaries", account_type="expense")
+    tech = Account.objects.create(
+        shop=shop, code="5110", name="Salaries — Tech", account_type="expense", parent=parent
+    )
+    office = Account.objects.create(
+        shop=shop, code="5120", name="Salaries — Office", account_type="expense", parent=parent
+    )
+    return {"parent": parent, "tech": tech, "office": office}
+
+
+@pytest.mark.django_db
+def test_pnl_nests_children_under_parent(shop, chart, nested_expenses, entry_factory, client_with_perms):
+    # Children post 400 + 250; the parent head itself posts 100 directly.
+    entry_factory("2026-06-05", nested_expenses["tech"], chart["cash"], "400.00")
+    entry_factory("2026-06-06", nested_expenses["office"], chart["cash"], "250.00")
+    entry_factory("2026-06-07", nested_expenses["parent"], chart["cash"], "100.00")
+    entry_factory("2026-06-10", chart["cash"], chart["sales"], "1000.00")
+
+    client = client_with_perms(shop, ["accounts.reports.view"])
+    data = client.get(PNL_URL).json()["data"]
+    rows = data["expense"]["rows"]
+
+    # Depth-first: parent immediately before its children, siblings code-ordered.
+    assert [(r["code"], r["level"]) for r in rows] == [
+        ("5100", 0), ("5110", 1), ("5120", 1),
+    ]
+    parent_row = rows[0]
+    assert Decimal(parent_row["amount"]) == Decimal("100.00")      # own postings only
+    assert Decimal(parent_row["total"]) == Decimal("750.00")       # own + descendants
+    assert rows[1]["total"] is None and rows[2]["total"] is None   # leaves have no rollup
+    # Subtotal is still the sum of own amounts — nesting must not change the math.
+    assert Decimal(data["expense"]["subtotal"]) == Decimal("750.00")
+    assert Decimal(data["net_profit"]) == Decimal("250.00")
+
+
+@pytest.mark.django_db
+def test_pnl_zero_balance_parent_shown_when_children_active(shop, chart, nested_expenses, entry_factory, client_with_perms):
+    # Only a child posts; the parent head has no postings of its own.
+    entry_factory("2026-06-05", nested_expenses["tech"], chart["cash"], "400.00")
+    client = client_with_perms(shop, ["accounts.reports.view"])
+    data = client.get(PNL_URL).json()["data"]
+    rows = data["expense"]["rows"]
+
+    assert [(r["code"], r["level"]) for r in rows] == [("5100", 0), ("5110", 1)]
+    assert Decimal(rows[0]["amount"]) == Decimal("0.00")
+    assert Decimal(rows[0]["total"]) == Decimal("400.00")
+    assert Decimal(data["expense"]["subtotal"]) == Decimal("400.00")
+
+
+@pytest.mark.django_db
+def test_pnl_skips_fully_zero_subtree(shop, chart, nested_expenses, entry_factory, client_with_perms):
+    # No postings to the Salaries subtree at all → none of 5100/5110/5120 appear.
+    entry_factory("2026-06-12", chart["rent"], chart["cash"], "300.00")
+    client = client_with_perms(shop, ["accounts.reports.view"])
+    rows = client.get(PNL_URL).json()["data"]["expense"]["rows"]
+    assert [r["code"] for r in rows] == ["5200"]
+
+
+@pytest.mark.django_db
+def test_cross_type_parent_child_is_section_root(shop, chart, entry_factory, client_with_perms):
+    # A misconfigured expense account parented under an income head must still
+    # appear — as a root of the expense section, not nested and not dropped.
+    from accounts.models import Account
+    stray = Account.objects.create(
+        shop=shop, code="5500", name="Stray Expense", account_type="expense", parent=chart["sales"]
+    )
+    entry_factory("2026-06-05", stray, chart["cash"], "75.00")
+    client = client_with_perms(shop, ["accounts.reports.view"])
+    data = client.get(PNL_URL).json()["data"]
+    stray_row = next(r for r in data["expense"]["rows"] if r["code"] == "5500")
+    assert stray_row["level"] == 0
+    assert Decimal(data["expense"]["subtotal"]) == Decimal("75.00")
+
+
+@pytest.mark.django_db
+def test_parent_cycle_does_not_crash_or_drop_money(shop, chart, entry_factory):
+    # Nothing prevents A→B→A via PATCH; the builder must survive it.
+    from accounts import services
+    from accounts.models import Account
+    a = Account.objects.create(shop=shop, code="5601", name="Cycle A", account_type="expense")
+    b = Account.objects.create(shop=shop, code="5602", name="Cycle B", account_type="expense")
+    a.parent = b
+    a.save(update_fields=["parent"])
+    b.parent = a
+    b.save(update_fields=["parent"])
+    entry_factory("2026-06-05", a, chart["cash"], "50.00")
+    entry_factory("2026-06-06", b, chart["cash"], "60.00")
+
+    pnl = services.profit_and_loss(shop)
+    codes = {r["code"]: r for r in pnl["expense"]["rows"]}
+    assert {"5601", "5602"} <= set(codes)
+    assert codes["5601"]["level"] == 0 and codes["5602"]["level"] == 0
+    assert pnl["expense"]["subtotal"] == Decimal("110.00")
+
+
+@pytest.mark.django_db
+def test_balance_sheet_nesting_and_earnings_row_shape(shop, chart, entry_factory, client_with_perms):
+    from accounts.models import Account
+    bank = Account.objects.create(
+        shop=shop, code="1010", name="Bank", account_type="asset", parent=chart["cash"]
+    )
+    entry_factory("2026-06-01", chart["cash"], chart["capital"], "5000.00")
+    entry_factory("2026-06-02", bank, chart["capital"], "2000.00")
+    entry_factory("2026-06-10", chart["cash"], chart["sales"], "1000.00")
+
+    client = client_with_perms(shop, ["accounts.reports.view"])
+    data = client.get(BS_URL).json()["data"]
+
+    asset_rows = data["assets"]["rows"]
+    assert [(r["code"], r["level"]) for r in asset_rows] == [("1000", 0), ("1010", 1)]
+    assert Decimal(asset_rows[0]["amount"]) == Decimal("6000.00")
+    assert Decimal(asset_rows[0]["total"]) == Decimal("8000.00")
+    assert Decimal(data["assets"]["subtotal"]) == Decimal("8000.00")
+    assert data["is_balanced"] is True
+
+    earnings = next(r for r in data["equity"]["rows"] if r["name"] == "Current Period Earnings")
+    assert earnings["level"] == 0
+    assert earnings["total"] is None
