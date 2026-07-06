@@ -1434,10 +1434,7 @@ exec daphne -b 0.0.0.0 -p 8000 config.asgi:application
 
 (`set -euo pipefail` stays at the top — the `if !` and `|| echo` guards are what make these two steps non-fatal.)
 
-- [ ] **Step 2: Verify live** *(BLOCKED: Docker Desktop not running in this session — bash -n passed; run this check before merging)*
-
-Run: `docker compose up -d --build backend && sleep 40 && docker compose ps backend && docker logs repairos-backend-1 --since 2m | tail -20 && curl -s -o /dev/null -w "HTTP %{http_code}\n" http://localhost:8000/api/v1/health/`
-Expected: backend stays `Up` (not restarting), log shows migrate-all-tenants + seed skip/success, HTTP 200.
+- [x] **Step 2: Verify live** *(Docker back up 2026-07-06. Had to force-recreate pgbouncer first — stale pidfile crash-loop, see [[pgbouncer-stale-pidfile-recovery]] — unrelated to this branch. After that: backend stayed `Up`, log showed `migrate_all_tenants` succeed on all 16 real tenant DBs, `seed_demo --if-empty` ran the full 15-seeder pipeline on first boot under the new SeedRun framework, health check HTTP 200.)*
 
 - [x] **Step 3: Commit**
 
@@ -1452,7 +1449,7 @@ git commit -m "feat(dev): entrypoint migrates tenant DBs and survives seed failu
 
 - [x] **Step 1: Full backend suite** *(788 passed; only the 10 known local-only weasyprint failures. Extra fix landed: autodiscover now re-registers seeders from cached modules — fixes cross-test registry corruption)* — `cd backend && python3 -m pytest --no-cov -q`
 Expected: green except the 10 known weasyprint PDF failures (local-only; pass in CI).
-- [ ] **Step 2: End-to-end seed check** *(BLOCKED: Docker Desktop not running in this session)* — `docker compose exec backend python manage.py seed_demo --force` then `docker compose exec backend python manage.py check_tenant_migrations`
+- [x] **Step 2: End-to-end seed check** *(against the 16 real tenant DBs on the dev host: `seed_demo --force` re-ran all 15 seeders `✓`; `check_tenant_migrations` reported `0/16 tenant(s) drifted`)* — `docker compose exec backend python manage.py seed_demo --force` then `docker compose exec backend python manage.py check_tenant_migrations`
 Expected: seeders all `✓`; doctor reports all tenants up to date.
 - [x] **Step 3: Tick all checkboxes in this plan; commit** — `git add docs/superpowers/plans/2026-07-06-migration-seeding-overhaul.md && git commit -m "docs(plan): tick migration-seeding tasks"`
 - [x] **Step 4: Push + PR**
