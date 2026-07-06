@@ -1194,7 +1194,7 @@ git commit -m "refactor(seeding): port demo data from seed_demo monolith to per-
 - Modify: `backend/apps/master/services.py` (add `_drop_pg_resources`, mirroring `_create_pg_resources`'s connection mechanics)
 - Test: `backend/apps/master/tests/test_seed_demo_command.py` (new)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `backend/apps/master/tests/test_seed_demo_command.py`:
 
@@ -1281,12 +1281,12 @@ def test_failed_seeder_exits_nonzero(stub_command, monkeypatch):
         call_command("seed_demo", stdout=StringIO())
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd backend && python3 -m pytest apps/master/tests/test_seed_demo_command.py --no-cov -v`
 Expected: FAIL (current command has no flags and no `ordered`/`run_seeders` imports).
 
-- [ ] **Step 3: Rewrite the command**
+- [x] **Step 3: Rewrite the command** *(reverse accessor confirmed: `tenant.database`; DEMO_PASSWORD now imported from core.seeds)*
 
 New `handle` + flags in `backend/apps/master/management/commands/seed_demo.py` (imports at module top: `from core.seeding import SeedContext, autodiscover, ordered, run_seeders`):
 
@@ -1373,12 +1373,12 @@ using `psycopg2.sql.Identifier` quoting exactly the way `_create_pg_resources` q
 
 Delete the 13 moved `_seed_*` methods and the module-level constants that moved in Task 8. `seed_demo.py` should now be roughly 250 lines (guard, provisioning, subscription, summary, handle, reset).
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass** *(master suite 60 passed)*
 
 Run: `cd backend && python3 -m pytest apps/master --no-cov -q`
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/master/management/commands/seed_demo.py backend/apps/master/services.py backend/apps/master/tests/test_seed_demo_command.py

@@ -331,6 +331,22 @@ def _create_pg_resources(db_name: str, db_user: str, db_password: str) -> None:
             sc.execute(f'GRANT ALL ON SCHEMA public TO "{db_user}"')
 
 
+def _drop_pg_resources(db_name: str, db_user: str) -> None:
+    """
+    Drop a tenant's PostgreSQL database and role (seed_demo --reset).
+
+    Mirrors _create_pg_resources' connection mechanics; IF EXISTS guards make
+    a retry after a partial prior drop safe.
+    """
+    from django.db import connection
+
+    with connection.cursor() as cursor:
+        connection.connection.autocommit = True
+        cursor.execute(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)')
+        cursor.execute(f'DROP ROLE IF EXISTS "{db_user}"')
+        connection.connection.autocommit = False
+
+
 def _seed_roles_and_permissions() -> None:
     """Seed system roles, the full permission catalogue, and grant defaults per spec §4–5."""
     from authentication.models import Permission, Role, RolePermission
