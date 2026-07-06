@@ -558,7 +558,7 @@ git commit -m "feat(finance): render nested statement rows with indent + group t
 
 ### Task 4: Full suites, tick plan, PR
 
-- [ ] **Step 1: Full backend suite** (the 10 weasyprint PDF tests fail locally by design — ignore them; they pass in CI):
+- [x] **Step 1: Full backend suite** (the 10 weasyprint PDF tests fail locally by design — ignore them; they pass in CI):
 
 ```bash
 cd backend && python3 -m pytest --no-cov -q
@@ -566,7 +566,7 @@ cd backend && python3 -m pytest --no-cov -q
 
 Expected: everything green except the known weasyprint-import failures in commissions/hr/reports PDF tests.
 
-- [ ] **Step 2: Full frontend suite**
+- [x] **Step 2: Full frontend suite**
 
 ```bash
 cd frontend && npx vitest run
@@ -574,14 +574,14 @@ cd frontend && npx vitest run
 
 Expected: all PASS.
 
-- [ ] **Step 3: Tick all checkboxes in this plan, commit**
+- [x] **Step 3: Tick all checkboxes in this plan, commit**
 
 ```bash
 git add docs/superpowers/plans/2026-07-06-erp-crm-statement-nesting.md
 git commit -m "docs(plan): tick statement-nesting tasks"
 ```
 
-- [ ] **Step 4: Push + PR to master**
+- [x] **Step 4: Push + PR to master**
 
 ```bash
 git push -u origin feature/erp-crm-statement-nesting
