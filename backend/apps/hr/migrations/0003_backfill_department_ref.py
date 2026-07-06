@@ -26,11 +26,12 @@ def _make_code(name: str, used: set) -> str:
 
 
 def backfill(apps, schema_editor):
+    alias = schema_editor.connection.alias
     Employee = apps.get_model("hr", "Employee")
     Department = apps.get_model("hr", "Department")
 
     shop_ids = (
-        Employee.objects.filter(deleted_at__isnull=True)
+        Employee.objects.using(alias).filter(deleted_at__isnull=True)
         .exclude(department__isnull=True)
         .exclude(department__exact="")
         .values_list("shop_id", flat=True)
@@ -38,37 +39,38 @@ def backfill(apps, schema_editor):
     )
     for shop_id in shop_ids:
         used_codes = set(
-            Department.objects.filter(shop_id=shop_id).values_list("code", flat=True)
+            Department.objects.using(alias).filter(shop_id=shop_id).values_list("code", flat=True)
         )
         names = (
-            Employee.objects.filter(shop_id=shop_id, deleted_at__isnull=True)
+            Employee.objects.using(alias).filter(shop_id=shop_id, deleted_at__isnull=True)
             .exclude(department__isnull=True)
             .exclude(department__exact="")
             .values_list("department", flat=True)
             .distinct()
         )
         for name in names:
-            dept, created = Department.objects.get_or_create(
+            dept, created = Department.objects.using(alias).get_or_create(
                 shop_id=shop_id, name=name,
                 defaults={"code": _make_code(name, used_codes), "is_active": True},
             )
             if not created:
                 used_codes.add(dept.code)
-            Employee.objects.filter(
+            Employee.objects.using(alias).filter(
                 shop_id=shop_id, department=name, department_ref__isnull=True
             ).update(department_ref=dept)
 
 
 def unbackfill(apps, schema_editor):
+    alias = schema_editor.connection.alias
     Employee = apps.get_model("hr", "Employee")
     Department = apps.get_model("hr", "Department")
 
     # Detach FKs that still mirror the legacy text, then drop the auto-created rows.
-    for dept in Department.objects.all().iterator():
-        Employee.objects.filter(department_ref=dept, department=dept.name).update(
+    for dept in Department.objects.using(alias).all().iterator():
+        Employee.objects.using(alias).filter(department_ref=dept, department=dept.name).update(
             department_ref=None
         )
-    Department.objects.filter(employees__isnull=True).delete()
+    Department.objects.using(alias).filter(employees__isnull=True).delete()
 
 
 class Migration(migrations.Migration):

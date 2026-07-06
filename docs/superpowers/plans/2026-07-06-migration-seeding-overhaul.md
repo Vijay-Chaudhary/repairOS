@@ -242,7 +242,7 @@ git commit -m "test(core): alias-leak guardrail for data migrations (red until p
 
 Editing applied migration files is safe here: semantics are identical, no new migration is created.
 
-- [ ] **Step 1: Pin `billing/0003_taxrate.py`**
+- [x] **Step 1: Pin `billing/0003_taxrate.py`**
 
 ```python
 def seed_slabs(apps, schema_editor):
@@ -260,7 +260,7 @@ def unseed_slabs(apps, schema_editor):
     TaxRate.objects.using(alias).filter(name__in=[n for n, _ in GST_SLABS]).delete()
 ```
 
-- [ ] **Step 2: Pin `hr/0003_backfill_department_ref.py`**
+- [x] **Step 2: Pin `hr/0003_backfill_department_ref.py`**
 
 At the top of `backfill(apps, schema_editor)` add `alias = schema_editor.connection.alias`, then pin **every** queryset in the function (and in the reverse function, same pattern):
 - `Employee.objects.using(alias).filter(deleted_at__isnull=True)…` (the `shop_ids` query)
@@ -270,7 +270,7 @@ At the top of `backfill(apps, schema_editor)` add `alias = schema_editor.connect
 - `Employee.objects.using(alias).filter(shop_id=shop_id, department=name, …).update(…)`
 - the later cleanup block: `Department.objects.using(alias).all().iterator()`, `Employee.objects.using(alias).filter(…).update(…)`, `Department.objects.using(alias).filter(employees__isnull=True).delete()`
 
-- [ ] **Step 3: Pin `repair/0002_spare_part_shop_and_optional_job.py`**
+- [x] **Step 3: Pin `repair/0002_spare_part_shop_and_optional_job.py`**
 
 ```python
 def backfill_shop_from_job(apps, schema_editor):
@@ -286,12 +286,12 @@ def backfill_shop_from_job(apps, schema_editor):
 
 (Keep the existing docstrings and `noop_reverse` as they are.)
 
-- [ ] **Step 4: Guardrail goes green + affected app suites pass**
+- [x] **Step 4: Guardrail goes green + affected app suites pass** *(168 passed; 1 known local-only weasyprint failure in hr test_approve_slip)*
 
 Run: `cd backend && python3 -m pytest apps/core/tests/test_migration_alias_leak.py apps/billing apps/hr apps/repair --no-cov -q`
 Expected: all PASS (the guardrail from Task 2 now finds zero leaked queries).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/billing/migrations/0003_taxrate.py backend/apps/hr/migrations/0003_backfill_department_ref.py backend/apps/repair/migrations/0002_spare_part_shop_and_optional_job.py

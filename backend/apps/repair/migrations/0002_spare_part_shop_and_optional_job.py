@@ -9,11 +9,12 @@ def backfill_shop_from_job(apps, schema_editor):
     Done as a single set-based UPDATE (no server-side cursor) so it is safe to run
     through pgbouncer transaction pooling.
     """
+    alias = schema_editor.connection.alias
     JobSparePartRequest = apps.get_model("repair", "JobSparePartRequest")
     JobTicket = apps.get_model("repair", "JobTicket")
-    JobSparePartRequest.objects.filter(shop__isnull=True).update(
+    JobSparePartRequest.objects.using(alias).filter(shop__isnull=True).update(
         shop=Subquery(
-            JobTicket.objects.filter(pk=OuterRef("job_id")).values("shop_id")[:1]
+            JobTicket.objects.using(alias).filter(pk=OuterRef("job_id")).values("shop_id")[:1]
         )
     )
 
