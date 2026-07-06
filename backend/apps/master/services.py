@@ -652,6 +652,9 @@ def do_provision_tenant(tenant_id: str) -> None:
     try:
         _seed_roles_and_permissions()
 
+        from core.seeding import run_reference_tier
+        run_reference_tier()
+
         init_raw = cache.get(f"tenant_init:{tenant_id}")
         if init_raw:
             try:

@@ -914,7 +914,7 @@ git commit -m "feat(core): SeedRun tracking + run_seeders runner"
 - Modify: `backend/apps/master/services.py:653` area (same call in the `register_tenant` provisioning path)
 - Test: `backend/apps/billing/tests/test_seeds.py`, `backend/apps/accounts/tests/test_seeds.py` (new)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `backend/apps/billing/tests/test_seeds.py`:
 
@@ -978,12 +978,12 @@ def test_chart_seeder_no_shops_is_noop(db):
     ChartOfAccountsSeeder().run(SeedContext())  # must not raise
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd backend && python3 -m pytest apps/billing/tests/test_seeds.py apps/accounts/tests/test_seeds.py --no-cov -v`
 Expected: FAIL — no module `billing.seeds` / `accounts.seeds`.
 
-- [ ] **Step 3: Implement the seeders + tier entry point**
+- [x] **Step 3: Implement the seeders + tier entry point**
 
 Create `backend/apps/billing/seeds.py`:
 
@@ -1052,7 +1052,7 @@ def run_reference_tier(log=lambda msg: None) -> SeedResult:
 
 Add to `backend/apps/core/seeding/__init__.py` exports: `from .reference import run_reference_tier` (+ `"run_reference_tier"` in `__all__`).
 
-- [ ] **Step 4: Wire into both provisioning paths**
+- [x] **Step 4: Wire into both provisioning paths**
 
 In `backend/apps/master/management/commands/create_tenant.py`, right after `services._seed_roles_and_permissions()` (line ~100, tenant context is already set there):
 
@@ -1069,7 +1069,7 @@ In `backend/apps/master/services.py`, in the provisioning function around line 6
         run_reference_tier()
 ```
 
-- [ ] **Step 5: Run to verify pass, then commit**
+- [x] **Step 5: Run to verify pass, then commit** *(59 passed)*
 
 Run: `cd backend && python3 -m pytest apps/billing/tests/test_seeds.py apps/accounts/tests/test_seeds.py apps/master --no-cov -q`
 Expected: all PASS.
