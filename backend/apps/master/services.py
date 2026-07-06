@@ -768,3 +768,27 @@ def handle_razorpay_subscription_webhook(payload: bytes, signature: str) -> dict
 
     logger.info("Subscription %s → %s (event: %s)", razorpay_id, new_status, event)
     return {"updated": True, "status": new_status}
+
+
+def ensure_tenant_alias(tenant_db) -> str:
+    """Register (once) and return the connection alias for a TenantDatabase.
+
+    Single code path for every command that talks to a tenant DB
+    (migrate_all_tenants, check_tenant_migrations, seed_demo).
+    """
+    from django.db import connections
+
+    alias = f"tenant_{tenant_db.tenant.slug}"
+    if alias not in connections.databases:
+        base = dict(connections.databases["default"])
+        base.update({
+            "NAME": tenant_db.db_name,
+            "HOST": tenant_db.db_host,
+            "PORT": str(tenant_db.db_port),
+            "USER": tenant_db.db_user,
+            "PASSWORD": tenant_db.decrypt_password(),
+            "CONN_MAX_AGE": 0,
+            "OPTIONS": {},
+        })
+        connections.databases[alias] = base
+    return alias

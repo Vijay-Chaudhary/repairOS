@@ -29,7 +29,7 @@
 - Modify: `backend/apps/master/management/commands/migrate_all_tenants.py:65-82` (`_migrate_one`)
 - Test: `backend/apps/master/tests/test_tenant_migration_tools.py` (new)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `backend/apps/master/tests/test_tenant_migration_tools.py`:
 
@@ -99,12 +99,12 @@ def test_migrate_one_sets_and_clears_tenant_context(tenant_db, monkeypatch):
     del connections.databases["tenant_ctxshop"]
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd backend && python3 -m pytest apps/master/tests/test_tenant_migration_tools.py --no-cov -v`
 Expected: FAIL — `ImportError: cannot import name 'ensure_tenant_alias'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Append to `backend/apps/master/services.py`:
 
@@ -150,12 +150,12 @@ Replace `_migrate_one` in `backend/apps/master/management/commands/migrate_all_t
             clear_tenant_context()
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 Run: `cd backend && python3 -m pytest apps/master/tests/test_tenant_migration_tools.py apps/master --no-cov -q`
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/master/services.py backend/apps/master/management/commands/migrate_all_tenants.py backend/apps/master/tests/test_tenant_migration_tools.py

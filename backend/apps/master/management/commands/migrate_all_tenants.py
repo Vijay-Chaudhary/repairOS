@@ -63,20 +63,14 @@ class Command(BaseCommand):
             raise SystemExit(f">{fail_count}/{total} migrations failed — CI gate triggered.")
 
     def _migrate_one(self, tenant_db) -> None:
-        slug = tenant_db.tenant.slug
-        alias = f"tenant_{slug}"
+        from core.context import clear_tenant_context, set_tenant_db_alias
+        from master.services import ensure_tenant_alias
 
-        if alias not in connections.databases:
-            base = dict(connections.databases["default"])
-            base.update({
-                "NAME": tenant_db.db_name,
-                "HOST": tenant_db.db_host,
-                "PORT": str(tenant_db.db_port),
-                "USER": tenant_db.db_user,
-                "PASSWORD": tenant_db.decrypt_password(),
-                "CONN_MAX_AGE": 0,
-                "OPTIONS": {},
-            })
-            connections.databases[alias] = base
-
-        call_command("migrate", database=alias, verbosity=0)
+        alias = ensure_tenant_alias(tenant_db)
+        # Data migrations may query through the router; pin the context so any
+        # unpinned query lands on this tenant DB instead of master.
+        set_tenant_db_alias(alias)
+        try:
+            call_command("migrate", database=alias, verbosity=0)
+        finally:
+            clear_tenant_context()
