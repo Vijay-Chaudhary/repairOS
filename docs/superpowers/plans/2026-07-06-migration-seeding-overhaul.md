@@ -306,7 +306,7 @@ git commit -m "fix(migrations): pin DB alias in RunPython data migrations"
 - Create: `backend/apps/master/management/commands/check_tenant_migrations.py`
 - Test: `backend/apps/master/tests/test_check_tenant_migrations.py` (new)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests** *(as-built: reuses the settings-declared `alias_leak_scratch` alias + `django_db(databases=[...])` instead of a runtime-registered `doctor_scratch` — Django 5.2 blocks runtime aliases)*
 
 Create `backend/apps/master/tests/test_check_tenant_migrations.py`:
 
@@ -373,12 +373,12 @@ def test_no_tenants_is_clean(db):
     assert "No active tenants" in out.getvalue()
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd backend && python3 -m pytest apps/master/tests/test_check_tenant_migrations.py --no-cov -v`
 Expected: FAIL — `Unknown command: 'check_tenant_migrations'`.
 
-- [ ] **Step 3: Implement the command**
+- [x] **Step 3: Implement the command**
 
 Create `backend/apps/master/management/commands/check_tenant_migrations.py`:
 
@@ -447,12 +447,12 @@ class Command(BaseCommand):
             raise SystemExit(1)
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass** *(3 passed; master+core suites 159 passed)*
 
 Run: `cd backend && python3 -m pytest apps/master/tests/test_check_tenant_migrations.py --no-cov -v`
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/master/management/commands/check_tenant_migrations.py backend/apps/master/tests/test_check_tenant_migrations.py
