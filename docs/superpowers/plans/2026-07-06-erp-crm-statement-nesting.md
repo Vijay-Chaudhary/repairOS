@@ -384,7 +384,7 @@ git commit -m "feat(accounts): nest child accounts under parents in statement se
 - Modify: `backend/apps/accounts/views.py` (`_statement_csv_response`)
 - Test: `backend/apps/accounts/tests/test_financial_statements.py`
 
-- [ ] **Step 1: Write the failing test** (append to the nesting block):
+- [x] **Step 1: Write the failing test** (append to the nesting block):
 
 ```python
 @pytest.mark.django_db
@@ -396,7 +396,7 @@ def test_pnl_csv_indents_child_rows(shop, chart, nested_expenses, entry_factory,
     assert "5110,  Salaries — Tech,400.00" in body  # two-space indent per level
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 ```bash
 cd backend && python3 -m pytest apps/accounts/tests/test_financial_statements.py::test_pnl_csv_indents_child_rows --no-cov -v
@@ -404,7 +404,7 @@ cd backend && python3 -m pytest apps/accounts/tests/test_financial_statements.py
 
 Expected: FAIL — the name cell is unindented (`5110,Salaries — Tech,400.00`).
 
-- [ ] **Step 3: Indent the name by level in `_statement_csv_response`**
+- [x] **Step 3: Indent the name by level in `_statement_csv_response`**
 
 In `backend/apps/accounts/views.py`, change the row loop:
 
@@ -414,7 +414,7 @@ In `backend/apps/accounts/views.py`, change the row loop:
             writer.writerow([row["code"] or "", indent + row["name"], row["amount"]])
 ```
 
-- [ ] **Step 4: Run the full accounts suite**
+- [x] **Step 4: Run the full accounts suite**
 
 ```bash
 cd backend && python3 -m pytest apps/accounts --no-cov
@@ -422,7 +422,7 @@ cd backend && python3 -m pytest apps/accounts --no-cov
 
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/accounts/views.py backend/apps/accounts/tests/test_financial_statements.py

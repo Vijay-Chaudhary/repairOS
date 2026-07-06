@@ -421,3 +421,12 @@ def test_balance_sheet_nesting_and_earnings_row_shape(shop, chart, entry_factory
     earnings = next(r for r in data["equity"]["rows"] if r["name"] == "Current Period Earnings")
     assert earnings["level"] == 0
     assert earnings["total"] is None
+
+
+@pytest.mark.django_db
+def test_pnl_csv_indents_child_rows(shop, chart, nested_expenses, entry_factory, client_with_perms):
+    entry_factory("2026-06-05", nested_expenses["tech"], chart["cash"], "400.00")
+    exporter = client_with_perms(shop, ["accounts.reports.view", "accounts.reports.export"])
+    body = exporter.get(PNL_URL, {"format": "csv"}).content.decode()
+    assert "5100,Salaries,0.00" in body
+    assert "5110,  Salaries — Tech,400.00" in body  # two-space indent per level
