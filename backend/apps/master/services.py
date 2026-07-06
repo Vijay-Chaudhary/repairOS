@@ -331,6 +331,22 @@ def _create_pg_resources(db_name: str, db_user: str, db_password: str) -> None:
             sc.execute(f'GRANT ALL ON SCHEMA public TO "{db_user}"')
 
 
+def _drop_pg_resources(db_name: str, db_user: str) -> None:
+    """
+    Drop a tenant's PostgreSQL database and role (seed_demo --reset).
+
+    Mirrors _create_pg_resources' connection mechanics; IF EXISTS guards make
+    a retry after a partial prior drop safe.
+    """
+    from django.db import connection
+
+    with connection.cursor() as cursor:
+        connection.connection.autocommit = True
+        cursor.execute(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)')
+        cursor.execute(f'DROP ROLE IF EXISTS "{db_user}"')
+        connection.connection.autocommit = False
+
+
 def _seed_roles_and_permissions() -> None:
     """Seed system roles, the full permission catalogue, and grant defaults per spec §4–5."""
     from authentication.models import Permission, Role, RolePermission
@@ -652,6 +668,9 @@ def do_provision_tenant(tenant_id: str) -> None:
     try:
         _seed_roles_and_permissions()
 
+        from core.seeding import run_reference_tier
+        run_reference_tier()
+
         init_raw = cache.get(f"tenant_init:{tenant_id}")
         if init_raw:
             try:
@@ -768,3 +787,27 @@ def handle_razorpay_subscription_webhook(payload: bytes, signature: str) -> dict
 
     logger.info("Subscription %s → %s (event: %s)", razorpay_id, new_status, event)
     return {"updated": True, "status": new_status}
+
+
+def ensure_tenant_alias(tenant_db) -> str:
+    """Register (once) and return the connection alias for a TenantDatabase.
+
+    Single code path for every command that talks to a tenant DB
+    (migrate_all_tenants, check_tenant_migrations, seed_demo).
+    """
+    from django.db import connections
+
+    alias = f"tenant_{tenant_db.tenant.slug}"
+    if alias not in connections.databases:
+        base = dict(connections.databases["default"])
+        base.update({
+            "NAME": tenant_db.db_name,
+            "HOST": tenant_db.db_host,
+            "PORT": str(tenant_db.db_port),
+            "USER": tenant_db.db_user,
+            "PASSWORD": tenant_db.decrypt_password(),
+            "CONN_MAX_AGE": 0,
+            "OPTIONS": {},
+        })
+        connections.databases[alias] = base
+    return alias

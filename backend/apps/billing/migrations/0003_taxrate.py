@@ -9,14 +9,18 @@ GST_SLABS = [("GST 0%", "0"), ("GST 5%", "5"), ("GST 12%", "12"), ("GST 18%", "1
 
 
 def seed_slabs(apps, schema_editor):
+    alias = schema_editor.connection.alias
     TaxRate = apps.get_model("billing", "TaxRate")
     for name, rate in GST_SLABS:
-        TaxRate.objects.get_or_create(name=name, defaults={"rate": rate, "tax_type": "gst"})
+        TaxRate.objects.using(alias).get_or_create(
+            name=name, defaults={"rate": rate, "tax_type": "gst"}
+        )
 
 
 def unseed_slabs(apps, schema_editor):
+    alias = schema_editor.connection.alias
     TaxRate = apps.get_model("billing", "TaxRate")
-    TaxRate.objects.filter(name__in=[n for n, _ in GST_SLABS]).delete()
+    TaxRate.objects.using(alias).filter(name__in=[n for n, _ in GST_SLABS]).delete()
 
 
 class Migration(migrations.Migration):

@@ -100,6 +100,10 @@ class Command(BaseCommand):
         services._seed_roles_and_permissions()
         self.stdout.write("  ✓ System roles and permissions seeded.")
 
+        from core.seeding import run_reference_tier
+        run_reference_tier(log=self.stdout.write)
+        self.stdout.write("  ✓ Reference data seeded (GST rates, chart of accounts).")
+
         services._create_admin_user(name=name, email=email, phone=phone, password=admin_password)
         self.stdout.write(f"  ✓ Tenant Admin created — email: {email}")
 

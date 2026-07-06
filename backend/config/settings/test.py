@@ -25,7 +25,15 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": ":memory:",
-    }
+    },
+    # Empty scratch DB standing in for a tenant DB in tests that exercise
+    # multi-alias behaviour (e.g. the migration alias-leak guardrail).
+    # MIGRATE: False keeps session setup fast — such tests migrate it themselves.
+    "alias_leak_scratch": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": ":memory:",
+        "TEST": {"MIGRATE": False},
+    },
 }
 
 # Use locmem cache — no Redis required

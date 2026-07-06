@@ -287,3 +287,18 @@ class Notification(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.type} → {self.recipient_id} ({'read' if self.read_at else 'unread'})"
+
+
+class SeedRun(models.Model):
+    """Marks a Seeder as completed in this tenant DB (resume + --if-empty)."""
+
+    seeder_name = models.CharField(max_length=100, unique=True)
+    seeded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "core"
+        db_table = "seed_runs"
+        ordering = ["seeder_name"]
+
+    def __str__(self) -> str:
+        return self.seeder_name
