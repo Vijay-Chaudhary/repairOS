@@ -1392,7 +1392,7 @@ git commit -m "feat(seeding): seed_demo thin runner — --force/--only/--reset/-
 **Files:**
 - Modify: `backend/entrypoint.sh`
 
-- [ ] **Step 1: Replace the seed section**
+- [x] **Step 1: Replace the seed section**
 
 Keep the wait-for-DB block and master migrate as-is; replace everything from the first `create_tenant` through `seed_demo` with:
 
@@ -1434,12 +1434,12 @@ exec daphne -b 0.0.0.0 -p 8000 config.asgi:application
 
 (`set -euo pipefail` stays at the top — the `if !` and `|| echo` guards are what make these two steps non-fatal.)
 
-- [ ] **Step 2: Verify live**
+- [ ] **Step 2: Verify live** *(BLOCKED: Docker Desktop not running in this session — bash -n passed; run this check before merging)*
 
 Run: `docker compose up -d --build backend && sleep 40 && docker compose ps backend && docker logs repairos-backend-1 --since 2m | tail -20 && curl -s -o /dev/null -w "HTTP %{http_code}\n" http://localhost:8000/api/v1/health/`
 Expected: backend stays `Up` (not restarting), log shows migrate-all-tenants + seed skip/success, HTTP 200.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend/entrypoint.sh
@@ -1450,12 +1450,12 @@ git commit -m "feat(dev): entrypoint migrates tenant DBs and survives seed failu
 
 ### Task 11: Full verification + PR
 
-- [ ] **Step 1: Full backend suite** — `cd backend && python3 -m pytest --no-cov -q`
+- [x] **Step 1: Full backend suite** *(788 passed; only the 10 known local-only weasyprint failures. Extra fix landed: autodiscover now re-registers seeders from cached modules — fixes cross-test registry corruption)* — `cd backend && python3 -m pytest --no-cov -q`
 Expected: green except the 10 known weasyprint PDF failures (local-only; pass in CI).
-- [ ] **Step 2: End-to-end seed check** — `docker compose exec backend python manage.py seed_demo --force` then `docker compose exec backend python manage.py check_tenant_migrations`
+- [ ] **Step 2: End-to-end seed check** *(BLOCKED: Docker Desktop not running in this session)* — `docker compose exec backend python manage.py seed_demo --force` then `docker compose exec backend python manage.py check_tenant_migrations`
 Expected: seeders all `✓`; doctor reports all tenants up to date.
-- [ ] **Step 3: Tick all checkboxes in this plan; commit** — `git add docs/superpowers/plans/2026-07-06-migration-seeding-overhaul.md && git commit -m "docs(plan): tick migration-seeding tasks"`
-- [ ] **Step 4: Push + PR**
+- [x] **Step 3: Tick all checkboxes in this plan; commit** — `git add docs/superpowers/plans/2026-07-06-migration-seeding-overhaul.md && git commit -m "docs(plan): tick migration-seeding tasks"`
+- [x] **Step 4: Push + PR**
 
 ```bash
 git push -u origin feature/migration-seeding-overhaul
