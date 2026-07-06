@@ -440,7 +440,7 @@ git commit -m "feat(accounts): indent nested rows in statement CSV export"
 - Modify: `frontend/src/app/(app)/finance/balance-sheet/__tests__/balanceSheet.test.tsx` (same)
 - Test (new): `frontend/src/components/finance/__tests__/StatementSectionTable.test.tsx`
 
-- [ ] **Step 1: Write the failing component test**
+- [x] **Step 1: Write the failing component test**
 
 Create `frontend/src/components/finance/__tests__/StatementSectionTable.test.tsx`:
 
@@ -474,7 +474,7 @@ describe('StatementSectionTable', () => {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 ```bash
 cd frontend && npx vitest run src/components/finance/__tests__/StatementSectionTable.test.tsx
@@ -482,7 +482,7 @@ cd frontend && npx vitest run src/components/finance/__tests__/StatementSectionT
 
 Expected: FAIL — no indent style, no `Σ` rollup rendered (TS may also fail on `level`/`total` not in `StatementRow`).
 
-- [ ] **Step 3: Add the fields to `StatementRow`** in `frontend/src/lib/api/accounts.ts`:
+- [x] **Step 3: Add the fields to `StatementRow`** in `frontend/src/lib/api/accounts.ts`:
 
 ```ts
 export interface StatementRow {
@@ -498,7 +498,7 @@ export interface StatementRow {
 }
 ```
 
-- [ ] **Step 4: Render nesting in `StatementSectionTable.tsx`** — replace the row `<tr>` body:
+- [x] **Step 4: Render nesting in `StatementSectionTable.tsx`** — replace the row `<tr>` body:
 
 ```tsx
           {section.rows.map((r) => (
@@ -524,7 +524,7 @@ export interface StatementRow {
 
 Also update the component's doc comment to: `/** One financial-statement section (P&L / Balance Sheet): depth-first nested rows + subtotal. */`
 
-- [ ] **Step 5: Update the two page-test mocks** — every mocked row in `pnl.test.tsx` and `balanceSheet.test.tsx` gains `level: 0, total: null`, e.g. in `pnl.test.tsx`:
+- [x] **Step 5: Update the two page-test mocks** — every mocked row in `pnl.test.tsx` and `balanceSheet.test.tsx` gains `level: 0, total: null`, e.g. in `pnl.test.tsx`:
 
 ```ts
       income: {
@@ -539,7 +539,7 @@ Also update the component's doc comment to: `/** One financial-statement section
 
 (Apply the same `level: 0, total: null` addition to every row literal in `balanceSheet.test.tsx`.)
 
-- [ ] **Step 6: Run the finance frontend tests + typecheck**
+- [x] **Step 6: Run the finance frontend tests + typecheck**
 
 ```bash
 cd frontend && npx vitest run src/components/finance src/app/\(app\)/finance && npx tsc --noEmit
@@ -547,7 +547,7 @@ cd frontend && npx vitest run src/components/finance src/app/\(app\)/finance && 
 
 Expected: all PASS, no type errors.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/lib/api/accounts.ts frontend/src/components/finance/StatementSectionTable.tsx frontend/src/components/finance/__tests__/StatementSectionTable.test.tsx "frontend/src/app/(app)/finance/pnl/__tests__/pnl.test.tsx" "frontend/src/app/(app)/finance/balance-sheet/__tests__/balanceSheet.test.tsx"
