@@ -168,8 +168,17 @@ git commit -m "fix(master): tenant context + shared alias helper in migrate_all_
 
 **Files:**
 - Test: `backend/apps/core/tests/test_migration_alias_leak.py` (new)
+- Modify: `backend/config/settings/test.py` (declare scratch alias)
 
-- [ ] **Step 1: Write the guardrail test**
+> **As-built deviations (Django 5.2):** (1) aliases added to `connections.databases` at
+> runtime are blocked by the test harness — the scratch alias is declared in
+> `config/settings/test.py` with `TEST: {"MIGRATE": False}` and allowed via
+> `django_db(databases=[...])`; (2) the test router's `allow_migrate` no-ops every
+> operation on a non-default alias, so the test swaps in the production
+> `core.routers.TenantDatabaseRouter` via `override_settings`; (3) `transaction=True`
+> because SQLite's schema editor can't run inside the wrapping test atomic.
+
+- [x] **Step 1: Write the guardrail test**
 
 Create `backend/apps/core/tests/test_migration_alias_leak.py`:
 
@@ -210,12 +219,12 @@ def test_full_migrate_on_second_alias_leaks_nothing_to_default():
         del connections.databases[SCRATCH]
 ```
 
-- [ ] **Step 2: Run to verify it fails for the right reason**
+- [x] **Step 2: Run to verify it fails for the right reason** *(leaked: tax_rates ×5, employees, job_spare_part_requests — exactly the three unpinned migrations)*
 
 Run: `cd backend && python3 -m pytest apps/core/tests/test_migration_alias_leak.py --no-cov -v`
 Expected: FAIL — `leaked` contains queries against `tax_rates` / `employees` / `job_spare_part_requests` (the three unpinned migrations). If it fails with an unrelated error, stop and investigate before Task 3.
 
-- [ ] **Step 3: Commit (red on purpose — goes green in Task 3)**
+- [x] **Step 3: Commit (red on purpose — goes green in Task 3)**
 
 ```bash
 git add backend/apps/core/tests/test_migration_alias_leak.py
