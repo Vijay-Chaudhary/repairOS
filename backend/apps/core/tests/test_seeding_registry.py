@@ -63,3 +63,23 @@ def test_cycle_rejected():
     _make("b", depends_on=("a",))
     with pytest.raises(ImproperlyConfigured):
         registry.ordered()
+
+
+def test_real_demo_seeders_topo_order_is_valid():
+    """Autodiscovered production seeders must form a valid DAG whose order
+    respects the original seed_demo handle() sequence constraints."""
+    from core.seeding import autodiscover, registry
+
+    saved = dict(registry._registry)
+    registry._registry.clear()
+    try:
+        autodiscover()
+        names = [s.name for s in registry.ordered()]
+        assert names.index("core.demo_shops") < names.index("authentication.demo_users")
+        assert names.index("authentication.demo_users") < names.index("crm.demo")
+        assert names.index("inventory.demo") < names.index("repair.demo")
+        assert names.index("repair.demo") < names.index("billing.demo")
+        assert names.index("billing.demo") < names.index("commissions.demo_payout")
+    finally:
+        registry._registry.clear()
+        registry._registry.update(saved)

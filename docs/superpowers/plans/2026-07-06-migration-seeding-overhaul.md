@@ -1150,10 +1150,10 @@ class CrmDemoSeeder(Seeder):
 register(CrmDemoSeeder)
 ```
 
-- [ ] **Step 1: Port the three producer chain roots** (`core/seeds.py`, `authentication/seeds.py`, `crm/seeds.py`) per the recipe, with `load()` implemented on each (shops by `code`, users by `email`, crm by phone literals).
-- [ ] **Step 2: Run the import smoke check** — `cd backend && python3 -c "import django,os; os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings.test'); django.setup(); from core.seeding import autodiscover; autodiscover(); from core.seeding import registry" ` — expect no exception.
-- [ ] **Step 3: Port the remaining producers** (`inventory/seeds.py` with `load()` by SKU/barcode, `repair/seeds.py` with `load()` by ticket number) and all non-producers (default no-op `load`).
-- [ ] **Step 4: Ordering test** — append to `backend/apps/core/tests/test_seeding_registry.py`:
+- [x] **Step 1: Port the three producer chain roots** (`core/seeds.py`, `authentication/seeds.py`, `crm/seeds.py`) per the recipe, with `load()` implemented on each (shops by `code`, users by `email`, crm by phone literals).
+- [x] **Step 2: Run the import smoke check** — `cd backend && python3 -c "import django,os; os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings.test'); django.setup(); from core.seeding import autodiscover; autodiscover(); from core.seeding import registry" ` — expect no exception.
+- [x] **Step 3: Port the remaining producers** (`inventory/seeds.py` with `load()` by SKU/barcode, `repair/seeds.py` with `load()` by ticket number) and all non-producers (default no-op `load`).
+- [x] **Step 4: Ordering test** — append to `backend/apps/core/tests/test_seeding_registry.py`:
 
 ```python
 def test_real_demo_seeders_topo_order_is_valid():
@@ -1178,7 +1178,7 @@ def test_real_demo_seeders_topo_order_is_valid():
 
 Run: `cd backend && python3 -m pytest apps/core/tests/test_seeding_registry.py --no-cov -v` — expect PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit** *(as-built: seed_demo.py left untouched in this commit so the old command keeps working until the Task 9 rewrite; bodies moved verbatim, stdout warnings → logger.warning)*
 
 ```bash
 git add backend/apps/*/seeds.py backend/apps/core/tests/test_seeding_registry.py backend/apps/master/management/commands/seed_demo.py
