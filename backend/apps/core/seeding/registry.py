@@ -21,14 +21,29 @@ def register(cls: type[Seeder]) -> type[Seeder]:
 
 
 def autodiscover() -> None:
-    """Import <app>.seeds for every installed app (Celery tasks.py pattern)."""
+    """Import <app>.seeds for every installed app (Celery tasks.py pattern).
+
+    Import side effects fire once per process, so seeders defined in an
+    already-imported module are re-registered here — this makes autodiscover
+    safe to call after the registry has been cleared (tests) or partially
+    populated by a direct `import <app>.seeds`.
+    """
     for app_config in django_apps.get_app_configs():
-        module = f"{app_config.name}.seeds"
+        module_name = f"{app_config.name}.seeds"
         try:
-            importlib.import_module(module)
+            module = importlib.import_module(module_name)
         except ModuleNotFoundError as exc:
-            if exc.name != module:
+            if exc.name != module_name:
                 raise  # seeds.py exists but has a broken import — surface it
+            continue
+        for obj in vars(module).values():
+            if (
+                isinstance(obj, type)
+                and issubclass(obj, Seeder)
+                and obj.name
+                and obj.name not in _registry
+            ):
+                _registry[obj.name] = obj()
 
 
 def ordered(scope: str | None = None) -> list[Seeder]:
