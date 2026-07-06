@@ -11,16 +11,34 @@
 1. **Code enums (~60 `TextChoices`)**: statuses, payment methods, priorities, GST tax type,
    leave/employment types, etc. Ship in code; never DB. Currency is INR-only by design — a
    constant, not a list.
-2. **Existing lookup tables**: TaxRate, chart of accounts, roles/permissions (all covered by the
-   seeding overhaul's reference tier); product categories, departments, budget heads, commission
-   rules (tenant-managed domain tables with their own UIs); notification templates (31
-   definitions in code, DB rows are lazy per-tenant overrides — no gap).
+2. **Existing lookup tables**: TaxRate + chart of accounts (covered by the seeding overhaul's
+   reference tier); product categories, departments, budget heads, commission rules
+   (tenant-managed domain tables with their own UIs); notification templates (31 definitions in
+   code, DB rows are lazy per-tenant overrides — no gap).
 3. **Free-text fields that should be configurable dropdown lists but have no backing data** —
    the gap this feature closes: device types, device brands, expense/petty-cash categories,
    asset categories, customer tags.
 
 Plus one provisioning gap found during the audit: **`master.SubscriptionPlan` is only created by
 `seed_demo`** — `create_tenant` hard-fails on a fresh master DB (`Plan 'starter' not found`).
+
+### Extended audit (roles, commissions, WhatsApp, segments, users, fault templates)
+
+- **Roles + permissions**: seeded at provisioning (7 system roles + ~120-permission catalogue in
+  `master.services._seed_roles_and_permissions`), but tenants provisioned in earlier phases miss
+  later-added permissions — the reason `backfill_role_permissions` exists. → becomes a
+  reference-tier **healer seeder** (§4) so every seed run tops up older tenants.
+- **Commission rules**: no rule ⇒ no commission created; jobs close fine. Any seeded default
+  would silently pay out money. **Intentionally excluded** — tenant-configured.
+- **WhatsApp**: template definitions live in code; `NotificationTemplate`, `WhatsAppConnection`
+  and `TenantSettings` are lazy `get_or_create` singletons/overrides. No gap.
+- **Customer segments**: new tenants start with zero — → seed **3 starter dynamic segments**
+  (§4), pairing with the seeded `customer_tags`.
+- **Default users**: provisioning creates exactly one Tenant Admin; automated actors are
+  nullable everywhere, so no bot/system user is needed. No gap.
+- **Fault templates**: per-**shop** with a mandatory `default_sc` price — generic seeds would
+  plant wrong prices. **Intentionally excluded.**
+- **Document counters**: created on demand (`DocumentCounter.next` does `get_or_create`). No gap.
 
 ## Decisions (locked during brainstorming)
 
@@ -81,11 +99,26 @@ Adding a future list type = one registry entry + one seeded-defaults tuple; no m
 
 ## 4. Seeding
 
-- New reference-tier seeder `core.config_options` in `core/seeds.py` (framework from the
-  overhaul plan): upsert each registry default by `(list_key, value)`; existing rows are left
-  untouched — **a deactivated system row is never resurrected**. Runs for every tenant at
-  provisioning and via `seed_demo`.
-- **`seed_plans` management command (master DB)**: idempotent `get_or_create` of
+Three new reference-tier seeders (framework from the overhaul plan; all run for every tenant at
+provisioning and via `seed_demo`):
+
+- **`core.config_options`** (`core/seeds.py`): upsert each registry default by
+  `(list_key, value)`; existing rows are left untouched — **a deactivated system row is never
+  resurrected**.
+- **`authentication.roles_permissions`** (`authentication/seeds.py`): wraps the existing
+  idempotent `master.services._seed_roles_and_permissions()` so tenants provisioned before new
+  permissions were added get healed on every seed run (replaces ad-hoc
+  `backfill_role_permissions` runs; that command stays for targeted use).
+- **`crm.starter_segments`** (`crm/seeds.py`, depends on `core.config_options`): three dynamic
+  starter segments, upserted by name, created only if absent (they are ordinary deletable
+  segments — no `is_system` field on `CustomerSegment`):
+  - *VIP Customers* — `{"tags": ["VIP"]}`
+  - *Business Customers* — `{"customer_type": "business"}`
+  - *High Value* — `{"min_total_billed": 10000}`
+
+Plus, master-DB side:
+
+- **`seed_plans` management command**: idempotent `get_or_create` of
   starter/professional/enterprise using the plan values currently in
   `seed_demo._seed_subscription`. Called by the dev entrypoint before `create_tenant`;
   documented in the prod runbook. Closes the fresh-install provisioning failure.
@@ -107,14 +140,18 @@ Adding a future list type = one registry entry + one seeded-defaults tuple; no m
 
 - Model: unique constraint, ordering.
 - API: permission gates, CRUD, system-row delete → 422, unknown list_key → 404, duplicate → 422.
-- Seeder: run twice → identical counts; deactivated row stays deactivated.
+- Seeders: run twice → identical counts; deactivated config row stays deactivated; renamed
+  starter segment is not re-created; roles/permissions healer adds a missing permission row.
 - Frontend: `ConfigSelect` (options render, free text works, add-new POSTs and selects) and the
   settings page, Vitest + RTL per existing page-test patterns.
 
-## Out of scope
+## Out of scope (intentional exclusions)
 
 - Hard enforcement (FKs or validate-against-list) — possible later phase.
 - Per-shop overrides.
 - Tenant-defined *new list types* (registry is code).
 - Multi-currency.
 - Backfilling/normalising historical free-text values.
+- Default commission rules (would silently pay out money — tenant must configure).
+- Seeded fault templates (per-shop, price-bearing — wrong defaults are worse than none).
+- Bot/system users beyond the provisioned Tenant Admin (nothing requires one).
