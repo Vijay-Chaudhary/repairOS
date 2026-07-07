@@ -304,8 +304,8 @@ Create `backend/apps/master/tokens.py`:
 JWT auth for platform admin — separate from apps/authentication/tokens.py.
 
 Platform-admin access/refresh tokens carry: user_id (the PlatformAdminUser's
-id), is_platform_admin, token_type, token_family. They never carry tenant_slug
-— that's the whole point.
+id), is_platform_admin, admin_token_type, token_family. They never carry
+tenant_slug — that's the whole point.
 """
 from typing import Any
 
@@ -315,9 +315,15 @@ from rest_framework_simplejwt.settings import api_settings
 
 
 def _build_platform_admin_claims() -> dict[str, Any]:
+    # NOTE: the key is "admin_token_type", NOT "token_type" — "token_type" is
+    # simplejwt's own reserved claim (TOKEN_TYPE_CLAIM, default "token_type"),
+    # used internally by AccessToken/RefreshToken.verify_token_type() to stamp
+    # and check "access" vs "refresh". Overwriting it breaks simplejwt's own
+    # token-type verification on every decode (raises TokenError: "Token has
+    # wrong type"). Found and fixed during Task 5 — see its notes.
     return {
         "is_platform_admin": True,
-        "token_type": "platform_admin",
+        "admin_token_type": "platform_admin",
     }
 
 
@@ -921,7 +927,7 @@ def platform_client(db, platform_admin_user):
     # OutstandingToken to a user that isn't AUTH_USER_MODEL and raise ValueError.
     access = AccessToken.for_user(platform_admin_user)
     access["is_platform_admin"] = True
-    access["token_type"] = "platform_admin"
+    access["admin_token_type"] = "platform_admin"  # NOT "token_type" — see Task 3's tokens.py note
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {str(access)}")
     return client
@@ -1775,4 +1781,4 @@ No commit for this task — it's verification of the already-committed work from
 
 - **Spec coverage:** §1 data model → Task 1 (`AuditLogMaster` reused instead of a new model, per the deviation noted at the top). §2 auth flow/tokens → Tasks 3–5. §3 frontend → Tasks 8–13. §4 provisioning/cutover → Tasks 2, 6, 7. §5 out-of-scope items are simply not touched by any task. §6 testing → backend tests embedded in Tasks 1–6, frontend tests in Tasks 8 & 10, manual E2E in Task 14.
 - **Placeholder scan:** no TBDs; every step has runnable code or an exact command.
-- **Type consistency:** `PlatformAdminUser` (id/email/full_name) shape is identical across the Django model (Task 1), the login/me view responses (Tasks 4–5), the frontend `PlatformAdminUser` interface (Task 8), and `PlatformLoginResponse`/`platformAuthApi` (Tasks 9–10). Cookie name `platform_refresh_token` and path `/api/v1/platform/auth/` are consistent between Task 4 (set) and Task 5 (read/clear). Claim names (`is_platform_admin`, `token_type`, `token_family`) match between `_build_platform_admin_claims` (Task 3) and every place tokens are issued/rotated (Tasks 4–5).
+- **Type consistency:** `PlatformAdminUser` (id/email/full_name) shape is identical across the Django model (Task 1), the login/me view responses (Tasks 4–5), the frontend `PlatformAdminUser` interface (Task 8), and `PlatformLoginResponse`/`platformAuthApi` (Tasks 9–10). Cookie name `platform_refresh_token` and path `/api/v1/platform/auth/` are consistent between Task 4 (set) and Task 5 (read/clear). Claim names (`is_platform_admin`, `admin_token_type`, `token_family`) match between `_build_platform_admin_claims` (Task 3) and every place tokens are issued/rotated (Tasks 4–5). (Post-hoc addendum: Task 5 found `admin_token_type` was originally named `token_type`, colliding with simplejwt's reserved `TOKEN_TYPE_CLAIM` and breaking token decode entirely — renamed and documented in Task 3's code; this self-review note reflects the corrected name.)
