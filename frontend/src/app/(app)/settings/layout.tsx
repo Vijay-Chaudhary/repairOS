@@ -12,7 +12,7 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
-  { label: 'Shop',              href: '/settings/shop',             permission: 'settings.shop.edit' },
+  { label: 'Shops',             href: '/settings/shops',            permission: 'settings.shop.edit' },
   { label: 'Users',             href: '/settings/users',            permission: 'settings.users.manage' },
   { label: 'Roles',             href: '/settings/roles',            permission: 'settings.roles.manage' },
   { label: 'Commission Rules',  href: '/settings/commission-rules', permission: 'settings.commission_rules.manage' },

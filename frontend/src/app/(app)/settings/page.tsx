@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/authStore';
 
 const ORDERED: { href: string; permission: string }[] = [
-  { href: '/settings/shop',             permission: 'settings.shop.edit' },
+  { href: '/settings/shops',            permission: 'settings.shop.edit' },
   { href: '/settings/users',            permission: 'settings.users.manage' },
   { href: '/settings/roles',            permission: 'settings.roles.manage' },
   { href: '/settings/commission-rules', permission: 'settings.commission_rules.manage' },
