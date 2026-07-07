@@ -2,7 +2,7 @@
 JWT auth for platform admin — separate from apps/authentication/tokens.py.
 
 Platform-admin access/refresh tokens carry: user_id (the PlatformAdminUser's
-id), is_platform_admin, token_type, token_family. They never carry
+id), is_platform_admin, admin_token_type, token_family. They never carry
 tenant_slug — that's the whole point.
 """
 from typing import Any
@@ -13,9 +13,15 @@ from rest_framework_simplejwt.settings import api_settings
 
 
 def _build_platform_admin_claims() -> dict[str, Any]:
+    # NOTE: the key is "admin_token_type", NOT "token_type" — "token_type" is
+    # simplejwt's own reserved claim (TOKEN_TYPE_CLAIM, default "token_type"),
+    # used internally by AccessToken/RefreshToken.verify_token_type() to stamp
+    # and check "access" vs "refresh". Overwriting it breaks simplejwt's own
+    # token-type verification on every decode (raises TokenError: "Token has
+    # wrong type"). Found and fixed during Task 5 — see its notes.
     return {
         "is_platform_admin": True,
-        "token_type": "platform_admin",
+        "admin_token_type": "platform_admin",
     }
 
 
