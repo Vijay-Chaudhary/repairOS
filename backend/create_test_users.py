@@ -161,24 +161,6 @@ viewer_perms = [
 make_user("viewer@demo.com", "+919876543216", "View Only User", "Viewer@123",
           "Viewer", viewer_perms)
 
-# ── Platform Admin (lives in demo tenant DB, is_platform_admin=True) ───────
-# Platform admin users authenticate via the tenant DB but carry is_platform_admin=True
-# in their JWT which bypasses tenant RBAC and grants access to /platform/* endpoints.
-print("\nCreating Platform Admin (demo tenant DB, is_platform_admin=True)...")
-pa, created = User.objects.using("tenant_demo").get_or_create(
-    email="platform@repaiross.app",
-    defaults={
-        "phone": "+910000000001",
-        "full_name": "Platform Admin",
-        "is_platform_admin": True,
-    },
-)
-if created:
-    pa.set_password("Platform@123")
-    pa.save(using="tenant_demo")
-status = "created" if created else "already exists"
-print(f"  [Platform Admin] platform@repaiross.app / Platform@123  ({status})")
-
 print("""
 ╔══════════════════════════════════════════════════════════════════╗
 ║                  RepairOS Test Credentials                       ║
@@ -194,8 +176,8 @@ print("""
 ║  HR Manager      hr@demo.com              HRmgr@123              ║
 ║  Viewer          viewer@demo.com          Viewer@123             ║
 ╠══════════════════════════════════════════════════════════════════╣
-║  Platform Admin  platform@repaiross.app   Platform@123           ║
-║  (master DB — no tenant slug needed)                             ║
+║  Platform Admin: run `python manage.py create_platform_admin`    ║
+║  (independent of any tenant — see /admin/login on the frontend)  ║
 ╠══════════════════════════════════════════════════════════════════╣
 ║  Login endpoint: POST /api/v1/auth/login/                        ║
 ║  Header needed:  X-Tenant-Slug: demo   (for tenant users)        ║
