@@ -63,8 +63,38 @@ def test_returns_none_for_unknown_slug(db):
 
 def test_caches_result(db, tenant_with_plan):
     from django.core.cache import cache
+    from django.db import connections
+    from django.test.utils import CaptureQueriesContext
     from core.services import get_tenant_max_shops
 
-    get_tenant_max_shops("maxshopsco")
-
+    first = get_tenant_max_shops("maxshopsco")
+    assert first == 2
     assert cache.get("tenant_max_shops:maxshopsco") == 2
+
+    # Second call should be served entirely from cache — no DB hit.
+    with CaptureQueriesContext(connections["default"]) as ctx:
+        second = get_tenant_max_shops("maxshopsco")
+
+    assert second == 2
+    assert len(ctx.captured_queries) == 0
+
+
+def test_cache_hit_decodes_unlimited_sentinel_back_to_none(db, tenant_with_plan):
+    from django.db import connections
+    from django.test.utils import CaptureQueriesContext
+    from core.services import get_tenant_max_shops
+
+    sub = tenant_with_plan.subscriptions.first()
+    sub.plan.max_shops = None
+    sub.plan.save()
+
+    first = get_tenant_max_shops("maxshopsco")
+    assert first is None
+
+    # Second call reads the cached _UNLIMITED_SENTINEL and must still decode
+    # it back to None, without re-querying the DB.
+    with CaptureQueriesContext(connections["default"]) as ctx:
+        second = get_tenant_max_shops("maxshopsco")
+
+    assert second is None
+    assert len(ctx.captured_queries) == 0

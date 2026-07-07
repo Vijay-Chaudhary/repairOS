@@ -1,4 +1,4 @@
-"""Core cross-module services: in-app notification producers + global search."""
+"""Core cross-module services: in-app notification producers, global search, and tenant plan limits."""
 
 from .models import Notification
 
@@ -145,9 +145,12 @@ def get_tenant_max_shops(slug: str) -> int | None:
     """
     Look up the tenant's current plan's max_shops limit from the master DB.
 
-    Returns None if the plan has no cap (or the tenant/subscription can't be
-    found — fail-open, since an unrelated master-DB hiccup shouldn't block
-    shop creation for tenants on unlimited plans anyway).
+    Returns None if the plan has no cap, and also fails open to None when no
+    TenantSubscription record is found for the slug (unknown tenant, or a
+    tenant with no subscription row) — that's the only case this treats as
+    "unlimited". This does NOT catch transient/infrastructure errors (DB
+    timeouts, OperationalError, etc.) — those propagate as exceptions, same
+    as TenantMiddleware._load_db_config elsewhere in this codebase.
 
     Cached in Redis for TENANT_CACHE_TTL seconds, same pattern as
     TenantMiddleware._load_db_config.
