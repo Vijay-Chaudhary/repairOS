@@ -97,6 +97,28 @@ class OTPRateLimit(APIException):
         super().__init__(detail="Too many OTP requests. Please wait before trying again.", code=self.default_code)
 
 
+class PlanShopLimitExceeded(APIException):
+    status_code = status.HTTP_403_FORBIDDEN
+    default_code = "PLAN_SHOP_LIMIT_EXCEEDED"
+
+    def __init__(self, max_shops: int):
+        super().__init__(
+            detail=f"Your plan allows {max_shops} shop(s). Upgrade to add more.",
+            code=self.default_code,
+        )
+
+
+class DuplicateShopCode(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "DUPLICATE_SHOP_CODE"
+
+    def __init__(self, code: str):
+        super().__init__(
+            detail=f"Shop code '{code}' is already in use.",
+            code=self.default_code,
+        )
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Custom exception handler
 # ──────────────────────────────────────────────────────────────────────────────

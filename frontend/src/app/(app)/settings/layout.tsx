@@ -8,11 +8,12 @@ import { cn } from '@/lib/utils';
 interface TabDef {
   label: string;
   href: string;
-  permission: string;
+  permission?: string;
+  anyOf?: string[];
 }
 
 const TABS: TabDef[] = [
-  { label: 'Shop',              href: '/settings/shop',             permission: 'settings.shop.edit' },
+  { label: 'Shops',             href: '/settings/shops',            anyOf: ['settings.shop.edit', 'settings.branches.manage'] },
   { label: 'Users',             href: '/settings/users',            permission: 'settings.users.manage' },
   { label: 'Roles',             href: '/settings/roles',            permission: 'settings.roles.manage' },
   { label: 'Commission Rules',  href: '/settings/commission-rules', permission: 'settings.commission_rules.manage' },
@@ -23,9 +24,9 @@ const TABS: TabDef[] = [
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { hasPermission } = useAuthStore();
+  const { hasPermission, hasAnyPermission } = useAuthStore();
 
-  const visibleTabs = TABS.filter((t) => hasPermission(t.permission));
+  const visibleTabs = TABS.filter((t) => (t.anyOf ? hasAnyPermission(t.anyOf) : hasPermission(t.permission!)));
 
   return (
     <div className="flex flex-col h-full">

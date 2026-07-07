@@ -109,6 +109,7 @@ class TenantDetailSerializer(serializers.ModelSerializer):
 
 class RegisterTenantSerializer(serializers.Serializer):
     business_name = serializers.CharField(max_length=200)
+    shop_name = serializers.CharField(max_length=200, required=False, allow_blank=True)
     slug = serializers.RegexField(
         regex=r"^[a-z0-9_]{3,50}$",
         error_messages={"invalid": "Slug must be 3–50 lowercase letters, digits, or underscores."},

@@ -4,8 +4,8 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/stores/authStore';
 
-const ORDERED: { href: string; permission: string }[] = [
-  { href: '/settings/shop',             permission: 'settings.shop.edit' },
+const ORDERED: { href: string; permission?: string; anyOf?: string[] }[] = [
+  { href: '/settings/shops',            anyOf: ['settings.shop.edit', 'settings.branches.manage'] },
   { href: '/settings/users',            permission: 'settings.users.manage' },
   { href: '/settings/roles',            permission: 'settings.roles.manage' },
   { href: '/settings/commission-rules', permission: 'settings.commission_rules.manage' },
@@ -16,13 +16,13 @@ const ORDERED: { href: string; permission: string }[] = [
 
 export default function SettingsRootPage() {
   const router = useRouter();
-  const { hasPermission, isBootstrapping } = useAuthStore();
+  const { hasPermission, hasAnyPermission, isBootstrapping } = useAuthStore();
 
   useEffect(() => {
     if (isBootstrapping) return;
-    const first = ORDERED.find((p) => hasPermission(p.permission));
+    const first = ORDERED.find((p) => (p.anyOf ? hasAnyPermission(p.anyOf) : hasPermission(p.permission!)));
     router.replace(first?.href ?? '/dashboard');
-  }, [isBootstrapping, hasPermission, router]);
+  }, [isBootstrapping, hasPermission, hasAnyPermission, router]);
 
   return (
     <div className="flex-1 flex items-center justify-center">
