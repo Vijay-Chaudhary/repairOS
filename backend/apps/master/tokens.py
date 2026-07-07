@@ -2,8 +2,8 @@
 JWT auth for platform admin — separate from apps/authentication/tokens.py.
 
 Platform-admin access/refresh tokens carry: user_id (the PlatformAdminUser's
-id, set automatically by RefreshToken.for_user), is_platform_admin, token_type,
-token_family. They never carry tenant_slug — that's the whole point.
+id), is_platform_admin, token_type, token_family. They never carry
+tenant_slug — that's the whole point.
 """
 from typing import Any
 
