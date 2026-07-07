@@ -18,7 +18,7 @@
 - Modify: `backend/apps/core/exceptions.py`
 - Test: `backend/apps/core/tests/test_exceptions.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # backend/apps/core/tests/test_exceptions.py
@@ -45,12 +45,12 @@ def test_duplicate_shop_code_shape():
     assert "MAIN" in str(exc.detail)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && python -m pytest apps/core/tests/test_exceptions.py -v`
 Expected: FAIL with `ImportError: cannot import name 'PlanShopLimitExceeded'`
 
-- [ ] **Step 3: Add the two exception classes**
+- [x] **Step 3: Add the two exception classes**
 
 In `backend/apps/core/exceptions.py`, add after the existing `OTPRateLimit` class (before the "Custom exception handler" section):
 
@@ -77,12 +77,12 @@ class DuplicateShopCode(APIException):
         )
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && python -m pytest apps/core/tests/test_exceptions.py -v`
 Expected: PASS (2 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/core/exceptions.py backend/apps/core/tests/test_exceptions.py
@@ -97,7 +97,7 @@ git commit -m "feat(core): add PlanShopLimitExceeded and DuplicateShopCode excep
 - Modify: `backend/apps/core/services.py`
 - Test: `backend/apps/core/tests/test_get_tenant_max_shops.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```python
 # backend/apps/core/tests/test_get_tenant_max_shops.py
@@ -160,12 +160,12 @@ def test_caches_result(db, tenant_with_plan):
     assert cache.get("tenant_max_shops:maxshopsco") == 2
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && python -m pytest apps/core/tests/test_get_tenant_max_shops.py -v`
 Expected: FAIL with `ImportError: cannot import name 'get_tenant_max_shops'`
 
-- [ ] **Step 3: Implement the helper**
+- [x] **Step 3: Implement the helper**
 
 In `backend/apps/core/services.py`, add at the end of the file:
 
@@ -214,12 +214,12 @@ def get_tenant_max_shops(slug: str) -> int | None:
     return max_shops
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && python -m pytest apps/core/tests/test_get_tenant_max_shops.py -v`
 Expected: PASS (4 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/core/services.py backend/apps/core/tests/test_get_tenant_max_shops.py
@@ -233,7 +233,7 @@ git commit -m "feat(core): add get_tenant_max_shops plan-limit lookup helper"
 **Files:**
 - Modify: `backend/apps/core/serializers.py`
 
-- [ ] **Step 1: Add the serializer**
+- [x] **Step 1: Add the serializer**
 
 `backend/apps/core/serializers.py` currently only has `NotificationSerializer`. Replace the full file contents with:
 
@@ -266,7 +266,7 @@ class ShopCreateSerializer(serializers.Serializer):
 
 No test for this step in isolation — it's exercised end-to-end by Task 4's `ShopCreateView` tests (a bare serializer with no custom `.validate()` has no independent behavior worth unit-testing).
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add backend/apps/core/serializers.py
@@ -281,7 +281,7 @@ git commit -m "feat(core): add ShopCreateSerializer"
 - Modify: `backend/apps/core/views.py`
 - Test: `backend/apps/core/tests/test_shop_create.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 # backend/apps/core/tests/test_shop_create.py
@@ -391,12 +391,12 @@ class TestShopCreate:
         assert res.status_code == status.HTTP_200_OK
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd backend && python -m pytest apps/core/tests/test_shop_create.py -v`
 Expected: FAIL — `POST` currently returns 405 (no `post` method on `ShopListView`)
 
-- [ ] **Step 3: Implement `POST` on `ShopListView`**
+- [x] **Step 3: Implement `POST` on `ShopListView`**
 
 Replace the full contents of `backend/apps/core/views.py` with:
 
@@ -483,17 +483,17 @@ class ShopListView(APIView):
         return Response(_shop_to_dict(shop), status=status.HTTP_201_CREATED)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd backend && python -m pytest apps/core/tests/test_shop_create.py -v`
 Expected: PASS (8 tests)
 
-- [ ] **Step 5: Run the full core test suite to check for regressions**
+- [x] **Step 5: Run the full core test suite to check for regressions**
 
 Run: `cd backend && python -m pytest apps/core/ -v`
 Expected: PASS (no regressions in existing `test_shop_isolation.py` etc.)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/apps/core/views.py backend/apps/core/tests/test_shop_create.py
@@ -509,7 +509,7 @@ git commit -m "feat(core): add POST /shops/ to create additional shops, plan-lim
 - Modify: `backend/apps/master/services.py` (`register_tenant`, `do_provision_tenant`, `_create_default_shop`)
 - Test: `backend/apps/master/tests/test_platform_admin.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add these methods to the existing `TestVerification` class in `backend/apps/master/tests/test_platform_admin.py` (near `test_verify_stores_credentials_in_cache`):
 
@@ -588,12 +588,12 @@ Add these methods to the existing `TestProvisioning` class (near `test_do_provis
         assert Shop.objects.get().name == "Prov Corp"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd backend && python -m pytest apps/master/tests/test_platform_admin.py -v -k "shop_name or ProvisionTenantCreatesShop or ShopNameFallsBack"`
 Expected: FAIL — `shop_name` key not present in cache payload (KeyError/assertion failure)
 
-- [ ] **Step 3: Add `shop_name` to `RegisterTenantSerializer`**
+- [x] **Step 3: Add `shop_name` to `RegisterTenantSerializer`**
 
 In `backend/apps/master/serializers.py`, in `RegisterTenantSerializer` (line 110), add after `business_name`:
 
@@ -612,7 +612,7 @@ class RegisterTenantSerializer(serializers.Serializer):
     plan_id = serializers.UUIDField(required=False, allow_null=True)
 ```
 
-- [ ] **Step 4: Thread `shop_name` through `register_tenant()`**
+- [x] **Step 4: Thread `shop_name` through `register_tenant()`**
 
 In `backend/apps/master/services.py`, in `register_tenant()`, change:
 
@@ -637,7 +637,7 @@ to:
     cache.set(f"tenant_init:{tenant.id}", init_payload, timeout=3600)
 ```
 
-- [ ] **Step 5: Rename `_create_default_shop`'s first param and use it**
+- [x] **Step 5: Rename `_create_default_shop`'s first param and use it**
 
 In `backend/apps/master/services.py`, change:
 
@@ -688,7 +688,7 @@ def _create_default_shop(shop_name: str, tenant_slug: str, phone: str, email: st
     )
 ```
 
-- [ ] **Step 6: Extract `shop_name` in `do_provision_tenant()` and pass it through**
+- [x] **Step 6: Extract `shop_name` in `do_provision_tenant()` and pass it through**
 
 In `backend/apps/master/services.py`, in `do_provision_tenant()`, change:
 
@@ -763,17 +763,17 @@ to:
         )
 ```
 
-- [ ] **Step 7: Run tests to verify they pass**
+- [x] **Step 7: Run tests to verify they pass**
 
 Run: `cd backend && python -m pytest apps/master/tests/test_platform_admin.py -v`
 Expected: PASS (all tests, including the 4 new ones)
 
-- [ ] **Step 8: Run the full backend test suite to check for regressions**
+- [x] **Step 8: Run the full backend test suite to check for regressions**
 
 Run: `cd backend && python -m pytest -v`
 Expected: PASS (aside from the pre-existing weasyprint PDF-test gap, which is a known local-only environment issue, not something introduced by this change)
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add backend/apps/master/serializers.py backend/apps/master/services.py backend/apps/master/tests/test_platform_admin.py
@@ -788,7 +788,7 @@ git commit -m "feat(master): capture shop_name at registration and use it for th
 - Create: `frontend/src/lib/constants/gstStates.ts`
 - Modify: `frontend/src/app/(app)/settings/shop/page.tsx:22-28`
 
-- [ ] **Step 1: Create the shared constant**
+- [x] **Step 1: Create the shared constant**
 
 ```typescript
 // frontend/src/lib/constants/gstStates.ts
@@ -801,7 +801,7 @@ export const INDIA_STATES = [
 ];
 ```
 
-- [ ] **Step 2: Remove the inline copy and import it instead**
+- [x] **Step 2: Remove the inline copy and import it instead**
 
 In `frontend/src/app/(app)/settings/shop/page.tsx`, remove lines 22-28 (the local `const INDIA_STATES = [...]` block) and add to the imports at the top:
 
@@ -811,12 +811,12 @@ import { INDIA_STATES } from '@/lib/constants/gstStates';
 
 (This file is fully replaced/removed in Task 10, so this is a transitional step — but keeping the app buildable at every commit matters, and this page still exists until Task 10 lands.)
 
-- [ ] **Step 3: Verify the frontend still builds and the shop settings page still works**
+- [x] **Step 3: Verify the frontend still builds and the shop settings page still works**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: no new type errors
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/lib/constants/gstStates.ts "frontend/src/app/(app)/settings/shop/page.tsx"
@@ -830,7 +830,7 @@ git commit -m "refactor(frontend): extract INDIA_STATES into a shared constant"
 **Files:**
 - Modify: `frontend/src/lib/api/settings.ts`
 
-- [ ] **Step 1: Add `createShop`**
+- [x] **Step 1: Add `createShop`**
 
 In `frontend/src/lib/api/settings.ts`, in the `settingsApi` object, add after `updateShop`:
 
@@ -839,12 +839,12 @@ In `frontend/src/lib/api/settings.ts`, in the `settingsApi` object, add after `u
     apiPost<Shop>('/shops/', body),
 ```
 
-- [ ] **Step 2: Verify types compile**
+- [x] **Step 2: Verify types compile**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: no new type errors
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/lib/api/settings.ts
@@ -859,7 +859,7 @@ git commit -m "feat(frontend): add settingsApi.createShop"
 - Modify: `frontend/src/app/(marketing)/register/page.tsx`
 - Test: `frontend/src/app/(marketing)/register/__tests__/page.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```tsx
 // frontend/src/app/(marketing)/register/__tests__/page.test.tsx
@@ -942,12 +942,12 @@ describe('RegisterPage — shop name field', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/app/\(marketing\)/register/__tests__/page.test.tsx`
 Expected: FAIL — no element with label matching `/shop name/i`
 
-- [ ] **Step 3: Add `shop_name` to the schema, defaults, and auto-sync effect**
+- [x] **Step 3: Add `shop_name` to the schema, defaults, and auto-sync effect**
 
 In `frontend/src/app/(marketing)/register/page.tsx`, change the schema (line 24):
 
@@ -1001,7 +1001,7 @@ Add an auto-sync effect next to the existing slug-sync effect (line ~331), keepi
   }, [businessName, form, shopNameEdited]);
 ```
 
-- [ ] **Step 4: Add the form field**
+- [x] **Step 4: Add the form field**
 
 In the JSX, right after the "Business name" `FormField` block (line ~578, before the "Workspace URL" field), add:
 
@@ -1032,12 +1032,12 @@ In the JSX, right after the "Business name" `FormField` block (line ~578, before
                 )} />
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/app/\(marketing\)/register/__tests__/page.test.tsx`
 Expected: PASS (3 tests)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add "frontend/src/app/(marketing)/register/page.tsx" "frontend/src/app/(marketing)/register/__tests__/page.test.tsx"
@@ -1052,7 +1052,7 @@ git commit -m "feat(register): capture shop name during tenant registration"
 - Create: `frontend/src/app/(app)/settings/shops/page.tsx`
 - Test: `frontend/src/app/(app)/settings/shops/__tests__/page.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```tsx
 // frontend/src/app/(app)/settings/shops/__tests__/page.test.tsx
@@ -1170,12 +1170,12 @@ describe('ShopsPage', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/app/\(app\)/settings/shops/__tests__/page.test.tsx`
 Expected: FAIL — `Cannot find module '../page'`
 
-- [ ] **Step 3: Implement the page**
+- [x] **Step 3: Implement the page**
 
 ```tsx
 // frontend/src/app/(app)/settings/shops/page.tsx
@@ -1476,12 +1476,12 @@ function ShopsPageInner() {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/app/\(app\)/settings/shops/__tests__/page.test.tsx`
 Expected: PASS (4 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add "frontend/src/app/(app)/settings/shops/page.tsx" "frontend/src/app/(app)/settings/shops/__tests__/page.test.tsx"
@@ -1496,7 +1496,7 @@ git commit -m "feat(settings): add Shops list page with Add-shop dialog"
 - Create: `frontend/src/app/(app)/settings/shops/[id]/page.tsx`
 - Delete: `frontend/src/app/(app)/settings/shop/page.tsx`
 
-- [ ] **Step 1: Create the per-shop detail page**
+- [x] **Step 1: Create the per-shop detail page**
 
 ```tsx
 // frontend/src/app/(app)/settings/shops/[id]/page.tsx
@@ -1671,18 +1671,18 @@ function ShopDetailInner() {
 }
 ```
 
-- [ ] **Step 2: Delete the old single-shop settings page**
+- [x] **Step 2: Delete the old single-shop settings page**
 
 ```bash
 git rm "frontend/src/app/(app)/settings/shop/page.tsx"
 ```
 
-- [ ] **Step 3: Verify the frontend still builds**
+- [x] **Step 3: Verify the frontend still builds**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: no new type errors (the old page's imports of `INDIA_STATES` etc. are gone along with the file)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add "frontend/src/app/(app)/settings/shops/[id]/page.tsx"
@@ -1697,7 +1697,7 @@ git commit -m "feat(settings): add per-shop detail page, replacing the single-sh
 - Modify: `frontend/src/app/(app)/settings/layout.tsx:15`
 - Modify: `frontend/src/app/(app)/settings/page.tsx:8`
 
-- [ ] **Step 1: Update the tab definition**
+- [x] **Step 1: Update the tab definition**
 
 In `frontend/src/app/(app)/settings/layout.tsx`, change:
 
@@ -1711,7 +1711,7 @@ to:
   { label: 'Shops',             href: '/settings/shops',            permission: 'settings.shop.edit' },
 ```
 
-- [ ] **Step 2: Update the redirect order**
+- [x] **Step 2: Update the redirect order**
 
 In `frontend/src/app/(app)/settings/page.tsx`, change:
 
@@ -1725,17 +1725,17 @@ to:
   { href: '/settings/shops',            permission: 'settings.shop.edit' },
 ```
 
-- [ ] **Step 3: Run the existing nav test suite to check for regressions**
+- [x] **Step 3: Run the existing nav test suite to check for regressions**
 
 Run: `cd frontend && npx vitest run src/components/shared/__tests__/navItems.test.ts`
 Expected: PASS (this test covers `AppShell` nav items, not the Settings tabs — confirms nothing else references the old `/settings/shop` path)
 
-- [ ] **Step 4: Search for any other reference to the old path**
+- [x] **Step 4: Search for any other reference to the old path**
 
 Run: `cd frontend && grep -rn "'/settings/shop'" src`
 Expected: no output (all references now say `/settings/shops`)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add "frontend/src/app/(app)/settings/layout.tsx" "frontend/src/app/(app)/settings/page.tsx"
@@ -1748,26 +1748,26 @@ git commit -m "feat(settings): point Shop nav tab at the new Shops list page"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Run the full backend test suite**
+- [x] **Step 1: Run the full backend test suite**
 
 Run: `cd backend && python -m pytest -v`
 Expected: PASS (aside from the known local-only weasyprint PDF-test gap)
 
-- [ ] **Step 2: Run the full frontend test suite**
+- [x] **Step 2: Run the full frontend test suite**
 
 Run: `cd frontend && npx vitest run`
 Expected: PASS
 
-- [ ] **Step 3: Type-check the frontend**
+- [x] **Step 3: Type-check the frontend**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: no errors
 
-- [ ] **Step 4: Manually verify the registration flow end-to-end**
+- [x] **Step 4: Manually verify the registration flow end-to-end**
 
 Using the `/register` page in a browser (or Playwright, per this project's established E2E pattern — driving the real UI, not the API directly): fill in a business name, confirm the new Shop name field defaults to it, edit both, complete OTP verification, and confirm in Django admin / `manage.py shell` that the created `Shop.name` matches what was entered (not the business name, if edited separately).
 
-- [ ] **Step 5: Manually verify Settings → Shops**
+- [x] **Step 5: Manually verify Settings → Shops**
 
 As a Tenant Admin: navigate to Settings → Shops, confirm the existing shop(s) render as cards, click "Add shop", fill the dialog, submit, and confirm the new shop appears in both the list and the header shop switcher without a page reload. As a non-admin user (no `settings.branches.manage` permission), confirm the "Add shop" button is hidden.
 
