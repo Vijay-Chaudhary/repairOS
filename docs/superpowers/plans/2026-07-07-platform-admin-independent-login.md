@@ -967,10 +967,27 @@ Then change each of these 6 class declarations (removing their `permission_class
 - `class SubscriptionPlanListCreateView(APIView):` → `class SubscriptionPlanListCreateView(PlatformAdminAPIView):`
 - `class SubscriptionPlanDetailView(APIView):` → `class SubscriptionPlanDetailView(PlatformAdminAPIView):`
 
-- [ ] **Step 4: Run the full master test suite to verify it passes**
+- [ ] **Step 4: Run the full master test suite**
 
 Run: `cd backend && pytest apps/master/tests/ -v`
-Expected: all passed (no regressions — `test_platform_admin_cannot_access_tenant_crm` still passes since it only asserts `status_code != 200`, which holds regardless of the exact 401/403/404 returned)
+
+Expect 2 failures beyond what Steps 1-3 already fixed:
+
+```
+FAILED test_platform_admin.py::TestPlatformAdminTenants::test_non_platform_admin_cannot_list_tenants
+    assert 401 == 403
+FAILED test_platform_admin.py::TestSubscriptionPlans::test_patch_plan_requires_platform_admin
+    assert 401 == 403
+```
+
+Both tests build a **tenant-issued** token (`RefreshToken.for_user(regular_user)` where `regular_user` is a real `authentication.User`) with `is_platform_admin` manually set to `False`, then hit a `/platform/*` business endpoint expecting `403 FORBIDDEN`. Under the old design this worked because `TenantJWTAuthentication` could resolve `regular_user`'s id (a real row in tenant `authentication.User`), so authentication succeeded and `IsPlatformAdmin`'s permission check correctly denied with 403 ("authenticated, but not privileged enough").
+
+Under the new design this is no longer the right mental model: `/platform/*` only ever accepts a platform-admin-issued token, full stop. A tenant-issued token's `user_id` doesn't exist in `PlatformAdminUser` (different table, different DB) at all, so `PlatformAdminJWTAuthentication.get_user()` raises `AuthenticationFailed` — the request never gets far enough to reach permission checking. This is **401** ("not authenticated as a platform admin"), not 403 ("authenticated but forbidden") — and that's actually more correct now, not a regression: it's the identical semantics already established by Task 5's `test_me_rejects_tenant_issued_token`, which expects 401 for exactly this scenario against `/platform/auth/me/`.
+
+Update both assertions from `status.HTTP_403_FORBIDDEN` to `status.HTTP_401_UNAUTHORIZED` (one-line change each, at the `assert res.status_code == ...` line in each test). No other change needed — the tests still correctly verify "a non-platform-admin cannot reach this endpoint," just via the more accurate status code.
+
+Re-run: `cd backend && pytest apps/master/tests/ -v`
+Expected: all passed, no regressions.
 
 - [ ] **Step 5: Commit**
 
