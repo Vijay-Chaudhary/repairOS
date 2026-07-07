@@ -44,12 +44,12 @@ const brandingSchema = z.object({
 type BrandForm = z.infer<typeof brandingSchema>;
 
 const EMPTY_CREATE_FORM: CreateShopForm = {
-  name: '', code: '', address: '', city: '', state: '', state_code: '', phone: '',
+  name: '', code: '', address: '', city: '', state: '', state_code: '', phone: '+91',
 };
 
 export default function ShopsPage() {
-  const { hasPermission } = useAuthStore();
-  if (!hasPermission('settings.shop.edit')) return <ForbiddenPage />;
+  const { hasAnyPermission } = useAuthStore();
+  if (!hasAnyPermission(['settings.shop.edit', 'settings.branches.manage'])) return <ForbiddenPage />;
   return <ShopsPageInner />;
 }
 
@@ -59,12 +59,20 @@ function ShopsPageInner() {
   const { setShops } = useActiveShopStore();
   const [addOpen, setAddOpen] = useState(false);
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [stateManuallyEdited, setStateManuallyEdited] = useState(false);
 
   const { data: shops, isLoading } = useQuery({
     queryKey: qk.shops(),
     queryFn: () => settingsApi.listShops(),
     staleTime: 30_000,
   });
+
+  // Keep the Zustand active-shop store in sync with the shops list on every
+  // refetch (initial load, invalidation after create, etc.) instead of
+  // re-fetching manually inside the mutation's onSuccess.
+  useEffect(() => {
+    if (shops) setShops(shops);
+  }, [shops, setShops]);
 
   const { data: branding, isLoading: brandLoading } = useQuery({
     queryKey: qk.tenantBranding(),
@@ -93,10 +101,9 @@ function ShopsPageInner() {
     mutationFn: (v: CreateShopForm) => settingsApi.createShop({ ...v, code: v.code || undefined }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: qk.shops() });
-      const allShops = await settingsApi.listShops();
-      setShops(allShops);
       toast.success('Shop created');
       form.reset(EMPTY_CREATE_FORM);
+      setStateManuallyEdited(false);
       setDialogError(null);
       setAddOpen(false);
     },
@@ -262,7 +269,10 @@ function ShopsPageInner() {
                   <FormItem>
                     <FormLabel>State *</FormLabel>
                     <FormControl>
-                      <Select value={field.value} onValueChange={field.onChange}>
+                      <Select
+                        value={field.value}
+                        onValueChange={(v) => { setStateManuallyEdited(true); field.onChange(v); }}
+                      >
                         <SelectTrigger><SelectValue placeholder="Select state…" /></SelectTrigger>
                         <SelectContent>
                           {INDIA_STATES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
@@ -284,6 +294,7 @@ function ShopsPageInner() {
                         onChange={(e) => {
                           const code = e.target.value;
                           field.onChange(code);
+                          if (stateManuallyEdited) return;
                           const mapped = GST_STATE_CODE_MAP[code];
                           if (mapped) form.setValue('state', mapped, { shouldValidate: true });
                         }}

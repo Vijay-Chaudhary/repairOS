@@ -84,6 +84,7 @@ describe('ShopsPage', () => {
     await user.type(screen.getByLabelText(/^address/i), 'A');
     await user.type(screen.getByLabelText(/^city/i), 'B');
     await user.type(screen.getByLabelText(/gst state code/i), '29');
+    await user.clear(screen.getByLabelText(/^phone/i));
     await user.type(screen.getByLabelText(/^phone/i), '+919900000000');
     await user.click(screen.getByRole('button', { name: /create shop/i }));
 
@@ -104,6 +105,7 @@ describe('ShopsPage', () => {
     await user.type(screen.getByLabelText(/^address/i), 'A');
     await user.type(screen.getByLabelText(/^city/i), 'B');
     await user.type(screen.getByLabelText(/gst state code/i), '29');
+    await user.clear(screen.getByLabelText(/^phone/i));
     await user.type(screen.getByLabelText(/^phone/i), '+919900000000');
     await user.click(screen.getByRole('button', { name: /create shop/i }));
 
