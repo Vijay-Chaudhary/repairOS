@@ -18,6 +18,13 @@ done
 echo "==> [seed] Running master DB migrations..."
 python manage.py migrate --database=default --noinput
 
+echo "==> [seed] Creating platform admin (idempotent)..."
+python manage.py create_platform_admin \
+  --email "platform@repaiross.app" \
+  --full-name "Platform Admin" \
+  --password "Demo@1234!" \
+  2>&1 | grep -v "already exists" || true
+
 echo "==> [seed] Migrating all tenant databases..."
 python manage.py migrate_all_tenants || echo "==> [seed] WARNING: some tenant migrations failed — check above."
 

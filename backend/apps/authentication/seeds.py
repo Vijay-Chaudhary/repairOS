@@ -1,4 +1,4 @@
-"""Demo seed: role users (admin normalisation, one user per role, platform admin)."""
+"""Demo seed: role users (admin normalisation, one user per role)."""
 from django.core.management.base import CommandError
 
 from core.seeding import SeedContext, Seeder, register
@@ -82,18 +82,6 @@ class UsersDemoSeeder(Seeder):
                 tech_idx += 1
                 key = f"technician_{tech_idx}"
             users[key] = user
-
-        # Seed platform admin user (stored in tenant DB, is_platform_admin=True)
-        platform_admin, created = User.objects.get_or_create(
-            email="platform@repaiross.app",
-            defaults={"phone": "+919999999999", "full_name": "Platform Admin", "is_active": True,
-                      "is_platform_admin": True},
-        )
-        platform_admin.is_platform_admin = True
-        platform_admin.set_password(DEMO_PASSWORD)
-        platform_admin.failed_login_attempts = 0
-        platform_admin.locked_until = None
-        platform_admin.save(update_fields=["is_platform_admin", "password", "failed_login_attempts", "locked_until"])
 
         # Ensure role-permission defaults are always up-to-date on every seed run
         from master.services import _seed_roles_and_permissions
