@@ -721,11 +721,30 @@ Expected: FAIL — 404 on refresh/logout/me
 
 - [ ] **Step 3: Add the views**
 
-Append to `backend/apps/master/auth_views.py`:
+First, add back the imports that Task 4 deliberately omitted from `backend/apps/master/auth_views.py` because they were unused at the time (this task now uses all of them):
+
+```python
+from django.utils import timezone
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework_simplejwt.exceptions import TokenError
+```
+
+(`AllowAny` is already imported — extend that existing import line to include `IsAuthenticated` rather than adding a second line.) Also add `PlatformAdminJWTAuthentication` back into the existing `from .tokens import _build_platform_admin_claims` line (Task 4 removed it since nothing used it at the time; `PlatformAdminLogoutView` and `PlatformAdminMeView` below need it):
+
+```python
+from .tokens import PlatformAdminJWTAuthentication, _build_platform_admin_claims
+```
+
+Then append to `backend/apps/master/auth_views.py`:
 
 ```python
 class PlatformAdminTokenRefreshView(APIView):
-    authentication_classes = [PlatformAdminJWTAuthentication]
+    # No authentication class — same reasoning as PlatformAdminLoginView in
+    # Task 4: this view never reads request.user (it resolves the admin from
+    # the refresh cookie's own claims), and refresh is called precisely when
+    # the access token has expired, so requiring a valid Bearer header here
+    # would break the normal refresh flow, not just an edge case.
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request):
