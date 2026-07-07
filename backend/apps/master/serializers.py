@@ -133,3 +133,51 @@ class RegisterVerifySerializer(serializers.Serializer):
         regex=r"^[0-9]{6}$",
         error_messages={"invalid": "Email code must be exactly 6 digits."},
     )
+
+
+class PlatformAdminLoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        from django.conf import settings
+        from django.utils import timezone
+
+        from core.exceptions import AccountLocked
+
+        from .models import PlatformAdminUser
+
+        # Deliberately generic errors (no "no account found" distinction) — these
+        # are superuser accounts, so we don't want to help enumerate valid emails.
+        generic_error = serializers.ValidationError({"non_field_errors": ["Invalid credentials."]})
+
+        try:
+            admin = PlatformAdminUser.objects.using("default").get(email=attrs["email"].lower())
+        except PlatformAdminUser.DoesNotExist:
+            raise generic_error
+
+        if admin.is_locked:
+            raise AccountLocked(admin.locked_until)
+
+        if not admin.check_password(attrs["password"]):
+            admin.failed_login_attempts += 1
+            max_attempts = settings.AUTH_MAX_FAILED_ATTEMPTS
+            if admin.failed_login_attempts >= max_attempts:
+                admin.locked_until = timezone.now() + timezone.timedelta(
+                    minutes=settings.AUTH_LOCKOUT_DURATION_MINUTES
+                )
+                admin.save(using="default", update_fields=["failed_login_attempts", "locked_until"])
+                raise AccountLocked(admin.locked_until)
+            admin.save(using="default", update_fields=["failed_login_attempts"])
+            raise generic_error
+
+        if not admin.is_active:
+            raise serializers.ValidationError({"non_field_errors": ["This account has been deactivated."]})
+
+        if admin.failed_login_attempts > 0:
+            admin.failed_login_attempts = 0
+            admin.locked_until = None
+            admin.save(using="default", update_fields=["failed_login_attempts", "locked_until"])
+
+        attrs["admin"] = admin
+        return attrs

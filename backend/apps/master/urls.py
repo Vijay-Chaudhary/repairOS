@@ -1,8 +1,9 @@
 from django.urls import path
 
-from . import views
+from . import auth_views, views
 
 urlpatterns = [
+    path("platform/auth/login/", auth_views.PlatformAdminLoginView.as_view(), name="platform-admin-login"),
     path("register/", views.RegisterView.as_view(), name="register"),
     path("register/verify/", views.RegisterVerifyView.as_view(), name="register-verify"),
     path("register/status/", views.RegistrationStatusView.as_view(), name="register-status"),

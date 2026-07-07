@@ -5,6 +5,8 @@ See docs/superpowers/specs/2026-07-07-platform-admin-independent-login-design.md
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from rest_framework import status
+from rest_framework.test import APIClient
 
 
 class TestPlatformAdminUserModel:
@@ -94,3 +96,56 @@ class TestPlatformAdminJWTAuthentication:
 
         with pytest.raises(AuthenticationFailed):
             PlatformAdminJWTAuthentication().get_user(token)
+
+
+@pytest.fixture
+def platform_admin(db):
+    from master.models import PlatformAdminUser
+
+    admin = PlatformAdminUser(email="admin@repaiross.app", full_name="Root Admin")
+    admin.set_password("StrongPass@123")
+    admin.save(using="default")
+    return admin
+
+
+@pytest.fixture
+def api_client():
+    return APIClient()
+
+
+class TestPlatformAdminLoginView:
+    url = "/api/v1/platform/auth/login/"
+
+    def test_success_returns_access_and_sets_cookie(self, api_client, platform_admin):
+        res = api_client.post(self.url, {"email": platform_admin.email, "password": "StrongPass@123"})
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data["access"]
+        assert res.data["admin"]["email"] == platform_admin.email
+        assert "platform_refresh_token" in res.cookies
+
+    def test_writes_audit_log(self, api_client, platform_admin):
+        from master.models import AuditLogMaster
+
+        api_client.post(self.url, {"email": platform_admin.email, "password": "StrongPass@123"})
+        assert AuditLogMaster.objects.using("default").filter(
+            event_type="platform_admin.login", actor_email=platform_admin.email
+        ).exists()
+
+    def test_wrong_password_increments_failed_attempts(self, api_client, platform_admin):
+        res = api_client.post(self.url, {"email": platform_admin.email, "password": "wrong"})
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        platform_admin.refresh_from_db()
+        assert platform_admin.failed_login_attempts == 1
+
+    def test_locks_after_max_attempts(self, api_client, platform_admin):
+        from django.conf import settings
+
+        max_attempts = settings.AUTH_MAX_FAILED_ATTEMPTS
+        for _ in range(max_attempts):
+            api_client.post(self.url, {"email": platform_admin.email, "password": "wrong"})
+        res = api_client.post(self.url, {"email": platform_admin.email, "password": "StrongPass@123"})
+        assert res.status_code == status.HTTP_423_LOCKED
+
+    def test_unknown_email_returns_generic_error(self, api_client, db):
+        res = api_client.post(self.url, {"email": "nobody@repaiross.app", "password": "whatever"})
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
