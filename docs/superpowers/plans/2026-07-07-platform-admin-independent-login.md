@@ -257,7 +257,7 @@ Append to `test_platform_admin_auth.py`:
 ```python
 class TestPlatformAdminJWTAuthentication:
     def test_get_user_resolves_platform_admin_from_token(self, db):
-        from rest_framework_simplejwt.tokens import RefreshToken
+        from rest_framework_simplejwt.tokens import AccessToken
 
         from master.models import PlatformAdminUser
         from master.tokens import PlatformAdminJWTAuthentication
@@ -266,7 +266,11 @@ class TestPlatformAdminJWTAuthentication:
         admin.set_password("x")
         admin.save(using="default")
 
-        access = RefreshToken.for_user(admin).access_token
+        # AccessToken.for_user() resolves to the base Token.for_user() (AccessToken
+        # doesn't mix in BlacklistMixin), so this is safe to call directly even
+        # though `admin` isn't AUTH_USER_MODEL. Do NOT use RefreshToken.for_user()
+        # here or anywhere platform-admin tokens are issued — see the note below.
+        access = AccessToken.for_user(admin)
         resolved = PlatformAdminJWTAuthentication().get_user(access)
         assert resolved.id == admin.id
         assert resolved.email == "tok@repaiross.app"
@@ -300,8 +304,8 @@ Create `backend/apps/master/tokens.py`:
 JWT auth for platform admin — separate from apps/authentication/tokens.py.
 
 Platform-admin access/refresh tokens carry: user_id (the PlatformAdminUser's
-id, set automatically by RefreshToken.for_user), is_platform_admin, token_type,
-token_family. They never carry tenant_slug — that's the whole point.
+id), is_platform_admin, token_type, token_family. They never carry tenant_slug
+— that's the whole point.
 """
 from typing import Any
 
@@ -341,6 +345,15 @@ class PlatformAdminJWTAuthentication(JWTAuthentication):
 
 Run: `cd backend && pytest apps/master/tests/test_platform_admin_auth.py::TestPlatformAdminJWTAuthentication -v`
 Expected: 2 passed
+
+**Important gotcha for Tasks 4 and 5 (not this task — noted here because this is where it's first relevant):** `RefreshToken.for_user(user)` — used throughout the tenant auth stack in `apps/authentication/views.py` — goes through `BlacklistMixin.for_user()`, which unconditionally creates a `token_blacklist.OutstandingToken` row with `user=<the actual user object>`. That FK is hard-coded to `settings.AUTH_USER_MODEL` (`authentication.User`), so passing a `PlatformAdminUser` instance raises `ValueError: Cannot assign ...: "OutstandingToken.user" must be a "User" instance`. `AccessToken` does **not** mix in `BlacklistMixin`, so `AccessToken.for_user(admin)` is safe (confirmed above) — but wherever Tasks 4/5 need an actual `RefreshToken` for a platform admin, they must NOT call `RefreshToken.for_user(admin)`. Instead construct it manually:
+
+```python
+refresh = RefreshToken()
+refresh[api_settings.USER_ID_CLAIM] = str(admin.id)
+```
+
+This produces an equivalent token (same auto-populated `exp`/`iat`/`jti`/`token_type` claims that a fresh `RefreshToken()` always gets) without ever touching `OutstandingToken`. Calling `.blacklist()` on such a token later (for logout/rotation) is safe and requires no change — `BlacklistMixin.blacklist()` does its own `get_user_model().objects.get(id=...)` lookup against tenant `authentication.User`, catches `DoesNotExist`, and falls back to `user=None` (the FK is nullable), so it never raises for a platform-admin token's jti. Task 4's `_issue_tokens` and Task 5's `PlatformAdminTokenRefreshView` below have already been written with this fix applied.
 
 - [ ] **Step 5: Commit**
 
@@ -501,6 +514,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import AuditLogMaster, PlatformAdminTokenFamily, PlatformAdminUser
@@ -549,7 +563,15 @@ def _write_audit(request, admin_email: str, event_type: str) -> None:
 
 
 def _issue_tokens(admin: PlatformAdminUser) -> tuple[str, str]:
-    refresh = RefreshToken.for_user(admin)
+    # Deliberately NOT RefreshToken.for_user(admin) — that goes through
+    # BlacklistMixin.for_user(), which creates a token_blacklist.OutstandingToken
+    # row with user=admin. That FK is hard-coded to AUTH_USER_MODEL
+    # (authentication.User), so it raises ValueError for a PlatformAdminUser.
+    # Building the token manually sidesteps OutstandingToken bookkeeping
+    # entirely — session lifecycle is tracked via PlatformAdminTokenFamily
+    # instead. See the gotcha note in Task 3.
+    refresh = RefreshToken()
+    refresh[api_settings.USER_ID_CLAIM] = str(admin.id)
     access = refresh.access_token  # property creates a new instance each call — access once
     family_id = uuid.uuid4()
 
@@ -759,7 +781,11 @@ class PlatformAdminTokenRefreshView(APIView):
             _clear_refresh_cookie(response)
             return response
 
-        new_refresh = RefreshToken.for_user(admin)
+        # Not RefreshToken.for_user(admin) — see the gotcha note in Task 3
+        # (BlacklistMixin.for_user() would try to FK an OutstandingToken to a
+        # PlatformAdminUser, which isn't AUTH_USER_MODEL, and raise ValueError).
+        new_refresh = RefreshToken()
+        new_refresh[api_settings.USER_ID_CLAIM] = str(admin.id)
         new_access = new_refresh.access_token
         claims = _build_platform_admin_claims()
         for key, value in claims.items():
@@ -868,9 +894,13 @@ def platform_admin_user(db):
 @pytest.fixture
 def platform_client(db, platform_admin_user):
     from rest_framework.test import APIClient
-    from rest_framework_simplejwt.tokens import RefreshToken
+    from rest_framework_simplejwt.tokens import AccessToken
 
-    access = RefreshToken.for_user(platform_admin_user).access_token
+    # AccessToken.for_user() (not RefreshToken.for_user()) — AccessToken doesn't
+    # mix in BlacklistMixin, so it's safe to call directly on a PlatformAdminUser.
+    # See the gotcha note in Task 3: RefreshToken.for_user() would try to FK an
+    # OutstandingToken to a user that isn't AUTH_USER_MODEL and raise ValueError.
+    access = AccessToken.for_user(platform_admin_user)
     access["is_platform_admin"] = True
     access["token_type"] = "platform_admin"
     client = APIClient()
