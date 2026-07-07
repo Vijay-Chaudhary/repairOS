@@ -2,11 +2,13 @@
 
 import { useEffect } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
+import { Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -18,6 +20,7 @@ import { settingsApi } from '@/lib/api/settings';
 import { qk } from '@/lib/query/keys';
 import { ApiError } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/stores/authStore';
+import { useActiveShopStore } from '@/lib/stores/activeShopStore';
 import { INDIA_STATES } from '@/lib/constants/gstStates';
 
 const shopSchema = z.object({
@@ -42,7 +45,7 @@ function ShopDetailInner() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
 
-  const { data: shop, isLoading } = useQuery({
+  const { data: shop, isLoading, isError } = useQuery({
     queryKey: qk.shop(id),
     queryFn: () => settingsApi.getShop(id),
     staleTime: 60_000,
@@ -72,10 +75,39 @@ function ShopDetailInner() {
     onSuccess: (updated) => {
       qc.setQueryData(qk.shop(id), updated);
       qc.invalidateQueries({ queryKey: qk.shops() });
+      // The active-shop store (header shop-switcher, etc.) is normally kept in
+      // sync by the Shops list page's useQuery(qk.shops()) effect — but that
+      // only runs while that page is mounted. Since we already have the fresh
+      // shop here, patch the store directly so a rename doesn't go stale until
+      // the user revisits /settings/shops.
+      const { shops, setShops } = useActiveShopStore.getState();
+      setShops(shops.map((s) => (s.id === updated.id ? { ...s, name: updated.name, address: updated.address } : s)));
       toast.success('Shop profile saved');
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : 'Failed'),
   });
+
+  if (isError) {
+    return (
+      <div className="flex-1 overflow-auto p-4 md:p-6">
+        <div className="flex flex-col items-center justify-center py-24 px-4 text-center max-w-2xl mx-auto">
+          <div className="rounded-full bg-[var(--danger)]/10 p-6 mb-4">
+            <Building2 className="h-10 w-10 text-[var(--danger)]" />
+          </div>
+          <h2 className="text-h1 text-[var(--text)]">Shop not found</h2>
+          <p className="mt-2 text-body-sm text-[var(--text-muted)] max-w-sm">
+            This shop doesn&apos;t exist or you no longer have access to it.
+          </p>
+          <Link
+            href="/settings/shops"
+            className="mt-6 inline-flex items-center justify-center h-11 px-4 rounded-md border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] text-sm font-medium hover:bg-[var(--surface-2)] transition-colors"
+          >
+            Back to Shops
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-auto p-4 md:p-6 space-y-6 max-w-2xl mx-auto">
