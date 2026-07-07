@@ -63,3 +63,34 @@ class TestCreatePlatformAdminCommand:
                 "create_platform_admin",
                 email="dup@repaiross.app", full_name="Second", password="Other@123",
             )
+
+
+class TestPlatformAdminJWTAuthentication:
+    def test_get_user_resolves_platform_admin_from_token(self, db):
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        from master.models import PlatformAdminUser
+        from master.tokens import PlatformAdminJWTAuthentication
+
+        admin = PlatformAdminUser(email="tok@repaiross.app", full_name="Tok Admin")
+        admin.set_password("x")
+        admin.save(using="default")
+
+        access = AccessToken.for_user(admin)
+        resolved = PlatformAdminJWTAuthentication().get_user(access)
+        assert resolved.id == admin.id
+        assert resolved.email == "tok@repaiross.app"
+
+    def test_get_user_rejects_unknown_id(self, db):
+        import uuid
+
+        from rest_framework_simplejwt.exceptions import AuthenticationFailed
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        from master.tokens import PlatformAdminJWTAuthentication
+
+        token = AccessToken()
+        token["user_id"] = str(uuid.uuid4())
+
+        with pytest.raises(AuthenticationFailed):
+            PlatformAdminJWTAuthentication().get_user(token)
