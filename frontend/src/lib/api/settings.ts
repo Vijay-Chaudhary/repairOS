@@ -91,6 +91,9 @@ export const settingsApi = {
   updateShop: (id: string, body: Partial<Pick<Shop, 'name' | 'address' | 'city' | 'state' | 'state_code' | 'phone' | 'email' | 'gstin' | 'working_hours'>>) =>
     apiPatch<Shop>(`/shops/${id}/`, body),
 
+  createShop: (body: { name: string; code?: string; address: string; city: string; state: string; state_code: string; phone: string }) =>
+    apiPost<Shop>('/shops/', body),
+
   getTenantBranding: () =>
     apiGet<TenantBranding>('/tenants/me/'),
 
