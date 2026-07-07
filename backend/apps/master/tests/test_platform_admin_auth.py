@@ -3,6 +3,8 @@ Platform admin independent auth — model, command, and endpoint tests.
 See docs/superpowers/specs/2026-07-07-platform-admin-independent-login-design.md.
 """
 import pytest
+from django.core.management import call_command
+from django.core.management.base import CommandError
 
 
 class TestPlatformAdminUserModel:
@@ -37,3 +39,27 @@ class TestPlatformAdminUserModel:
         admin.set_password("x")
         admin.save(using="default")
         assert admin.is_locked is True
+
+
+class TestCreatePlatformAdminCommand:
+    def test_creates_admin(self, db):
+        from master.models import PlatformAdminUser
+
+        call_command(
+            "create_platform_admin",
+            email="new@repaiross.app", full_name="New Admin", password="Secret@123",
+        )
+        admin = PlatformAdminUser.objects.using("default").get(email="new@repaiross.app")
+        assert admin.check_password("Secret@123")
+        assert admin.full_name == "New Admin"
+
+    def test_rejects_duplicate_email(self, db):
+        call_command(
+            "create_platform_admin",
+            email="dup@repaiross.app", full_name="First", password="Secret@123",
+        )
+        with pytest.raises(CommandError, match="already exists"):
+            call_command(
+                "create_platform_admin",
+                email="dup@repaiross.app", full_name="Second", password="Other@123",
+            )
