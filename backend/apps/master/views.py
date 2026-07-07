@@ -28,6 +28,7 @@ from .serializers import (
     TenantDetailSerializer,
     TenantListSerializer,
 )
+from .tokens import PlatformAdminJWTAuthentication
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,13 @@ class IsPlatformAdmin(BasePermission):
         if token is None:
             return False
         return bool(token.get("is_platform_admin"))
+
+
+class PlatformAdminAPIView(APIView):
+    """Base for /platform/* business endpoints — requires a valid platform-admin JWT."""
+
+    authentication_classes = [PlatformAdminJWTAuthentication]
+    permission_classes = [IsAuthenticated, IsPlatformAdmin]
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -153,9 +161,7 @@ class RegistrationStatusView(APIView):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-class TenantListView(APIView):
-    permission_classes = [IsAuthenticated, IsPlatformAdmin]
-
+class TenantListView(PlatformAdminAPIView):
     def get(self, request: Request) -> Response:
         from .models import TenantSubscription
         qs = (
@@ -191,9 +197,7 @@ class TenantListView(APIView):
         return paginator.get_paginated_response(data)
 
 
-class TenantDetailView(APIView):
-    permission_classes = [IsAuthenticated, IsPlatformAdmin]
-
+class TenantDetailView(PlatformAdminAPIView):
     def _get_tenant(self, tenant_id):
         try:
             return Tenant.objects.using("default").get(id=tenant_id)
@@ -211,9 +215,7 @@ class TenantDetailView(APIView):
         return Response({"detail": "Use /suspend/ endpoint."}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class TenantSuspendView(APIView):
-    permission_classes = [IsAuthenticated, IsPlatformAdmin]
-
+class TenantSuspendView(PlatformAdminAPIView):
     def post(self, request: Request, tenant_id) -> Response:
         try:
             tenant = Tenant.objects.using("default").get(id=tenant_id)
@@ -226,9 +228,7 @@ class TenantSuspendView(APIView):
         return Response(TenantDetailSerializer(tenant).data)
 
 
-class TenantReactivateView(APIView):
-    permission_classes = [IsAuthenticated, IsPlatformAdmin]
-
+class TenantReactivateView(PlatformAdminAPIView):
     def post(self, request: Request, tenant_id) -> Response:
         try:
             tenant = Tenant.objects.using("default").get(id=tenant_id)
@@ -252,9 +252,7 @@ class TenantReactivateView(APIView):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
-class SubscriptionPlanListCreateView(APIView):
-    permission_classes = [IsAuthenticated, IsPlatformAdmin]
-
+class SubscriptionPlanListCreateView(PlatformAdminAPIView):
     def get(self, request: Request) -> Response:
         plans = SubscriptionPlan.objects.using("default").order_by("price_monthly_inr")
         return Response({"items": SubscriptionPlanSerializer(plans, many=True).data})
@@ -266,9 +264,7 @@ class SubscriptionPlanListCreateView(APIView):
         return Response(SubscriptionPlanSerializer(plan).data, status=status.HTTP_201_CREATED)
 
 
-class SubscriptionPlanDetailView(APIView):
-    permission_classes = [IsAuthenticated, IsPlatformAdmin]
-
+class SubscriptionPlanDetailView(PlatformAdminAPIView):
     def _get_plan(self, plan_id):
         try:
             return SubscriptionPlan.objects.using("default").get(id=plan_id)

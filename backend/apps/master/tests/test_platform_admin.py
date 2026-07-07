@@ -34,22 +34,26 @@ from rest_framework import status
 
 @pytest.fixture
 def platform_admin_user(db):
-    from authentication.models import User
-    return User.objects.create_user(
-        email="platform@repaiross.app", phone="+919000000001",
-        full_name="Platform Admin", password="adminpass",
-        is_platform_admin=True,
-    )
+    from master.models import PlatformAdminUser
+
+    admin = PlatformAdminUser(email="platform@repaiross.app", full_name="Platform Admin")
+    admin.set_password("adminpass")
+    admin.save(using="default")
+    return admin
 
 
 @pytest.fixture
 def platform_client(db, platform_admin_user):
     from rest_framework.test import APIClient
-    from rest_framework_simplejwt.tokens import RefreshToken
-    refresh = RefreshToken.for_user(platform_admin_user)
-    access = refresh.access_token
+    from rest_framework_simplejwt.tokens import AccessToken
+
+    # AccessToken.for_user() (not RefreshToken.for_user()) — AccessToken doesn't
+    # mix in BlacklistMixin, so it's safe to call directly on a PlatformAdminUser.
+    # See the gotcha note in Task 3: RefreshToken.for_user() would try to FK an
+    # OutstandingToken to a user that isn't AUTH_USER_MODEL and raise ValueError.
+    access = AccessToken.for_user(platform_admin_user)
     access["is_platform_admin"] = True
-    access["is_tenant_wide"] = True
+    access["admin_token_type"] = "platform_admin"  # NOT "token_type" — see Task 3's tokens.py note
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {str(access)}")
     return client
@@ -598,7 +602,7 @@ class TestPlatformAdminTenants:
         client = APIClient()
         client.credentials(HTTP_AUTHORIZATION=f"Bearer {str(access)}")
         res = client.get(self.list_url)
-        assert res.status_code == status.HTTP_403_FORBIDDEN
+        assert res.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -734,7 +738,7 @@ class TestSubscriptionPlans:
             {"price_monthly_inr": "0.00"},
             format="json",
         )
-        assert res.status_code == status.HTTP_403_FORBIDDEN
+        assert res.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 # ──────────────────────────────────────────────────────────────────────────────
