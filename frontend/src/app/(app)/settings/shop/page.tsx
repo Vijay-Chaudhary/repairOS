@@ -18,14 +18,7 @@ import { qk } from '@/lib/query/keys';
 import { useActiveShopStore } from '@/lib/stores/activeShopStore';
 import { ApiError } from '@/lib/api/client';
 import { useAuthStore } from '@/lib/stores/authStore';
-
-const INDIA_STATES = [
-  'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Goa','Gujarat',
-  'Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh',
-  'Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab',
-  'Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh',
-  'Uttarakhand','West Bengal','Delhi','Jammu & Kashmir','Ladakh','Puducherry','Chandigarh',
-];
+import { INDIA_STATES } from '@/lib/constants/gstStates';
 
 const shopSchema = z.object({
   name:       z.string().min(2, 'Required'),
