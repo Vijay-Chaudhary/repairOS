@@ -149,3 +149,13 @@ class TestPlatformAdminLoginView:
     def test_unknown_email_returns_generic_error(self, api_client, db):
         res = api_client.post(self.url, {"email": "nobody@repaiross.app", "password": "whatever"})
         assert res.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_succeeds_with_stale_bearer_header_attached(self, api_client, platform_admin):
+        # Regression: authentication_classes must be empty on this view. DRF runs
+        # authentication in APIView.initial() before permission_classes is even
+        # consulted, so a stale/garbage Authorization header must not block a
+        # fresh login attempt (e.g. silent-refresh-then-retry, or leftover token
+        # in the client after expiry).
+        api_client.credentials(HTTP_AUTHORIZATION="Bearer garbage-token")
+        res = api_client.post(self.url, {"email": platform_admin.email, "password": "StrongPass@123"})
+        assert res.status_code == status.HTTP_200_OK

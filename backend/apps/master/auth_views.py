@@ -18,7 +18,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import AuditLogMaster, PlatformAdminTokenFamily, PlatformAdminUser
 from .serializers import PlatformAdminLoginSerializer
-from .tokens import PlatformAdminJWTAuthentication, _build_platform_admin_claims
+from .tokens import _build_platform_admin_claims
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,13 @@ def _issue_tokens(admin: PlatformAdminUser) -> tuple[str, str]:
 
 
 class PlatformAdminLoginView(APIView):
-    authentication_classes = [PlatformAdminJWTAuthentication]
+    # No authentication class needed — this view never reads request.user.
+    # DRF runs authentication in APIView.initial() before dispatch(), regardless
+    # of permission_classes, so leaving PlatformAdminJWTAuthentication wired up
+    # here would 401 a login attempt that happens to carry a stale/expired/
+    # garbage Authorization header (e.g. a silent-refresh-then-retry flow, or
+    # leftover token in the client after expiry).
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request):
