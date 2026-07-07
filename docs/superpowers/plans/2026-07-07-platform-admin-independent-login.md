@@ -876,7 +876,7 @@ In `backend/apps/master/urls.py`, add below the login path:
 - [ ] **Step 5: Run test to verify it passes**
 
 Run: `cd backend && pytest apps/master/tests/test_platform_admin_auth.py -v`
-Expected: all passed (14 tests across the file)
+Expected: all passed (17 tests across the file — 13 from Tasks 1-4 plus these 4 new ones)
 
 - [ ] **Step 6: Commit**
 
