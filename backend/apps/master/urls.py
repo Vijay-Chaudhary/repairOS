@@ -4,6 +4,9 @@ from . import auth_views, views
 
 urlpatterns = [
     path("platform/auth/login/", auth_views.PlatformAdminLoginView.as_view(), name="platform-admin-login"),
+    path("platform/auth/token/refresh/", auth_views.PlatformAdminTokenRefreshView.as_view(), name="platform-admin-refresh"),
+    path("platform/auth/logout/", auth_views.PlatformAdminLogoutView.as_view(), name="platform-admin-logout"),
+    path("platform/auth/me/", auth_views.PlatformAdminMeView.as_view(), name="platform-admin-me"),
     path("register/", views.RegisterView.as_view(), name="register"),
     path("register/verify/", views.RegisterVerifyView.as_view(), name="register-verify"),
     path("register/status/", views.RegistrationStatusView.as_view(), name="register-status"),

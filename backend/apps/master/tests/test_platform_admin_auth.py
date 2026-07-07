@@ -159,3 +159,57 @@ class TestPlatformAdminLoginView:
         api_client.credentials(HTTP_AUTHORIZATION="Bearer garbage-token")
         res = api_client.post(self.url, {"email": platform_admin.email, "password": "StrongPass@123"})
         assert res.status_code == status.HTTP_200_OK
+
+
+class TestPlatformAdminMeAndSessions:
+    login_url = "/api/v1/platform/auth/login/"
+    refresh_url = "/api/v1/platform/auth/token/refresh/"
+    logout_url = "/api/v1/platform/auth/logout/"
+    me_url = "/api/v1/platform/auth/me/"
+
+    def _login(self, api_client, platform_admin):
+        res = api_client.post(self.login_url, {"email": platform_admin.email, "password": "StrongPass@123"})
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {res.data['access']}")
+        return res
+
+    def test_me_returns_profile(self, api_client, platform_admin):
+        self._login(api_client, platform_admin)
+        res = api_client.get(self.me_url)
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data["email"] == platform_admin.email
+
+    def test_me_rejects_tenant_issued_token(self, api_client, db):
+        from authentication.models import User
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        tenant_user = User.objects.create_user(
+            email="tenant@example.com", phone="+919876500000",
+            full_name="Tenant User", password="whatever",
+        )
+        access = RefreshToken.for_user(tenant_user).access_token
+        access["tenant_slug"] = "demo"
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {str(access)}")
+        res = api_client.get(self.me_url)
+        assert res.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_refresh_rotates_token(self, api_client, platform_admin):
+        self._login(api_client, platform_admin)
+        res = api_client.post(self.refresh_url, {})
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data["access"]
+
+    def test_logout_writes_audit_log_and_revokes_family(self, api_client, platform_admin):
+        from master.models import AuditLogMaster, PlatformAdminTokenFamily
+
+        self._login(api_client, platform_admin)
+        old_cookie = api_client.cookies["platform_refresh_token"].value
+
+        res = api_client.post(self.logout_url, {})
+        assert res.status_code == status.HTTP_200_OK
+        assert AuditLogMaster.objects.using("default").filter(event_type="platform_admin.logout").exists()
+
+        # Cookie was revoked — presenting it again to refresh must fail.
+        api_client.cookies["platform_refresh_token"] = old_cookie
+        res = api_client.post(self.refresh_url, {})
+        assert res.status_code == status.HTTP_401_UNAUTHORIZED
+        assert PlatformAdminTokenFamily.objects.using("default").get().is_revoked
