@@ -30,7 +30,11 @@ logger = logging.getLogger(__name__)
 _REFRESH_COOKIE = "platform_refresh_token"
 _COOKIE_PARAMS = {
     "httponly": True,
-    "secure": not getattr(settings, "DEBUG", False),
+    # Track SESSION_COOKIE_SECURE (env-driven, default True in production) so a
+    # plain-HTTP deploy — e.g. the bare-IP staging box — can store this cookie.
+    # Over real HTTPS this stays True and behaviour is unchanged. Mirrors the
+    # tenant auth cookie in authentication/views.py.
+    "secure": getattr(settings, "SESSION_COOKIE_SECURE", not getattr(settings, "DEBUG", False)),
     "samesite": "Strict",
     "max_age": int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()),
     "path": "/api/v1/platform/auth/",
