@@ -108,8 +108,13 @@ class Command(BaseCommand):
         self.stdout.write(f"  ✓ Tenant Admin created — email: {email}")
 
         clear_tenant_context()
-        tenant.status = Tenant.Status.ACTIVE
-        tenant.save(using="default", update_fields=["status", "updated_at"])
+        # Wrap the activation in an explicit atomic block so the status flip is
+        # COMMITTED even though _create_pg_resources left the master connection's
+        # autocommit desynced. Mirrors services._provision_tenant (the Celery
+        # path); without this the tenant is stranded in PROVISIONING.
+        with transaction.atomic(using="default"):
+            tenant.status = Tenant.Status.ACTIVE
+            tenant.save(using="default", update_fields=["status", "updated_at"])
 
         self.stdout.write(self.style.SUCCESS(
             f"\nTenant '{slug}' is ready.\n"
