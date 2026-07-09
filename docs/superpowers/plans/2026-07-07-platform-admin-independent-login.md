@@ -1760,32 +1760,32 @@ git commit -m "feat(platform): wire PlatformLayout to the independent platform-a
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Start the stack**
+- [x] **Step 1: Start the stack**
 
 Run: `docker compose up --build -d` (from repo root)
 Expected: backend, frontend, postgres, redis containers healthy; entrypoint logs show `Platform admin 'platform@repaiross.app' created.` (or `already exists` on subsequent runs)
 
-- [ ] **Step 2: Confirm the old path no longer works**
+- [x] **Step 2: Confirm the old path no longer works**
 
 In a browser, go to `http://localhost:3000/login`, enter workspace `demo`, email `platform@repaiross.app`, password `Demo@1234!`.
 Expected: login fails (`Email or password is incorrect` or `Workspace not found` depending on whether the row still exists post-seed-change) — this account no longer lives in the `demo` tenant DB.
 
-- [ ] **Step 3: Confirm the new independent login works**
+- [x] **Step 3: Confirm the new independent login works**
 
 Go to `http://localhost:3000/admin/login`. Note there is no workspace field. Enter email `platform@repaiross.app`, password `Demo@1234!`, submit.
 Expected: redirected to `/platform/tenants`, tenant list loads, "Platform Admin" nav badge visible, admin's full name shown top-right.
 
-- [ ] **Step 4: Confirm a tenant user cannot use the admin login**
+- [x] **Step 4: Confirm a tenant user cannot use the admin login**
 
 At `http://localhost:3000/admin/login`, try `admin@demo.com` / `Demo@1234!` (a regular tenant admin).
 Expected: rejected with "Email or password is incorrect" (this account doesn't exist in the master DB).
 
-- [ ] **Step 5: Confirm session persistence**
+- [x] **Step 5: Confirm session persistence**
 
 While logged in at `/platform/tenants`, refresh the page.
 Expected: stays logged in (silent refresh via the `platform_refresh_token` cookie), tenant list still loads.
 
-- [ ] **Step 6: Confirm logout**
+- [x] **Step 6: Confirm logout**
 
 Click "Sign out".
 Expected: redirected to `/admin/login`; navigating directly to `/platform/tenants` afterward redirects back to `/admin/login`.
