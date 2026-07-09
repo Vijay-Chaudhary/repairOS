@@ -28,4 +28,10 @@ if [[ "$state" != "healthy" ]]; then
   exit 1
 fi
 
+# The backend/frontend containers are recreated on every build, so nginx (which
+# isn't recreated) is left holding their old upstream IPs → 502s. Restart it so
+# it re-resolves against the fresh containers.
+log "Restarting nginx to pick up fresh upstream IPs"
+"${COMPOSE[@]}" restart nginx
+
 log "Stack up. Reachable at http://200.97.165.67"
