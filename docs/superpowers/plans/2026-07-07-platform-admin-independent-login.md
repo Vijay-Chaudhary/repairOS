@@ -20,7 +20,7 @@
 - Modify: `backend/apps/master/models.py`
 - Test: `backend/apps/master/tests/test_platform_admin_auth.py` (new file)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/apps/master/tests/test_platform_admin_auth.py`:
 
@@ -66,12 +66,12 @@ class TestPlatformAdminUserModel:
         assert admin.is_locked is True
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && pytest apps/master/tests/test_platform_admin_auth.py -v`
 Expected: FAIL — `ImportError: cannot import name 'PlatformAdminUser' from 'master.models'`
 
-- [ ] **Step 3: Add the models**
+- [x] **Step 3: Add the models**
 
 In `backend/apps/master/models.py`, add near the top imports (`uuid` and `models` are already imported; add):
 
@@ -127,17 +127,17 @@ class PlatformAdminTokenFamily(models.Model):
         db_table = "platform_admin_token_families"
 ```
 
-- [ ] **Step 4: Generate the migration**
+- [x] **Step 4: Generate the migration**
 
 Run: `cd backend && python manage.py makemigrations master --name platform_admin_auth`
 Expected: `Migrations for 'master': apps/master/migrations/0003_platform_admin_auth.py` (or similar auto-generated name), creating `platformadminuser` and `platformadmintokenfamily`.
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `cd backend && pytest apps/master/tests/test_platform_admin_auth.py -v`
 Expected: 3 passed
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/apps/master/models.py backend/apps/master/migrations/ backend/apps/master/tests/test_platform_admin_auth.py
@@ -152,7 +152,7 @@ git commit -m "feat(master): add PlatformAdminUser + PlatformAdminTokenFamily mo
 - Create: `backend/apps/master/management/commands/create_platform_admin.py`
 - Test: `backend/apps/master/tests/test_platform_admin_auth.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `test_platform_admin_auth.py`:
 
@@ -185,12 +185,12 @@ class TestCreatePlatformAdminCommand:
             )
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && pytest apps/master/tests/test_platform_admin_auth.py::TestCreatePlatformAdminCommand -v`
 Expected: FAIL — `CommandError: Unknown command: 'create_platform_admin'`
 
-- [ ] **Step 3: Write the command**
+- [x] **Step 3: Write the command**
 
 Create `backend/apps/master/management/commands/create_platform_admin.py`:
 
@@ -230,12 +230,12 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"Platform admin '{email}' created."))
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && pytest apps/master/tests/test_platform_admin_auth.py::TestCreatePlatformAdminCommand -v`
 Expected: 2 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/master/management/commands/create_platform_admin.py backend/apps/master/tests/test_platform_admin_auth.py
@@ -250,14 +250,14 @@ git commit -m "feat(master): add create_platform_admin management command"
 - Create: `backend/apps/master/tokens.py`
 - Test: `backend/apps/master/tests/test_platform_admin_auth.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `test_platform_admin_auth.py`:
 
 ```python
 class TestPlatformAdminJWTAuthentication:
     def test_get_user_resolves_platform_admin_from_token(self, db):
-        from rest_framework_simplejwt.tokens import RefreshToken
+        from rest_framework_simplejwt.tokens import AccessToken
 
         from master.models import PlatformAdminUser
         from master.tokens import PlatformAdminJWTAuthentication
@@ -266,7 +266,11 @@ class TestPlatformAdminJWTAuthentication:
         admin.set_password("x")
         admin.save(using="default")
 
-        access = RefreshToken.for_user(admin).access_token
+        # AccessToken.for_user() resolves to the base Token.for_user() (AccessToken
+        # doesn't mix in BlacklistMixin), so this is safe to call directly even
+        # though `admin` isn't AUTH_USER_MODEL. Do NOT use RefreshToken.for_user()
+        # here or anywhere platform-admin tokens are issued — see the note below.
+        access = AccessToken.for_user(admin)
         resolved = PlatformAdminJWTAuthentication().get_user(access)
         assert resolved.id == admin.id
         assert resolved.email == "tok@repaiross.app"
@@ -286,12 +290,12 @@ class TestPlatformAdminJWTAuthentication:
             PlatformAdminJWTAuthentication().get_user(token)
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && pytest apps/master/tests/test_platform_admin_auth.py::TestPlatformAdminJWTAuthentication -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'master.tokens'`
 
-- [ ] **Step 3: Write the auth module**
+- [x] **Step 3: Write the auth module**
 
 Create `backend/apps/master/tokens.py`:
 
@@ -300,8 +304,8 @@ Create `backend/apps/master/tokens.py`:
 JWT auth for platform admin — separate from apps/authentication/tokens.py.
 
 Platform-admin access/refresh tokens carry: user_id (the PlatformAdminUser's
-id, set automatically by RefreshToken.for_user), is_platform_admin, token_type,
-token_family. They never carry tenant_slug — that's the whole point.
+id), is_platform_admin, admin_token_type, token_family. They never carry
+tenant_slug — that's the whole point.
 """
 from typing import Any
 
@@ -311,9 +315,15 @@ from rest_framework_simplejwt.settings import api_settings
 
 
 def _build_platform_admin_claims() -> dict[str, Any]:
+    # NOTE: the key is "admin_token_type", NOT "token_type" — "token_type" is
+    # simplejwt's own reserved claim (TOKEN_TYPE_CLAIM, default "token_type"),
+    # used internally by AccessToken/RefreshToken.verify_token_type() to stamp
+    # and check "access" vs "refresh". Overwriting it breaks simplejwt's own
+    # token-type verification on every decode (raises TokenError: "Token has
+    # wrong type"). Found and fixed during Task 5 — see its notes.
     return {
         "is_platform_admin": True,
-        "token_type": "platform_admin",
+        "admin_token_type": "platform_admin",
     }
 
 
@@ -337,12 +347,21 @@ class PlatformAdminJWTAuthentication(JWTAuthentication):
             raise AuthenticationFailed("Platform admin not found", code="user_not_found") from exc
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && pytest apps/master/tests/test_platform_admin_auth.py::TestPlatformAdminJWTAuthentication -v`
 Expected: 2 passed
 
-- [ ] **Step 5: Commit**
+**Important gotcha for Tasks 4 and 5 (not this task — noted here because this is where it's first relevant):** `RefreshToken.for_user(user)` — used throughout the tenant auth stack in `apps/authentication/views.py` — goes through `BlacklistMixin.for_user()`, which unconditionally creates a `token_blacklist.OutstandingToken` row with `user=<the actual user object>`. That FK is hard-coded to `settings.AUTH_USER_MODEL` (`authentication.User`), so passing a `PlatformAdminUser` instance raises `ValueError: Cannot assign ...: "OutstandingToken.user" must be a "User" instance`. `AccessToken` does **not** mix in `BlacklistMixin`, so `AccessToken.for_user(admin)` is safe (confirmed above) — but wherever Tasks 4/5 need an actual `RefreshToken` for a platform admin, they must NOT call `RefreshToken.for_user(admin)`. Instead construct it manually:
+
+```python
+refresh = RefreshToken()
+refresh[api_settings.USER_ID_CLAIM] = str(admin.id)
+```
+
+This produces an equivalent token (same auto-populated `exp`/`iat`/`jti`/`token_type` claims that a fresh `RefreshToken()` always gets) without ever touching `OutstandingToken`. Calling `.blacklist()` on such a token later (for logout/rotation) is safe and requires no change — `BlacklistMixin.blacklist()` does its own `get_user_model().objects.get(id=...)` lookup against tenant `authentication.User`, catches `DoesNotExist`, and falls back to `user=None` (the FK is nullable), so it never raises for a platform-admin token's jti. Task 4's `_issue_tokens` and Task 5's `PlatformAdminTokenRefreshView` below have already been written with this fix applied.
+
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/master/tokens.py backend/apps/master/tests/test_platform_admin_auth.py
@@ -359,7 +378,7 @@ git commit -m "feat(master): add PlatformAdminJWTAuthentication"
 - Modify: `backend/apps/master/urls.py`
 - Test: `backend/apps/master/tests/test_platform_admin_auth.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `test_platform_admin_auth.py`:
 
@@ -421,12 +440,12 @@ class TestPlatformAdminLoginView:
         assert res.status_code == status.HTTP_400_BAD_REQUEST
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && pytest apps/master/tests/test_platform_admin_auth.py::TestPlatformAdminLoginView -v`
 Expected: FAIL — 404 (no such URL) on every test
 
-- [ ] **Step 3: Add the serializer**
+- [x] **Step 3: Add the serializer**
 
 Append to `backend/apps/master/serializers.py`:
 
@@ -479,7 +498,7 @@ class PlatformAdminLoginSerializer(serializers.Serializer):
         return attrs
 ```
 
-- [ ] **Step 4: Add the login view**
+- [x] **Step 4: Add the login view**
 
 Create `backend/apps/master/auth_views.py`:
 
@@ -501,6 +520,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import AuditLogMaster, PlatformAdminTokenFamily, PlatformAdminUser
@@ -549,7 +569,15 @@ def _write_audit(request, admin_email: str, event_type: str) -> None:
 
 
 def _issue_tokens(admin: PlatformAdminUser) -> tuple[str, str]:
-    refresh = RefreshToken.for_user(admin)
+    # Deliberately NOT RefreshToken.for_user(admin) — that goes through
+    # BlacklistMixin.for_user(), which creates a token_blacklist.OutstandingToken
+    # row with user=admin. That FK is hard-coded to AUTH_USER_MODEL
+    # (authentication.User), so it raises ValueError for a PlatformAdminUser.
+    # Building the token manually sidesteps OutstandingToken bookkeeping
+    # entirely — session lifecycle is tracked via PlatformAdminTokenFamily
+    # instead. See the gotcha note in Task 3.
+    refresh = RefreshToken()
+    refresh[api_settings.USER_ID_CLAIM] = str(admin.id)
     access = refresh.access_token  # property creates a new instance each call — access once
     family_id = uuid.uuid4()
 
@@ -597,7 +625,7 @@ class PlatformAdminLoginView(APIView):
         return response
 ```
 
-- [ ] **Step 5: Wire the URL**
+- [x] **Step 5: Wire the URL**
 
 In `backend/apps/master/urls.py`, add to the imports section (no change needed, `views` module import stays) and add near the top of `urlpatterns`:
 
@@ -612,12 +640,12 @@ urlpatterns = [
 
 (Replace the existing `from . import views` line with the combined import above, and add the new `path(...)` line as the first entry in `urlpatterns`.)
 
-- [ ] **Step 6: Run test to verify it passes**
+- [x] **Step 6: Run test to verify it passes**
 
 Run: `cd backend && pytest apps/master/tests/test_platform_admin_auth.py::TestPlatformAdminLoginView -v`
 Expected: 5 passed
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/apps/master/serializers.py backend/apps/master/auth_views.py backend/apps/master/urls.py backend/apps/master/tests/test_platform_admin_auth.py
@@ -633,7 +661,7 @@ git commit -m "feat(master): add platform admin login endpoint"
 - Modify: `backend/apps/master/urls.py`
 - Test: `backend/apps/master/tests/test_platform_admin_auth.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `test_platform_admin_auth.py`:
 
@@ -692,18 +720,37 @@ class TestPlatformAdminMeAndSessions:
         assert PlatformAdminTokenFamily.objects.using("default").get().is_revoked
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd backend && pytest apps/master/tests/test_platform_admin_auth.py::TestPlatformAdminMeAndSessions -v`
 Expected: FAIL — 404 on refresh/logout/me
 
-- [ ] **Step 3: Add the views**
+- [x] **Step 3: Add the views**
 
-Append to `backend/apps/master/auth_views.py`:
+First, add back the imports that Task 4 deliberately omitted from `backend/apps/master/auth_views.py` because they were unused at the time (this task now uses all of them):
+
+```python
+from django.utils import timezone
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework_simplejwt.exceptions import TokenError
+```
+
+(`AllowAny` is already imported — extend that existing import line to include `IsAuthenticated` rather than adding a second line.) Also add `PlatformAdminJWTAuthentication` back into the existing `from .tokens import _build_platform_admin_claims` line (Task 4 removed it since nothing used it at the time; `PlatformAdminLogoutView` and `PlatformAdminMeView` below need it):
+
+```python
+from .tokens import PlatformAdminJWTAuthentication, _build_platform_admin_claims
+```
+
+Then append to `backend/apps/master/auth_views.py`:
 
 ```python
 class PlatformAdminTokenRefreshView(APIView):
-    authentication_classes = [PlatformAdminJWTAuthentication]
+    # No authentication class — same reasoning as PlatformAdminLoginView in
+    # Task 4: this view never reads request.user (it resolves the admin from
+    # the refresh cookie's own claims), and refresh is called precisely when
+    # the access token has expired, so requiring a valid Bearer header here
+    # would break the normal refresh flow, not just an edge case.
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def post(self, request):
@@ -759,7 +806,11 @@ class PlatformAdminTokenRefreshView(APIView):
             _clear_refresh_cookie(response)
             return response
 
-        new_refresh = RefreshToken.for_user(admin)
+        # Not RefreshToken.for_user(admin) — see the gotcha note in Task 3
+        # (BlacklistMixin.for_user() would try to FK an OutstandingToken to a
+        # PlatformAdminUser, which isn't AUTH_USER_MODEL, and raise ValueError).
+        new_refresh = RefreshToken()
+        new_refresh[api_settings.USER_ID_CLAIM] = str(admin.id)
         new_access = new_refresh.access_token
         claims = _build_platform_admin_claims()
         for key, value in claims.items():
@@ -818,7 +869,7 @@ class PlatformAdminMeView(APIView):
         })
 ```
 
-- [ ] **Step 4: Wire the URLs**
+- [x] **Step 4: Wire the URLs**
 
 In `backend/apps/master/urls.py`, add below the login path:
 
@@ -828,12 +879,12 @@ In `backend/apps/master/urls.py`, add below the login path:
     path("platform/auth/me/", auth_views.PlatformAdminMeView.as_view(), name="platform-admin-me"),
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `cd backend && pytest apps/master/tests/test_platform_admin_auth.py -v`
-Expected: all passed (14 tests across the file)
+Expected: all passed (17 tests across the file — 13 from Tasks 1-4 plus these 4 new ones)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/apps/master/auth_views.py backend/apps/master/urls.py backend/apps/master/tests/test_platform_admin_auth.py
@@ -850,7 +901,7 @@ git commit -m "feat(master): add platform admin refresh/logout/me endpoints"
 
 This is the cutover point: the existing tenant-management endpoints (tenants list/detail/suspend/reactivate, plans) stop trusting tenant-issued JWTs and start requiring a platform-admin-issued one.
 
-- [ ] **Step 1: Update the existing test fixtures first**
+- [x] **Step 1: Update the existing test fixtures first**
 
 In `backend/apps/master/tests/test_platform_admin.py`, replace the `platform_admin_user` and `platform_client` fixtures (currently around lines 35–53):
 
@@ -868,22 +919,26 @@ def platform_admin_user(db):
 @pytest.fixture
 def platform_client(db, platform_admin_user):
     from rest_framework.test import APIClient
-    from rest_framework_simplejwt.tokens import RefreshToken
+    from rest_framework_simplejwt.tokens import AccessToken
 
-    access = RefreshToken.for_user(platform_admin_user).access_token
+    # AccessToken.for_user() (not RefreshToken.for_user()) — AccessToken doesn't
+    # mix in BlacklistMixin, so it's safe to call directly on a PlatformAdminUser.
+    # See the gotcha note in Task 3: RefreshToken.for_user() would try to FK an
+    # OutstandingToken to a user that isn't AUTH_USER_MODEL and raise ValueError.
+    access = AccessToken.for_user(platform_admin_user)
     access["is_platform_admin"] = True
-    access["token_type"] = "platform_admin"
+    access["admin_token_type"] = "platform_admin"  # NOT "token_type" — see Task 3's tokens.py note
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {str(access)}")
     return client
 ```
 
-- [ ] **Step 2: Run the existing suite to confirm it now fails at the auth layer**
+- [x] **Step 2: Run the existing suite to confirm it now fails at the auth layer**
 
 Run: `cd backend && pytest apps/master/tests/test_platform_admin.py -v -k "platform_client or PlatformAdmin"`
 Expected: FAIL — requests using `platform_client` now get 401, because `TenantListView`/etc. still use the default `TenantJWTAuthentication`, which tries to resolve the token's `user_id` against tenant `authentication.User` and won't find a `PlatformAdminUser` there.
 
-- [ ] **Step 3: Add a shared base class and switch the 6 views**
+- [x] **Step 3: Add a shared base class and switch the 6 views**
 
 In `backend/apps/master/views.py`, add the import and base class, then update each view class to inherit from it instead of `APIView` (dropping their now-redundant `permission_classes` line):
 
@@ -912,12 +967,29 @@ Then change each of these 6 class declarations (removing their `permission_class
 - `class SubscriptionPlanListCreateView(APIView):` → `class SubscriptionPlanListCreateView(PlatformAdminAPIView):`
 - `class SubscriptionPlanDetailView(APIView):` → `class SubscriptionPlanDetailView(PlatformAdminAPIView):`
 
-- [ ] **Step 4: Run the full master test suite to verify it passes**
+- [x] **Step 4: Run the full master test suite**
 
 Run: `cd backend && pytest apps/master/tests/ -v`
-Expected: all passed (no regressions — `test_platform_admin_cannot_access_tenant_crm` still passes since it only asserts `status_code != 200`, which holds regardless of the exact 401/403/404 returned)
 
-- [ ] **Step 5: Commit**
+Expect 2 failures beyond what Steps 1-3 already fixed:
+
+```
+FAILED test_platform_admin.py::TestPlatformAdminTenants::test_non_platform_admin_cannot_list_tenants
+    assert 401 == 403
+FAILED test_platform_admin.py::TestSubscriptionPlans::test_patch_plan_requires_platform_admin
+    assert 401 == 403
+```
+
+Both tests build a **tenant-issued** token (`RefreshToken.for_user(regular_user)` where `regular_user` is a real `authentication.User`) with `is_platform_admin` manually set to `False`, then hit a `/platform/*` business endpoint expecting `403 FORBIDDEN`. Under the old design this worked because `TenantJWTAuthentication` could resolve `regular_user`'s id (a real row in tenant `authentication.User`), so authentication succeeded and `IsPlatformAdmin`'s permission check correctly denied with 403 ("authenticated, but not privileged enough").
+
+Under the new design this is no longer the right mental model: `/platform/*` only ever accepts a platform-admin-issued token, full stop. A tenant-issued token's `user_id` doesn't exist in `PlatformAdminUser` (different table, different DB) at all, so `PlatformAdminJWTAuthentication.get_user()` raises `AuthenticationFailed` — the request never gets far enough to reach permission checking. This is **401** ("not authenticated as a platform admin"), not 403 ("authenticated but forbidden") — and that's actually more correct now, not a regression: it's the identical semantics already established by Task 5's `test_me_rejects_tenant_issued_token`, which expects 401 for exactly this scenario against `/platform/auth/me/`.
+
+Update both assertions from `status.HTTP_403_FORBIDDEN` to `status.HTTP_401_UNAUTHORIZED` (one-line change each, at the `assert res.status_code == ...` line in each test). No other change needed — the tests still correctly verify "a non-platform-admin cannot reach this endpoint," just via the more accurate status code.
+
+Re-run: `cd backend && pytest apps/master/tests/ -v`
+Expected: all passed, no regressions.
+
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/master/views.py backend/apps/master/tests/test_platform_admin.py
@@ -933,7 +1005,7 @@ git commit -m "feat(master): require PlatformAdminJWTAuthentication on /platform
 - Modify: `backend/entrypoint.sh`
 - Modify: `infra/docker/seed.sh`
 
-- [ ] **Step 1: Remove the platform-admin block from the demo seeder**
+- [x] **Step 1: Remove the platform-admin block from the demo seeder**
 
 In `backend/apps/authentication/seeds.py`, delete lines 86–96 (the `# Seed platform admin user...` block):
 
@@ -954,7 +1026,7 @@ In `backend/apps/authentication/seeds.py`, delete lines 86–96 (the `# Seed pla
 
 (Leave the surrounding `# Ensure role-permission defaults...` block and `ctx["users"] = users` line intact — only the platform-admin block is removed.)
 
-- [ ] **Step 2: Add platform admin creation to `backend/entrypoint.sh`**
+- [x] **Step 2: Add platform admin creation to `backend/entrypoint.sh`**
 
 In `backend/entrypoint.sh`, right after the `"==> [seed] Running master DB migrations..."` step and before `"==> [seed] Migrating all tenant databases..."`, add:
 
@@ -967,16 +1039,16 @@ python manage.py create_platform_admin \
   2>&1 | grep -v "already exists" || true
 ```
 
-- [ ] **Step 3: Mirror the same change in `infra/docker/seed.sh`**
+- [x] **Step 3: Mirror the same change in `infra/docker/seed.sh`**
 
 In `infra/docker/seed.sh`, add the identical block right after `"==> [seed] Running master DB migrations..."` and before `"==> [seed] Seeding demo tenants (idempotent)..."`.
 
-- [ ] **Step 4: Verify locally**
+- [x] **Step 4: Verify locally**
 
 Run: `cd backend && python manage.py create_platform_admin --email platform@repaiross.app --full-name "Platform Admin" --password "Demo@1234!"`
 Expected: `Platform admin 'platform@repaiross.app' created.` (or `CommandError: ... already exists` if run twice — both are correct idempotent behavior)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/authentication/seeds.py backend/entrypoint.sh infra/docker/seed.sh
@@ -991,7 +1063,7 @@ git commit -m "feat(master): retire tenant-DB platform admin, provision via crea
 - Create: `frontend/src/lib/stores/platformAuthStore.ts`
 - Test: `frontend/src/lib/stores/__tests__/platformAuthStore.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/lib/stores/__tests__/platformAuthStore.test.ts`:
 
@@ -1037,12 +1109,12 @@ describe('usePlatformAuthStore', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/lib/stores/__tests__/platformAuthStore.test.ts`
 Expected: FAIL — cannot find module `@/lib/stores/platformAuthStore`
 
-- [ ] **Step 3: Write the store**
+- [x] **Step 3: Write the store**
 
 Create `frontend/src/lib/stores/platformAuthStore.ts`:
 
@@ -1078,12 +1150,12 @@ export const usePlatformAuthStore = create<PlatformAuthState>((set) => ({
 }));
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/lib/stores/__tests__/platformAuthStore.test.ts`
 Expected: 5 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/lib/stores/platformAuthStore.ts frontend/src/lib/stores/__tests__/platformAuthStore.test.ts
@@ -1099,7 +1171,7 @@ git commit -m "feat(platform): add usePlatformAuthStore"
 
 No dedicated test here — this is a direct structural mirror of the already-working `frontend/src/lib/api/client.ts`, and its behavior is exercised end-to-end by Task 10's test and the manual verification in Task 13.
 
-- [ ] **Step 1: Write the module**
+- [x] **Step 1: Write the module**
 
 Create `frontend/src/lib/api/platformClient.ts`:
 
@@ -1227,12 +1299,12 @@ export async function platformApiPatch<T>(path: string, body?: unknown): Promise
 }
 ```
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: no new errors
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/lib/api/platformClient.ts
@@ -1247,7 +1319,7 @@ git commit -m "feat(platform): add platformClient fetch wrapper (no X-Tenant-Slu
 - Create: `frontend/src/lib/api/platformAuth.ts`
 - Test: `frontend/src/lib/api/__tests__/platformAuth.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/lib/api/__tests__/platformAuth.test.ts`:
 
@@ -1285,12 +1357,12 @@ describe('platformAuthApi', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/lib/api/__tests__/platformAuth.test.ts`
 Expected: FAIL — cannot find module `@/lib/api/platformAuth`
 
-- [ ] **Step 3: Write the client**
+- [x] **Step 3: Write the client**
 
 Create `frontend/src/lib/api/platformAuth.ts`:
 
@@ -1324,12 +1396,12 @@ export const platformAuthApi = {
 };
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/lib/api/__tests__/platformAuth.test.ts`
 Expected: 3 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/lib/api/platformAuth.ts frontend/src/lib/api/__tests__/platformAuth.test.ts
@@ -1343,7 +1415,7 @@ git commit -m "feat(platform): add platformAuthApi client"
 **Files:**
 - Modify: `frontend/src/lib/api/platform.ts:1`
 
-- [ ] **Step 1: Change the import**
+- [x] **Step 1: Change the import**
 
 In `frontend/src/lib/api/platform.ts`, replace line 1:
 
@@ -1359,12 +1431,12 @@ import { platformApiGet as apiGet, platformApiPost as apiPost, platformApiPatch 
 
 Nothing else in the file changes — the aliasing keeps every other line (`apiGet(...)`, `apiPost(...)`, etc.) working as-is, now backed by the platform-admin token/refresh flow instead of the tenant one.
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: no new errors
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/lib/api/platform.ts
@@ -1380,7 +1452,7 @@ git commit -m "feat(platform): route tenant/plan management calls through platfo
 
 No dedicated component test — matches this codebase's existing convention (the tenant-scoped `(auth)/login/page.tsx` it mirrors has no test either); covered by the manual verification in Task 13.
 
-- [ ] **Step 1: Write the page**
+- [x] **Step 1: Write the page**
 
 Create `frontend/src/app/(platform)/admin/login/page.tsx`:
 
@@ -1528,12 +1600,12 @@ export default function PlatformAdminLoginPage() {
 }
 ```
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: no new errors
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add "frontend/src/app/(platform)/admin/login/page.tsx"
@@ -1547,7 +1619,7 @@ git commit -m "feat(platform): add independent /admin/login page"
 **Files:**
 - Modify: `frontend/src/app/(platform)/platform/layout.tsx`
 
-- [ ] **Step 1: Swap the imports**
+- [x] **Step 1: Swap the imports**
 
 In `frontend/src/app/(platform)/platform/layout.tsx`, replace:
 
@@ -1563,7 +1635,7 @@ import { usePlatformAuthStore } from '@/lib/stores/platformAuthStore';
 import { platformAuthApi } from '@/lib/api/platformAuth';
 ```
 
-- [ ] **Step 2: Swap the bootstrap logic**
+- [x] **Step 2: Swap the bootstrap logic**
 
 Replace:
 
@@ -1622,7 +1694,7 @@ with:
 
 (The `is_platform_admin` redirect-to-`/dashboard` branch is removed — `/platform/auth/me/` only ever succeeds for a platform admin, so the check is no longer meaningful.)
 
-- [ ] **Step 3: Swap logout + the render guard**
+- [x] **Step 3: Swap logout + the render guard**
 
 Replace:
 
@@ -1670,12 +1742,12 @@ with:
           <span className="text-sm text-[var(--text-muted)] hidden sm:block">{admin.full_name}</span>
 ```
 
-- [ ] **Step 4: Typecheck**
+- [x] **Step 4: Typecheck**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: no errors (confirms no leftover reference to `useAuthStore`/`authApi`/`user` in this file)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add "frontend/src/app/(platform)/platform/layout.tsx"
@@ -1688,32 +1760,32 @@ git commit -m "feat(platform): wire PlatformLayout to the independent platform-a
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Start the stack**
+- [x] **Step 1: Start the stack**
 
 Run: `docker compose up --build -d` (from repo root)
 Expected: backend, frontend, postgres, redis containers healthy; entrypoint logs show `Platform admin 'platform@repaiross.app' created.` (or `already exists` on subsequent runs)
 
-- [ ] **Step 2: Confirm the old path no longer works**
+- [x] **Step 2: Confirm the old path no longer works**
 
 In a browser, go to `http://localhost:3000/login`, enter workspace `demo`, email `platform@repaiross.app`, password `Demo@1234!`.
 Expected: login fails (`Email or password is incorrect` or `Workspace not found` depending on whether the row still exists post-seed-change) — this account no longer lives in the `demo` tenant DB.
 
-- [ ] **Step 3: Confirm the new independent login works**
+- [x] **Step 3: Confirm the new independent login works**
 
 Go to `http://localhost:3000/admin/login`. Note there is no workspace field. Enter email `platform@repaiross.app`, password `Demo@1234!`, submit.
 Expected: redirected to `/platform/tenants`, tenant list loads, "Platform Admin" nav badge visible, admin's full name shown top-right.
 
-- [ ] **Step 4: Confirm a tenant user cannot use the admin login**
+- [x] **Step 4: Confirm a tenant user cannot use the admin login**
 
 At `http://localhost:3000/admin/login`, try `admin@demo.com` / `Demo@1234!` (a regular tenant admin).
 Expected: rejected with "Email or password is incorrect" (this account doesn't exist in the master DB).
 
-- [ ] **Step 5: Confirm session persistence**
+- [x] **Step 5: Confirm session persistence**
 
 While logged in at `/platform/tenants`, refresh the page.
 Expected: stays logged in (silent refresh via the `platform_refresh_token` cookie), tenant list still loads.
 
-- [ ] **Step 6: Confirm logout**
+- [x] **Step 6: Confirm logout**
 
 Click "Sign out".
 Expected: redirected to `/admin/login`; navigating directly to `/platform/tenants` afterward redirects back to `/admin/login`.
@@ -1726,4 +1798,4 @@ No commit for this task — it's verification of the already-committed work from
 
 - **Spec coverage:** §1 data model → Task 1 (`AuditLogMaster` reused instead of a new model, per the deviation noted at the top). §2 auth flow/tokens → Tasks 3–5. §3 frontend → Tasks 8–13. §4 provisioning/cutover → Tasks 2, 6, 7. §5 out-of-scope items are simply not touched by any task. §6 testing → backend tests embedded in Tasks 1–6, frontend tests in Tasks 8 & 10, manual E2E in Task 14.
 - **Placeholder scan:** no TBDs; every step has runnable code or an exact command.
-- **Type consistency:** `PlatformAdminUser` (id/email/full_name) shape is identical across the Django model (Task 1), the login/me view responses (Tasks 4–5), the frontend `PlatformAdminUser` interface (Task 8), and `PlatformLoginResponse`/`platformAuthApi` (Tasks 9–10). Cookie name `platform_refresh_token` and path `/api/v1/platform/auth/` are consistent between Task 4 (set) and Task 5 (read/clear). Claim names (`is_platform_admin`, `token_type`, `token_family`) match between `_build_platform_admin_claims` (Task 3) and every place tokens are issued/rotated (Tasks 4–5).
+- **Type consistency:** `PlatformAdminUser` (id/email/full_name) shape is identical across the Django model (Task 1), the login/me view responses (Tasks 4–5), the frontend `PlatformAdminUser` interface (Task 8), and `PlatformLoginResponse`/`platformAuthApi` (Tasks 9–10). Cookie name `platform_refresh_token` and path `/api/v1/platform/auth/` are consistent between Task 4 (set) and Task 5 (read/clear). Claim names (`is_platform_admin`, `admin_token_type`, `token_family`) match between `_build_platform_admin_claims` (Task 3) and every place tokens are issued/rotated (Tasks 4–5). (Post-hoc addendum: Task 5 found `admin_token_type` was originally named `token_type`, colliding with simplejwt's reserved `TOKEN_TYPE_CLAIM` and breaking token decode entirely — renamed and documented in Task 3's code; this self-review note reflects the corrected name.)

@@ -3,8 +3,10 @@ import uuid
 
 from cryptography.fernet import Fernet
 from django.conf import settings
+from django.contrib.auth.models import AbstractBaseUser
 from django.core.validators import RegexValidator
 from django.db import models
+from django.utils import timezone
 
 
 slug_validator = RegexValidator(
@@ -149,3 +151,47 @@ class AuditLogMaster(models.Model):
 
     def __str__(self) -> str:
         return f"{self.event_type} @ {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class PlatformAdminUser(AbstractBaseUser):
+    """
+    Independent platform-admin account — lives only in the master DB, never
+    a tenant DB. Not AUTH_USER_MODEL; used solely by the /platform/auth/*
+    endpoints and PlatformAdminJWTAuthentication.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField(unique=True)
+    full_name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+    failed_login_attempts = models.IntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    USERNAME_FIELD = "email"
+
+    class Meta:
+        app_label = "master"
+        db_table = "platform_admin_users"
+
+    def __str__(self) -> str:
+        return self.email
+
+    @property
+    def is_locked(self) -> bool:
+        return self.locked_until is not None and timezone.now() < self.locked_until
+
+
+class PlatformAdminTokenFamily(models.Model):
+    """Refresh-token replay detection for platform admins (mirrors authentication.UserTokenFamily)."""
+
+    admin = models.ForeignKey(PlatformAdminUser, on_delete=models.CASCADE, related_name="token_families")
+    family_id = models.UUIDField(default=uuid.uuid4, db_index=True)
+    is_revoked = models.BooleanField(default=False, db_index=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    current_jti = models.CharField(max_length=255, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "master"
+        db_table = "platform_admin_token_families"

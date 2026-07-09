@@ -4,8 +4,8 @@ import { useEffect, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Building2, LogOut, Users, CreditCard } from 'lucide-react';
-import { useAuthStore } from '@/lib/stores/authStore';
-import { authApi } from '@/lib/api/auth';
+import { usePlatformAuthStore } from '@/lib/stores/platformAuthStore';
+import { platformAuthApi } from '@/lib/api/platformAuth';
 import { Button } from '@/components/ui/button';
 import { wsClient } from '@/lib/ws/client';
 import { cn } from '@/lib/utils';
@@ -16,7 +16,7 @@ const NAV = [
 ];
 
 export default function PlatformLayout({ children }: { children: React.ReactNode }) {
-  const { setAccessToken, setUser, logout, isBootstrapping, setBootstrapping, user } = useAuthStore();
+  const { setAccessToken, setAdmin, logout, isBootstrapping, setBootstrapping, admin } = usePlatformAuthStore();
   const router = useRouter();
   const pathname = usePathname();
   const bootstrapped = useRef(false);
@@ -28,17 +28,14 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
     (async () => {
       setBootstrapping(true);
       try {
-        const res = await authApi.refresh();
+        const res = await platformAuthApi.refresh();
         setAccessToken(res.access);
-        const me = await authApi.me();
-        setUser(me);
-        if (!me.is_platform_admin) {
-          router.replace('/dashboard');
-        }
+        const me = await platformAuthApi.me();
+        setAdmin(me);
         wsClient.connect(null, me.id);
       } catch {
         logout();
-        router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+        router.replace(`/admin/login?next=${encodeURIComponent(pathname)}`);
       } finally {
         setBootstrapping(false);
       }
@@ -47,10 +44,10 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
   }, []);
 
   async function handleLogout() {
-    try { await authApi.logout(); } catch { /* ignore */ }
+    try { await platformAuthApi.logout(); } catch { /* ignore */ }
     logout();
     wsClient.disconnect();
-    router.replace('/login');
+    router.replace('/admin/login');
   }
 
   if (isBootstrapping) {
@@ -61,7 +58,7 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
     );
   }
 
-  if (!user?.is_platform_admin) return null;
+  if (!admin) return null;
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)]">
@@ -97,7 +94,7 @@ export default function PlatformLayout({ children }: { children: React.ReactNode
         </nav>
 
         <div className="ml-auto flex items-center gap-3">
-          <span className="text-sm text-[var(--text-muted)] hidden sm:block">{user.name}</span>
+          <span className="text-sm text-[var(--text-muted)] hidden sm:block">{admin.full_name}</span>
           <Button variant="ghost" size="sm" onClick={handleLogout} className="h-8 gap-1.5">
             <LogOut className="h-4 w-4" />
             <span className="hidden sm:inline">Sign out</span>

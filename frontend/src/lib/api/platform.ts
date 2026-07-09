@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPatch, type PageMeta } from './client';
+import { platformApiGet as apiGet, platformApiPost as apiPost, platformApiPatch as apiPatch, type PageMeta } from './platformClient';
 
 export type DbStatus = 'provisioning' | 'active' | 'suspended' | 'deleted';
 export type SubStatus = 'active' | 'trialing' | 'past_due' | 'cancelled' | 'paused';
