@@ -6,7 +6,7 @@ interface StatementSectionTableProps {
   section: StatementSection;
 }
 
-/** One financial-statement section (P&L / Balance Sheet): code-ordered rows + subtotal. */
+/** One financial-statement section (P&L / Balance Sheet): depth-first nested rows + subtotal. */
 export function StatementSectionTable({ title, section }: StatementSectionTableProps) {
   return (
     <div className="rounded-lg border border-[var(--border)] overflow-hidden">
@@ -18,8 +18,20 @@ export function StatementSectionTable({ title, section }: StatementSectionTableP
           {section.rows.map((r) => (
             <tr key={r.account_id ?? r.name} className="border-t border-[var(--border)]">
               <td className="px-3 py-2 font-mono-num text-[var(--text-muted)] w-20">{r.code ?? '—'}</td>
-              <td className="px-3 py-2">{r.name}</td>
-              <td className="px-3 py-2 text-right"><Money amount={r.amount} /></td>
+              <td
+                className={`px-3 py-2 ${r.total !== null ? 'font-medium' : ''}`}
+                style={{ paddingLeft: `${0.75 + r.level * 1.25}rem` }}
+              >
+                {r.name}
+              </td>
+              <td className="px-3 py-2 text-right">
+                <Money amount={r.amount} />
+                {r.total !== null && (
+                  <div className="text-xs text-[var(--text-muted)]">
+                    Σ <Money amount={r.total} />
+                  </div>
+                )}
+              </td>
             </tr>
           ))}
           {section.rows.length === 0 && (

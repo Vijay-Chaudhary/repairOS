@@ -38,17 +38,19 @@ describe('BalanceSheetPage', () => {
   beforeEach(() => {
     getBalanceSheet.mockReset().mockResolvedValue({
       assets: {
-        rows: [{ account_id: 'a-1', code: '1000', name: 'Cash', amount: '5700.00' }],
+        rows: [{ account_id: 'a-1', code: '1000', name: 'Cash', amount: '5700.00', level: 0, total: null }],
         subtotal: '5700.00',
       },
       liabilities: {
-        rows: [{ account_id: 'a-2', code: '2000', name: 'Sundry Creditors', amount: '200.00' }],
+        rows: [
+          { account_id: 'a-2', code: '2000', name: 'Sundry Creditors', amount: '200.00', level: 0, total: null },
+        ],
         subtotal: '200.00',
       },
       equity: {
         rows: [
-          { account_id: 'a-3', code: '3000', name: 'Capital', amount: '5000.00' },
-          { account_id: null, code: null, name: 'Current Period Earnings', amount: '500.00' },
+          { account_id: 'a-3', code: '3000', name: 'Capital', amount: '5000.00', level: 0, total: null },
+          { account_id: null, code: null, name: 'Current Period Earnings', amount: '500.00', level: 0, total: null },
         ],
         subtotal: '5500.00',
       },

@@ -90,6 +90,9 @@ class StatementRowSerializer(serializers.Serializer):
     code = serializers.CharField(allow_null=True)
     name = serializers.CharField()
     amount = serializers.DecimalField(max_digits=16, decimal_places=2)
+    level = serializers.IntegerField()
+    # Own + descendant amounts; null on rows without children.
+    total = serializers.DecimalField(max_digits=16, decimal_places=2, allow_null=True)
 
 
 class StatementSectionSerializer(serializers.Serializer):
