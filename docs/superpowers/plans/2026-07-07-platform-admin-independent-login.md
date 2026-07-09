@@ -1415,7 +1415,7 @@ git commit -m "feat(platform): add platformAuthApi client"
 **Files:**
 - Modify: `frontend/src/lib/api/platform.ts:1`
 
-- [ ] **Step 1: Change the import**
+- [x] **Step 1: Change the import**
 
 In `frontend/src/lib/api/platform.ts`, replace line 1:
 
@@ -1431,12 +1431,12 @@ import { platformApiGet as apiGet, platformApiPost as apiPost, platformApiPatch 
 
 Nothing else in the file changes — the aliasing keeps every other line (`apiGet(...)`, `apiPost(...)`, etc.) working as-is, now backed by the platform-admin token/refresh flow instead of the tenant one.
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: no new errors
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add frontend/src/lib/api/platform.ts
