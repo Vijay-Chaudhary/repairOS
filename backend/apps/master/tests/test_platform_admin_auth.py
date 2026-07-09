@@ -2,6 +2,8 @@
 Platform admin independent auth — model, command, and endpoint tests.
 See docs/superpowers/specs/2026-07-07-platform-admin-independent-login-design.md.
 """
+from unittest import mock
+
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -195,6 +197,27 @@ class TestPlatformAdminMeAndSessions:
     def test_refresh_rotates_token(self, api_client, platform_admin):
         self._login(api_client, platform_admin)
         res = api_client.post(self.refresh_url, {})
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data["access"]
+
+    def test_refresh_does_not_touch_simplejwt_blacklist(self, api_client, platform_admin):
+        # Regression: the platform-admin refresh path must not query the
+        # simplejwt token_blacklist tables. Those tables are migrated only onto
+        # tenant DBs (see core.routers.allow_migrate) — never the master DB
+        # where platform-admin tokens are verified. Plain RefreshToken(str)
+        # triggers BlacklistMixin.check_blacklist(), which 500s in production
+        # because the table is absent. Platform-admin sessions use
+        # PlatformAdminTokenFamily for reuse detection instead. Here we simulate
+        # the missing table by making any blacklist query raise, and assert the
+        # refresh endpoint still succeeds.
+        from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+
+        self._login(api_client, platform_admin)
+        with mock.patch.object(
+            BlacklistedToken.objects, "filter",
+            side_effect=AssertionError("blacklist table must not be queried"),
+        ):
+            res = api_client.post(self.refresh_url, {})
         assert res.status_code == status.HTTP_200_OK
         assert res.data["access"]
 

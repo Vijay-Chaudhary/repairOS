@@ -16,11 +16,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings
-from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import AuditLogMaster, PlatformAdminTokenFamily, PlatformAdminUser
 from .serializers import PlatformAdminLoginSerializer
-from .tokens import PlatformAdminJWTAuthentication, _build_platform_admin_claims
+from .tokens import (
+    PlatformAdminJWTAuthentication,
+    PlatformAdminRefreshToken,
+    _build_platform_admin_claims,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +74,7 @@ def _issue_tokens(admin: PlatformAdminUser) -> tuple[str, str]:
     # Building the token manually sidesteps OutstandingToken bookkeeping
     # entirely — session lifecycle is tracked via PlatformAdminTokenFamily
     # instead. See the gotcha note in Task 3.
-    refresh = RefreshToken()
+    refresh = PlatformAdminRefreshToken()
     refresh[api_settings.USER_ID_CLAIM] = str(admin.id)
     access = refresh.access_token  # property creates a new instance each call — access once
     family_id = uuid.uuid4()
@@ -143,7 +146,7 @@ class PlatformAdminTokenRefreshView(APIView):
             raise NotAuthenticated()
 
         try:
-            refresh = RefreshToken(refresh_str)
+            refresh = PlatformAdminRefreshToken(refresh_str)
         except TokenError:
             response = Response(
                 {"code": "REFRESH_TOKEN_INVALID", "message": "Refresh token is invalid or expired."},
@@ -191,7 +194,7 @@ class PlatformAdminTokenRefreshView(APIView):
         # Not RefreshToken.for_user(admin) — see the gotcha note in Task 3
         # (BlacklistMixin.for_user() would try to FK an OutstandingToken to a
         # PlatformAdminUser, which isn't AUTH_USER_MODEL, and raise ValueError).
-        new_refresh = RefreshToken()
+        new_refresh = PlatformAdminRefreshToken()
         new_refresh[api_settings.USER_ID_CLAIM] = str(admin.id)
         new_access = new_refresh.access_token
         claims = _build_platform_admin_claims()
@@ -222,7 +225,7 @@ class PlatformAdminLogoutView(APIView):
         refresh_str = request.COOKIES.get(_REFRESH_COOKIE)
         if refresh_str:
             try:
-                refresh = RefreshToken(refresh_str)
+                refresh = PlatformAdminRefreshToken(refresh_str)
                 jti = str(refresh["jti"])
                 PlatformAdminTokenFamily.objects.using("default").filter(current_jti=jti).update(
                     is_revoked=True, revoked_at=timezone.now()

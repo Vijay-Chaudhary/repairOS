@@ -10,6 +10,31 @@ from typing import Any
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed, InvalidToken
 from rest_framework_simplejwt.settings import api_settings
+from rest_framework_simplejwt.tokens import RefreshToken
+
+
+class PlatformAdminRefreshToken(RefreshToken):
+    """
+    Refresh token for platform-admin sessions that never touches simplejwt's
+    token_blacklist app.
+
+    Platform-admin tokens are verified against the master ('default') DB, but
+    core.routers.TenantDatabaseRouter.allow_migrate() only creates the
+    token_blacklist_* tables on tenant DBs — never the master DB. A plain
+    RefreshToken(str) runs BlacklistMixin.check_blacklist() during verify(),
+    which then queries a table that doesn't exist and raises, 500ing every
+    refresh/logout. Session revocation and refresh-token reuse detection are
+    handled by PlatformAdminTokenFamily (rotating current_jti) instead, so the
+    blacklist app is simply not part of this subsystem. Overriding both hooks to
+    no-ops keeps signature/expiry/token-type verification intact while skipping
+    the blacklist DB access entirely.
+    """
+
+    def check_blacklist(self, *args, **kwargs) -> None:  # noqa: D401
+        return None
+
+    def blacklist(self, *args, **kwargs) -> None:
+        return None
 
 
 def _build_platform_admin_claims() -> dict[str, Any]:
