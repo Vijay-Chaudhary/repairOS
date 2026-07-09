@@ -1452,7 +1452,7 @@ git commit -m "feat(platform): route tenant/plan management calls through platfo
 
 No dedicated component test — matches this codebase's existing convention (the tenant-scoped `(auth)/login/page.tsx` it mirrors has no test either); covered by the manual verification in Task 13.
 
-- [ ] **Step 1: Write the page**
+- [x] **Step 1: Write the page**
 
 Create `frontend/src/app/(platform)/admin/login/page.tsx`:
 
@@ -1600,12 +1600,12 @@ export default function PlatformAdminLoginPage() {
 }
 ```
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: no new errors
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add "frontend/src/app/(platform)/admin/login/page.tsx"
