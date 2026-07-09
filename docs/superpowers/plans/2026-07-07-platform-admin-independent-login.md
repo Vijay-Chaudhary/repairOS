@@ -1619,7 +1619,7 @@ git commit -m "feat(platform): add independent /admin/login page"
 **Files:**
 - Modify: `frontend/src/app/(platform)/platform/layout.tsx`
 
-- [ ] **Step 1: Swap the imports**
+- [x] **Step 1: Swap the imports**
 
 In `frontend/src/app/(platform)/platform/layout.tsx`, replace:
 
@@ -1635,7 +1635,7 @@ import { usePlatformAuthStore } from '@/lib/stores/platformAuthStore';
 import { platformAuthApi } from '@/lib/api/platformAuth';
 ```
 
-- [ ] **Step 2: Swap the bootstrap logic**
+- [x] **Step 2: Swap the bootstrap logic**
 
 Replace:
 
@@ -1694,7 +1694,7 @@ with:
 
 (The `is_platform_admin` redirect-to-`/dashboard` branch is removed — `/platform/auth/me/` only ever succeeds for a platform admin, so the check is no longer meaningful.)
 
-- [ ] **Step 3: Swap logout + the render guard**
+- [x] **Step 3: Swap logout + the render guard**
 
 Replace:
 
@@ -1742,12 +1742,12 @@ with:
           <span className="text-sm text-[var(--text-muted)] hidden sm:block">{admin.full_name}</span>
 ```
 
-- [ ] **Step 4: Typecheck**
+- [x] **Step 4: Typecheck**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: no errors (confirms no leftover reference to `useAuthStore`/`authApi`/`user` in this file)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add "frontend/src/app/(platform)/platform/layout.tsx"
