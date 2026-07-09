@@ -1319,7 +1319,7 @@ git commit -m "feat(platform): add platformClient fetch wrapper (no X-Tenant-Slu
 - Create: `frontend/src/lib/api/platformAuth.ts`
 - Test: `frontend/src/lib/api/__tests__/platformAuth.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/lib/api/__tests__/platformAuth.test.ts`:
 
@@ -1357,12 +1357,12 @@ describe('platformAuthApi', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd frontend && npx vitest run src/lib/api/__tests__/platformAuth.test.ts`
 Expected: FAIL — cannot find module `@/lib/api/platformAuth`
 
-- [ ] **Step 3: Write the client**
+- [x] **Step 3: Write the client**
 
 Create `frontend/src/lib/api/platformAuth.ts`:
 
@@ -1396,12 +1396,12 @@ export const platformAuthApi = {
 };
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd frontend && npx vitest run src/lib/api/__tests__/platformAuth.test.ts`
 Expected: 3 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add frontend/src/lib/api/platformAuth.ts frontend/src/lib/api/__tests__/platformAuth.test.ts
