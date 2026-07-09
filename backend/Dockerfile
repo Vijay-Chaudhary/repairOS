@@ -33,8 +33,9 @@ FROM base AS production
 
 ENV DJANGO_SETTINGS_MODULE=config.settings.production
 
-COPY requirements/base.txt requirements/base.txt
-RUN pip install -r requirements/base.txt
+COPY requirements/base.txt       requirements/base.txt
+COPY requirements/production.txt requirements/production.txt
+RUN pip install -r requirements/production.txt
 
 COPY . .
 
