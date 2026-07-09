@@ -38,11 +38,11 @@ describe('ProfitLossPage', () => {
   beforeEach(() => {
     getProfitLoss.mockReset().mockResolvedValue({
       income: {
-        rows: [{ account_id: 'a-4', code: '4000', name: 'Sales', amount: '1000.00' }],
+        rows: [{ account_id: 'a-4', code: '4000', name: 'Sales', amount: '1000.00', level: 0, total: null }],
         subtotal: '1000.00',
       },
       expense: {
-        rows: [{ account_id: 'a-5', code: '5200', name: 'Rent', amount: '300.00' }],
+        rows: [{ account_id: 'a-5', code: '5200', name: 'Rent', amount: '300.00', level: 0, total: null }],
         subtotal: '300.00',
       },
       net_profit: '700.00',

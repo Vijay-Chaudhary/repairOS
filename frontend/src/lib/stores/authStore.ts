@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useActiveShopStore } from './activeShopStore';
 
 export interface AuthUser {
   id: string;
@@ -37,6 +38,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: () => {
     set({ accessToken: null, user: null });
+    // Clear the persisted shop selection too — it's keyed globally in
+    // localStorage, so a stale id can otherwise leak into the next
+    // tenant/account that logs in on this origin.
+    useActiveShopStore.getState().reset();
   },
 
   setBootstrapping: (v) => set({ isBootstrapping: v }),

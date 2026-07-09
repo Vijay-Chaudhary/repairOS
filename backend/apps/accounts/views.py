@@ -395,7 +395,8 @@ def _statement_csv_response(filename, sections, footer_rows):
         writer.writerow([title])
         writer.writerow(["Code", "Account", "Amount"])
         for row in section["rows"]:
-            writer.writerow([row["code"] or "", row["name"], row["amount"]])
+            indent = "  " * row.get("level", 0)
+            writer.writerow([row["code"] or "", indent + row["name"], row["amount"]])
         writer.writerow(["", "Subtotal", section["subtotal"]])
         writer.writerow([])
     for label, value in footer_rows:

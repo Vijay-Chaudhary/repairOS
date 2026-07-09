@@ -263,6 +263,44 @@ class TestRegistrationVerify:
         assert data["owner_name"] == "Verify Owner"
         assert data["password"] == "SecurePass123!"
 
+    def test_verify_stores_shop_name_falls_back_to_business_name(self, db, starter_plan):
+        from unittest.mock import patch
+        from django.core import signing
+        from django.core.cache import cache
+        client, phone_otp, email_code = self._do_init(starter_plan, slug="shopnameshop", phone="+919811200107")
+        with patch("master.tasks.provision_tenant.delay"):
+            res = client.post(self.verify_url, {
+                "slug": "shopnameshop", "phone_otp": phone_otp, "email_code": email_code,
+            }, format="json")
+        tenant_id = res.data["tenant_id"]
+        data = signing.loads(cache.get(f"tenant_init:{tenant_id}"))
+        assert data["shop_name"] == "Verify Shop"  # _do_init's business_name, no shop_name sent
+
+    def test_verify_stores_explicit_shop_name(self, db, starter_plan):
+        from unittest.mock import patch
+        from django.core import signing
+        from django.core.cache import cache
+        from rest_framework.test import APIClient
+        client = APIClient()
+        with patch("master.services._send_registration_otp", return_value=True), \
+             patch("master.services._send_registration_email_code"):
+            client.post(self.init_url, {
+                "business_name": "Verify Shop Co", "slug": "explicitshop",
+                "shop_name": "Verify Shop - Main Branch",
+                "owner_name": "Verify Owner", "phone": "+919811200108",
+                "email": "owner@explicitshop.com", "password": "SecurePass123!",
+                "plan_id": str(starter_plan.id),
+            }, format="json")
+        pending = cache.get("reg_pending:explicitshop")
+        with patch("master.tasks.provision_tenant.delay"):
+            res = client.post(self.verify_url, {
+                "slug": "explicitshop",
+                "phone_otp": pending["phone_otp"], "email_code": pending["email_code"],
+            }, format="json")
+        tenant_id = res.data["tenant_id"]
+        data = signing.loads(cache.get(f"tenant_init:{tenant_id}"))
+        assert data["shop_name"] == "Verify Shop - Main Branch"
+
     def test_verify_wrong_phone_otp_returns_400(self, db, starter_plan):
         client, _, email_code = self._do_init(starter_plan, slug="wrongotp", phone="+919811200104")
         res = client.post(self.verify_url, {
@@ -483,6 +521,37 @@ class TestProvisioning:
             do_provision_tenant(str(provisioning_tenant.id))
 
         assert AuditLogMaster.objects.filter(event_type="tenant.provisioned").exists()
+
+    def test_do_provision_tenant_creates_shop_with_registration_name(self, db, provisioning_tenant):
+        from django.core import signing
+        from django.core.cache import cache
+        from master.services import do_provision_tenant
+        from core.models import Shop
+
+        payload = signing.dumps({
+            "owner_name": "Prov Owner", "password": "Pass@123!",
+            "shop_name": "Prov Corp Main Branch",
+        })
+        cache.set(f"tenant_init:{provisioning_tenant.id}", payload, timeout=3600)
+
+        with self._patch_infra():
+            do_provision_tenant(str(provisioning_tenant.id))
+
+        assert Shop.objects.get().name == "Prov Corp Main Branch"
+
+    def test_do_provision_tenant_shop_name_falls_back_to_tenant_name(self, db, provisioning_tenant):
+        from django.core import signing
+        from django.core.cache import cache
+        from master.services import do_provision_tenant
+        from core.models import Shop
+
+        payload = signing.dumps({"owner_name": "Prov Owner", "password": "Pass@123!"})
+        cache.set(f"tenant_init:{provisioning_tenant.id}", payload, timeout=3600)
+
+        with self._patch_infra():
+            do_provision_tenant(str(provisioning_tenant.id))
+
+        assert Shop.objects.get().name == "Prov Corp"
 
     def test_do_provision_tenant_idempotent_if_already_active(self, db, active_tenant):
         """Calling do_provision_tenant on an already-active tenant is a no-op."""

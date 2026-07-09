@@ -1,4 +1,4 @@
-"""Core cross-module services: in-app notification producers + global search."""
+"""Core cross-module services: in-app notification producers, global search, and tenant plan limits."""
 
 from .models import Notification
 
@@ -132,3 +132,50 @@ def global_search(term, token):
                      "sublabel": po.supplier.name, "route": f"/purchases/{po.id}"} for po in qs]
 
     return results
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tenant plan limits (used by ShopCreateView)
+# ──────────────────────────────────────────────────────────────────────────────
+
+_UNLIMITED_SENTINEL = "unlimited"
+
+
+def get_tenant_max_shops(slug: str) -> int | None:
+    """
+    Look up the tenant's current plan's max_shops limit from the master DB.
+
+    Returns None if the plan has no cap, and also fails open to None when no
+    TenantSubscription record is found for the slug (unknown tenant, or a
+    tenant with no subscription row) — that's the only case this treats as
+    "unlimited". This does NOT catch transient/infrastructure errors (DB
+    timeouts, OperationalError, etc.) — those propagate as exceptions, same
+    as TenantMiddleware._load_db_config elsewhere in this codebase.
+
+    Cached in Redis for TENANT_CACHE_TTL seconds, same pattern as
+    TenantMiddleware._load_db_config.
+    """
+    from django.conf import settings
+    from django.core.cache import cache
+
+    cache_key = f"tenant_max_shops:{slug}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return None if cached == _UNLIMITED_SENTINEL else cached
+
+    from master.models import TenantSubscription
+
+    sub = (
+        TenantSubscription.objects.using("default")
+        .select_related("plan")
+        .filter(tenant__slug=slug)
+        .order_by("-created_at")
+        .first()
+    )
+    max_shops = sub.plan.max_shops if sub else None
+    cache.set(
+        cache_key,
+        _UNLIMITED_SENTINEL if max_shops is None else max_shops,
+        timeout=settings.TENANT_CACHE_TTL,
+    )
+    return max_shops

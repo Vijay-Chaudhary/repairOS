@@ -17,6 +17,7 @@ interface ActiveShopState {
   setAllShops: () => void;
   setShops: (shops: Shop[]) => void;
   getActiveShop: () => Shop | null;
+  reset: () => void;
 }
 
 export const useActiveShopStore = create<ActiveShopState>()(
@@ -32,9 +33,14 @@ export const useActiveShopStore = create<ActiveShopState>()(
 
       setShops: (shops: Shop[]) => {
         set({ shops });
-        const { activeShopId } = get();
-        if (!activeShopId && shops.length > 0) {
-          set({ activeShopId: shops[0].id, isAllShops: false });
+        const { activeShopId, isAllShops } = get();
+        if (isAllShops) return;
+        // activeShopId may be a stale id persisted from a previous tenant/account
+        // on the same origin — if it no longer resolves in the fresh shop list,
+        // fall back instead of sending an unresolvable id to the API.
+        const stillExists = shops.some((s) => s.id === activeShopId);
+        if (!stillExists) {
+          set({ activeShopId: shops.length > 0 ? shops[0].id : null, isAllShops: false });
         }
       },
 
@@ -42,6 +48,8 @@ export const useActiveShopStore = create<ActiveShopState>()(
         const { shops, activeShopId } = get();
         return shops.find((s) => s.id === activeShopId) ?? null;
       },
+
+      reset: () => set({ activeShopId: null, isAllShops: false, shops: [] }),
     }),
     {
       name: 'repairos-active-shop',

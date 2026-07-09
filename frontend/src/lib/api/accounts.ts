@@ -77,6 +77,10 @@ export interface StatementRow {
   code: string | null;
   name: string;
   amount: string;
+  /** Indent depth in the section tree; 0 = root. */
+  level: number;
+  /** Own + descendant amounts; null on rows without children. */
+  total: string | null;
 }
 
 export interface StatementSection {

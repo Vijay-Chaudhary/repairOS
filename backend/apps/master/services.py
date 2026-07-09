@@ -231,10 +231,11 @@ def register_tenant(data: dict) -> Tenant:
         payload={"slug": slug, "plan": plan.name, "owner_email": data["email"]},
     )
 
-    # Store owner credentials for the provisioning task (signed, 1-hour TTL).
+    # Store owner credentials + first-shop name for the provisioning task (signed, 1-hour TTL).
     init_payload = signing.dumps({
         "owner_name": data.get("owner_name", ""),
         "password": data["password"],
+        "shop_name": data.get("shop_name") or data["business_name"],
     })
     cache.set(f"tenant_init:{tenant.id}", init_payload, timeout=3600)
 
@@ -575,9 +576,8 @@ def _create_admin_user(name: str, email: str, phone: str, password: str) -> None
     UserRole.objects.create(user=user, role=admin_role, shop=None)
 
 
-def _create_default_shop(tenant_name: str, tenant_slug: str, phone: str, email: str) -> None:
-    """Create a default shop so new tenants can use CRM/Repair immediately."""
-    import re as _re
+def _create_default_shop(shop_name: str, tenant_slug: str, phone: str, email: str) -> None:
+    """Create the tenant's first shop, using the name captured at registration."""
     from core.models import Shop
 
     # Derive a short unique code from the slug (e.g. "vijay_test" → "VT")
@@ -585,9 +585,9 @@ def _create_default_shop(tenant_name: str, tenant_slug: str, phone: str, email: 
     code = "".join(w[0].upper() for w in words)[:4] or tenant_slug[:4].upper()
 
     Shop.objects.create(
-        name=tenant_name,
+        name=shop_name,
         code=code,
-        address="TBD",       # owner updates via Settings → Shop
+        address="TBD",       # owner updates via Settings → Shops
         city="TBD",
         state="Karnataka",
         state_code="29",
@@ -677,17 +677,20 @@ def do_provision_tenant(tenant_id: str) -> None:
                 init_data = signing.loads(init_raw)
                 owner_name = init_data.get("owner_name") or tenant.name
                 password = init_data["password"]
+                shop_name = init_data.get("shop_name") or tenant.name
             except signing.BadSignature:
                 logger.warning(
                     "Bad signature on tenant_init cache for %s; using random password.", tenant.slug
                 )
                 owner_name = tenant.name
                 password = _random_password()
+                shop_name = tenant.name
             cache.delete(f"tenant_init:{tenant_id}")
         else:
             logger.warning("No tenant_init cache entry for %s; using random password.", tenant.slug)
             owner_name = tenant.name
             password = _random_password()
+            shop_name = tenant.name
 
         _create_admin_user(
             name=owner_name,
@@ -696,7 +699,7 @@ def do_provision_tenant(tenant_id: str) -> None:
             password=password,
         )
         _create_default_shop(
-            tenant_name=tenant.name,
+            shop_name=shop_name,
             tenant_slug=tenant.slug,
             phone=tenant.owner_phone,
             email=tenant.owner_email,

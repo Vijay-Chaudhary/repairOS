@@ -23,6 +23,7 @@ import { AuthBrandPanel } from '@/components/auth/AuthBrandPanel';
 
 const schema = z.object({
   business_name: z.string().min(2, 'Required'),
+  shop_name: z.string().min(2, 'Required'),
   slug: z
     .string()
     .min(3, 'Min 3 characters')
@@ -315,11 +316,12 @@ export default function RegisterPage() {
   const [emailCode, setEmailCode] = useState('');
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [slugEdited, setSlugEdited] = useState(false);
+  const [shopNameEdited, setShopNameEdited] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      business_name: '', slug: '', owner_name: '',
+      business_name: '', shop_name: '', slug: '', owner_name: '',
       phone: '+91', email: '', password: '',
     },
   });
@@ -339,6 +341,12 @@ export default function RegisterPage() {
       .slice(0, 50);
     form.setValue('slug', auto, { shouldValidate: true });
   }, [businessName, form, slugEdited]);
+
+  // Auto-sync shop name from business name until the user manually edits the field
+  useEffect(() => {
+    if (shopNameEdited) return;
+    form.setValue('shop_name', businessName, { shouldValidate: true });
+  }, [businessName, form, shopNameEdited]);
 
   async function onSubmit(values: FormValues) {
     setError(null);
@@ -567,12 +575,37 @@ export default function RegisterPage() {
                 <FormField control={form.control} name="business_name" render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-sm font-medium text-[var(--text)]">Business name</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" strokeWidth={2} />
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" strokeWidth={2} />
+                      <FormControl>
                         <Input placeholder="Sunrise Repairs" className="h-11 pl-10" {...field} />
-                      </div>
-                    </FormControl>
+                      </FormControl>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                {/* Shop name */}
+                <FormField control={form.control} name="shop_name" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium text-[var(--text)]">Shop name</FormLabel>
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" strokeWidth={2} />
+                      <FormControl>
+                        <Input
+                          placeholder="Sunrise Repairs - Main"
+                          className="h-11 pl-10"
+                          {...field}
+                          onChange={(e) => {
+                            setShopNameEdited(true);
+                            field.onChange(e);
+                          }}
+                        />
+                      </FormControl>
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                      Defaults to your business name — edit if this shop has a different name
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -581,9 +614,9 @@ export default function RegisterPage() {
                 <FormField control={form.control} name="slug" render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-sm font-medium text-[var(--text)]">Workspace ID</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" strokeWidth={2} />
+                    <div className="relative">
+                      <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" strokeWidth={2} />
+                      <FormControl>
                         <Input
                           placeholder="sunrise_repairs"
                           className="h-11 pl-10"
@@ -593,8 +626,8 @@ export default function RegisterPage() {
                             field.onChange(e);
                           }}
                         />
-                      </div>
-                    </FormControl>
+                      </FormControl>
+                    </div>
                     <p className="text-xs text-[var(--text-muted)] mt-1">
                       Lowercase letters, numbers, underscores only
                     </p>
@@ -607,24 +640,24 @@ export default function RegisterPage() {
                   <FormField control={form.control} name="owner_name" render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-sm font-medium text-[var(--text)]">Your name</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" strokeWidth={2} />
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" strokeWidth={2} />
+                        <FormControl>
                           <Input placeholder="Ravi Kumar" className="h-11 pl-10" {...field} />
-                        </div>
-                      </FormControl>
+                        </FormControl>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )} />
                   <FormField control={form.control} name="phone" render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-sm font-medium text-[var(--text)]">Phone</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" strokeWidth={2} />
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" strokeWidth={2} />
+                        <FormControl>
                           <Input inputMode="tel" placeholder="+91XXXXXXXXXX" className="h-11 pl-10" {...field} />
-                        </div>
-                      </FormControl>
+                        </FormControl>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -634,12 +667,12 @@ export default function RegisterPage() {
                 <FormField control={form.control} name="email" render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-sm font-medium text-[var(--text)]">Email address</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" strokeWidth={2} />
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" strokeWidth={2} />
+                      <FormControl>
                         <Input type="email" autoComplete="email" placeholder="you@company.com" className="h-11 pl-10" {...field} />
-                      </div>
-                    </FormControl>
+                      </FormControl>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -648,28 +681,28 @@ export default function RegisterPage() {
                 <FormField control={form.control} name="password" render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-sm font-medium text-[var(--text)]">Password</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" strokeWidth={2} />
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" strokeWidth={2} />
+                      <FormControl>
                         <Input
                           type={showPassword ? 'text' : 'password'}
                           autoComplete="new-password"
                           className="h-11 pl-10 pr-10"
                           {...field}
                         />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword((v) => !v)}
-                          aria-label={showPassword ? 'Hide password' : 'Show password'}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
-                          style={{ minHeight: 0, minWidth: 0 }}
-                        >
-                          {showPassword
-                            ? <EyeOff className="w-4 h-4" strokeWidth={2} />
-                            : <Eye className="w-4 h-4" strokeWidth={2} />}
-                        </button>
-                      </div>
-                    </FormControl>
+                      </FormControl>
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((v) => !v)}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+                        style={{ minHeight: 0, minWidth: 0 }}
+                      >
+                        {showPassword
+                          ? <EyeOff className="w-4 h-4" strokeWidth={2} />
+                          : <Eye className="w-4 h-4" strokeWidth={2} />}
+                      </button>
+                    </div>
                     {/* Strength bar */}
                     {password && (
                       <div className="space-y-1 mt-1">
