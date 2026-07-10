@@ -13,7 +13,7 @@ export function StatementSectionTable({ title, section }: StatementSectionTableP
       <h3 className="px-3 py-2 bg-[var(--surface-2)] text-body-sm font-semibold text-[var(--text)]">
         {title}
       </h3>
-      <table className="w-full text-body-sm">
+      <div className="overflow-x-auto"><table className="w-full min-w-max text-body-sm">
         <tbody>
           {section.rows.map((r) => (
             <tr key={r.account_id ?? r.name} className="border-t border-[var(--border)]">
@@ -48,7 +48,7 @@ export function StatementSectionTable({ title, section }: StatementSectionTableP
             <td className="px-3 py-2 text-right"><Money amount={section.subtotal} /></td>
           </tr>
         </tfoot>
-      </table>
+      </table></div>
     </div>
   );
 }
