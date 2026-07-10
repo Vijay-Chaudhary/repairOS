@@ -148,7 +148,7 @@ function UsersInner() {
           <p className="text-body-sm text-[var(--text-muted)] py-12 text-center">No users found.</p>
         ) : (
           <div className="rounded-lg border border-[var(--border)] overflow-hidden">
-            <table className="w-full text-body-sm">
+            <div className="overflow-x-auto"><table className="w-full min-w-max text-body-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] bg-[var(--surface)] text-left">
                   <th className="px-4 py-3 font-medium text-[var(--text-muted)]">User</th>
@@ -212,7 +212,7 @@ function UsersInner() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
             {data?.meta?.total_pages !== undefined && data.meta.total_pages > 1 && (
               <div className="border-t border-[var(--border)] p-3">
                 <PaginationBar

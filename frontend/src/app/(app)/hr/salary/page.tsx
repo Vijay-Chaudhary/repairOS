@@ -137,7 +137,7 @@ export default function SalaryPage() {
           </div>
         ) : (
           <div className="rounded-lg border border-[var(--border)] overflow-hidden">
-            <table className="w-full text-body-sm">
+            <div className="overflow-x-auto"><table className="w-full min-w-max text-body-sm">
               <thead>
                 <tr className="border-b border-[var(--border)] bg-[var(--surface-2)] text-left">
                   <th className="px-4 py-2 font-medium text-[var(--text-muted)]">Employee</th>
@@ -189,7 +189,7 @@ export default function SalaryPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         )}
         {data?.meta?.total_pages !== undefined && data.meta.total_pages > 1 && (

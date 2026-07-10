@@ -90,7 +90,7 @@ export default function LedgerPage() {
                   <span>Opening balance</span>
                   <Money amount={ledger.opening_balance} className="font-semibold" />
                 </div>
-                <table className="w-full text-body-sm">
+                <div className="overflow-x-auto"><table className="w-full min-w-max text-body-sm">
                   <thead>
                     <tr className="text-[var(--text-muted)] text-left">
                       <th className="px-3 py-2 font-medium">Date</th>
@@ -114,7 +114,7 @@ export default function LedgerPage() {
                       <tr><td colSpan={5} className="px-3 py-6 text-center text-[var(--text-muted)]">No postings in range.</td></tr>
                     )}
                   </tbody>
-                </table>
+                </table></div>
                 <div className="flex justify-between px-3 py-2 bg-[var(--surface-2)] text-body-sm border-t border-[var(--border)]">
                   <span>Closing balance</span>
                   <Money amount={ledger.closing_balance} className="font-semibold" />
@@ -129,7 +129,7 @@ export default function LedgerPage() {
             {tbLoading && <p className="text-body-sm text-[var(--text-muted)]">Loading…</p>}
             {trialBalance && (
               <div className="rounded-lg border border-[var(--border)] overflow-hidden">
-                <table className="w-full text-body-sm">
+                <div className="overflow-x-auto"><table className="w-full min-w-max text-body-sm">
                   <thead>
                     <tr className="text-[var(--text-muted)] text-left">
                       <th className="px-3 py-2 font-medium">Code</th>
@@ -158,7 +158,7 @@ export default function LedgerPage() {
                       <td className="px-3 py-2 text-right"><Money amount={trialBalance.total_credit} /></td>
                     </tr>
                   </tfoot>
-                </table>
+                </table></div>
               </div>
             )}
           </>

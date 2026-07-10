@@ -141,7 +141,7 @@ export default function TechnicianLedgerPage() {
             {/* Per-job breakdown */}
             {ledger.commissions.length > 0 ? (
               <div className="rounded-lg border border-[var(--border)] overflow-hidden">
-                <table className="w-full text-body-sm">
+                <div className="overflow-x-auto"><table className="w-full min-w-max text-body-sm">
                   <thead>
                     <tr className="border-b border-[var(--border)] bg-[var(--surface-2)] text-left">
                       <th className="px-4 py-2 font-medium text-[var(--text-muted)]">Job</th>
@@ -182,7 +182,7 @@ export default function TechnicianLedgerPage() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </table></div>
               </div>
             ) : (
               <p className="text-body-sm text-[var(--text-muted)] py-6 text-center">No jobs closed in this period.</p>

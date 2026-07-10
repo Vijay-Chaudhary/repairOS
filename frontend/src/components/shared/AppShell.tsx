@@ -459,7 +459,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </Sheet>
 
         {/* Main */}
-        <div className="flex flex-col flex-1 overflow-hidden">
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
           {/* Topbar */}
           <header className="h-14 flex items-center gap-3 px-4 border-b border-[var(--border)] bg-[var(--surface)] shrink-0">
             <button

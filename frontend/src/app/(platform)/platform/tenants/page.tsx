@@ -107,7 +107,7 @@ export default function TenantsPage() {
         <p className="text-body-sm text-[var(--text-muted)] py-12 text-center">No tenants found.</p>
       ) : (
         <div className="rounded-lg border border-[var(--border)] overflow-hidden">
-          <table className="w-full text-body-sm">
+          <div className="overflow-x-auto"><table className="w-full min-w-max text-body-sm">
             <thead>
               <tr className="border-b border-[var(--border)] bg-[var(--surface)] text-left">
                 <th className="px-4 py-3 font-medium text-[var(--text-muted)]">Tenant</th>
@@ -166,7 +166,7 @@ export default function TenantsPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
 
           {/* Pagination */}
           {(data?.meta?.next_cursor || cursor) && (
