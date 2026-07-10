@@ -292,6 +292,7 @@ export default function NewJobPage() {
       <QuickCreateCustomerDialog
         open={showQuickCreate}
         onOpenChange={setShowQuickCreate}
+        shopId={activeShopId}
         onCreated={(c) => {
           setWizardData(p => ({ ...p, customer: c }));
           setShowQuickCreate(false);
@@ -673,10 +674,11 @@ function ReviewStep({
 // ── Quick-create customer dialog ──────────────────────────────────────────────
 
 function QuickCreateCustomerDialog({
-  open, onOpenChange, onCreated,
+  open, onOpenChange, shopId, onCreated,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  shopId: string | null;
   onCreated: (c: CustomerOption) => void;
 }) {
   const form = useForm<QuickCustomerFormValues>({
@@ -685,12 +687,15 @@ function QuickCreateCustomerDialog({
   });
 
   const createMutation = useMutation({
-    mutationFn: (values: QuickCustomerFormValues) =>
-      apiPost<CustomerOption>('/crm/customers/', {
+    mutationFn: (values: QuickCustomerFormValues) => {
+      if (!shopId) throw new Error('No active shop selected');
+      return apiPost<CustomerOption>('/crm/customers/', {
+        shop_id: shopId,
         name: values.name,
         phone: normalizePhone(values.phone),
         email: values.email || undefined,
-      }),
+      });
+    },
     onSuccess: (customer) => {
       toast.success('Customer created');
       form.reset();
