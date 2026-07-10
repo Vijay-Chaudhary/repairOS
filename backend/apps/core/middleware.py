@@ -92,7 +92,32 @@ class TenantMiddleware:
         if slug:
             return slug.lower()
 
+        # 4. Refresh-token cookie. A token-less refresh on a hard page reload
+        # carries no JWT/subdomain/header — only the HttpOnly refresh cookie,
+        # whose signed tenant_slug claim is the sole tenant hint. Without it the
+        # refresh runs against the master DB and 500s on the tenant-only
+        # token_blacklist_* tables (surfaces as logout-on-refresh).
+        slug = self._slug_from_refresh_cookie(request)
+        if slug:
+            return slug
+
         return None
+
+    def _slug_from_refresh_cookie(self, request) -> Optional[str]:
+        # Cookie name mirrors authentication.views._REFRESH_COOKIE. Decoding via
+        # UntypedToken verifies the signature (so the slug is authentic) without
+        # touching the blacklist table, which the tenant DB context isn't ready
+        # for yet.
+        token = request.COOKIES.get("refresh_token")
+        if not token:
+            return None
+        try:
+            from rest_framework_simplejwt.tokens import UntypedToken
+
+            slug = UntypedToken(token).payload.get("tenant_slug") or ""
+            return slug.lower() or None
+        except Exception:
+            return None
 
     def _slug_from_jwt(self, request) -> Optional[str]:
         auth = request.META.get("HTTP_AUTHORIZATION", "")
