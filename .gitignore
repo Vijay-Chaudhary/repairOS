@@ -51,7 +51,9 @@ Thumbs.db
 *.swo
 
 # Claude Code project settings
-.claude/
+.claude/*
+# ...but track shared, checked-in skills
+!.claude/skills/
 
 # Build artifacts
 dist/
