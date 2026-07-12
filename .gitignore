@@ -51,7 +51,12 @@ Thumbs.db
 *.swo
 
 # Claude Code project settings
-.claude/
+.claude/*
+# ...but track shared, checked-in skills
+!.claude/skills/
+# ...except these Anthropic-provided local skills
+.claude/skills/frontend-design/
+.claude/skills/webapp-testing/
 
 # Build artifacts
 dist/
