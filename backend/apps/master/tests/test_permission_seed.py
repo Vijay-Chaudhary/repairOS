@@ -16,6 +16,8 @@ NEW_SLUGS = [
     "repair.estimates.view",
     # erp
     "erp.products.view", "erp.products.manage", "erp.purchase_returns.view",
+    # pos
+    "pos.returns.view",
     # billing
     "billing.credit_notes.view", "billing.credit_notes.create", "billing.credit_notes.approve",
     "billing.refunds.view", "billing.refunds.create", "billing.refunds.approve",
@@ -53,3 +55,48 @@ def test_new_slugs_are_seeded_and_granted_to_admin():
     )
     not_granted = [s for s in NEW_SLUGS if s not in admin_slugs]
     assert not not_granted, f"slugs not granted to Tenant Admin: {not_granted}"
+
+
+# Catalogue slugs that used to reach Tenant Admin only, leaving the Products,
+# Purchase Returns and Sales Returns pages invisible to every other role.
+NON_ADMIN_GRANTS = {
+    "Shop Manager": [
+        "erp.products.view", "erp.products.manage",
+        "erp.purchase_returns.view", "pos.returns.view",
+    ],
+    "Receptionist": ["erp.products.view", "pos.returns.view"],
+    "Technician": ["erp.products.view"],
+    "Billing Staff": ["erp.products.view", "pos.returns.view"],
+    "Viewer": ["erp.products.view"],
+}
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("role_name,codenames", sorted(NON_ADMIN_GRANTS.items()))
+def test_catalogue_and_return_slugs_reach_non_admin_roles(role_name, codenames):
+    from authentication.models import Role, RolePermission
+    from master.services import _seed_roles_and_permissions
+
+    _seed_roles_and_permissions()
+
+    role = Role.objects.get(name=role_name)
+    granted = set(
+        RolePermission.objects.filter(role=role).values_list("permission__codename", flat=True)
+    )
+    missing = [c for c in codenames if c not in granted]
+    assert not missing, f"{role_name} is missing: {missing}"
+
+
+@pytest.mark.django_db
+def test_products_manage_stays_off_read_only_roles():
+    from authentication.models import Role, RolePermission
+    from master.services import _seed_roles_and_permissions
+
+    _seed_roles_and_permissions()
+
+    for role_name in ("Receptionist", "Technician", "Viewer"):
+        role = Role.objects.get(name=role_name)
+        granted = set(
+            RolePermission.objects.filter(role=role).values_list("permission__codename", flat=True)
+        )
+        assert "erp.products.manage" not in granted, f"{role_name} must not manage the catalogue"

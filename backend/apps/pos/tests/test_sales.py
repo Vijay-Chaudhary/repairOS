@@ -66,7 +66,7 @@ def admin_user(db):
     perms = [
         "pos.counter_sale.create", "pos.wholesale_sale.create",
         "pos.job_sale.create", "pos.discount.apply",
-        "pos.returns.create", "pos.returns.approve",
+        "pos.returns.create", "pos.returns.approve", "pos.returns.view",
         "billing.sales_invoices.view", "billing.payments.record",
     ]
     for codename in perms:
@@ -77,6 +77,40 @@ def admin_user(db):
         RolePermission.objects.get_or_create(role=role, permission=perm)
     UserRole.objects.create(user=user, role=role, shop=None)
     return user
+
+
+@pytest.fixture
+def counter_staff_user(db):
+    """Can raise a return but not read the returns list (no pos.returns.view)."""
+    from authentication.models import Permission, Role, RolePermission, User, UserRole
+
+    user = User.objects.create_user(
+        email="counter@pos.test",
+        phone="+919000000021",
+        full_name="POS Counter Staff",
+        password="CounterPass@1",
+    )
+    role, _ = Role.objects.get_or_create(name="Counter Staff", defaults={"is_system_role": False})
+    for codename in ("pos.counter_sale.create", "pos.returns.create"):
+        perm, _ = Permission.objects.get_or_create(
+            codename=codename, defaults={"module": "pos", "label": codename}
+        )
+        RolePermission.objects.get_or_create(role=role, permission=perm)
+    UserRole.objects.create(user=user, role=role, shop=None)
+    return user
+
+
+@pytest.fixture
+def counter_staff_client(api_client, counter_staff_user):
+    from authentication.tokens import _build_token_claims
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    refresh = RefreshToken.for_user(counter_staff_user)
+    access = refresh.access_token
+    for k, v in _build_token_claims(counter_staff_user, "test").items():
+        access[k] = v
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {str(access)}")
+    return api_client
 
 
 @pytest.fixture
@@ -442,6 +476,66 @@ class TestReturns:
         )
         assert res.status_code == status.HTTP_200_OK
         assert res.data["status"] == "rejected"
+
+    def _seed_return(self, shop, user, reason="Defective item"):
+        from pos.services import create_sale, create_return
+
+        sale = create_sale(
+            shop,
+            {
+                "sale_type": "counter",
+                "items": [{"product_name_snapshot": "USB Cable", "quantity": "1",
+                            "unit_price": "500", "tax_rate": "0"}],
+                "payments": [{"amount": "500", "method": "cash"}],
+            },
+            user,
+        )
+        ret = create_return(
+            sale,
+            {"reason": reason, "total_refund_amount": "500.00", "refund_method": "cash"},
+            user,
+        )
+        return sale, ret
+
+    def test_list_returns_newest_first_with_sale_context(self, admin_client, shop, admin_user):
+        _, first = self._seed_return(shop, admin_user, reason="First")
+        second_sale, second = self._seed_return(shop, admin_user, reason="Second")
+
+        res = admin_client.get(self.returns_url)
+
+        assert res.status_code == status.HTTP_200_OK
+        ids = [row["id"] for row in res.data]
+        assert ids == [str(second.id), str(first.id)]
+        assert res.data[0]["sale_number"] == second_sale.sale_number
+        assert res.data[0]["sale_id"] == str(second_sale.id)
+
+    def test_list_returns_filtered_by_sale(self, admin_client, shop, admin_user):
+        self._seed_return(shop, admin_user, reason="Other sale")
+        target_sale, target = self._seed_return(shop, admin_user, reason="Wanted")
+
+        res = admin_client.get(self.returns_url, {"sale_id": str(target_sale.id)})
+
+        assert res.status_code == status.HTTP_200_OK
+        assert [row["id"] for row in res.data] == [str(target.id)]
+
+    def test_list_returns_filtered_by_status(self, admin_client, shop, admin_user):
+        _, pending = self._seed_return(shop, admin_user)
+
+        res = admin_client.get(self.returns_url, {"status": "approved"})
+        assert res.status_code == status.HTTP_200_OK
+        assert res.data == []
+
+        res = admin_client.get(self.returns_url, {"status": "pending"})
+        assert [row["id"] for row in res.data] == [str(pending.id)]
+
+    def test_list_returns_denied_without_view_permission(
+        self, counter_staff_client, shop, counter_staff_user
+    ):
+        self._seed_return(shop, counter_staff_user)
+
+        res = counter_staff_client.get(self.returns_url)
+
+        assert res.status_code == status.HTTP_403_FORBIDDEN
 
     def test_cannot_return_cancelled_sale(self, admin_client, shop, admin_user):
         from pos.models import Sale

@@ -76,6 +76,33 @@ describe('NAV_ITEMS — CRM group', () => {
   });
 });
 
+describe('NAV_ITEMS — POS group', () => {
+  it('starts with Counter at /pos on pos.counter_sale.create', () => {
+    const c = group('POS').children;
+    expect(c[0].href).toBe('/pos');
+    expect(c[0].label).toBe('Counter');
+    expect(c[0].permission).toBe('pos.counter_sale.create');
+  });
+
+  it('links the sales list on billing.sales_invoices.view', () => {
+    expect(leaf('/sales').permission).toBe('billing.sales_invoices.view');
+  });
+
+  it('links sales returns on pos.returns.view', () => {
+    expect(leaf('/sales/returns').permission).toBe('pos.returns.view');
+  });
+});
+
+describe('NAV_ITEMS — Inventory group', () => {
+  it('links the product catalogue on erp.products.view', () => {
+    expect(leaf('/products').permission).toBe('erp.products.view');
+  });
+
+  it('links purchase returns on erp.purchase_returns.view', () => {
+    expect(leaf('/purchases/returns').permission).toBe('erp.purchase_returns.view');
+  });
+});
+
 describe('NAV_ITEMS — Tasks is now a top-level Operations leaf', () => {
   it('exists as a top-level leaf gated on tasks.tasks.view or crm.tasks.manage', () => {
     const t = NAV_ITEMS.find((e) => e.type === 'leaf' && e.href === '/tasks');

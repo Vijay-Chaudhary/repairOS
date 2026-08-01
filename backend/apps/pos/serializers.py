@@ -65,6 +65,9 @@ class SalesReturnSerializer(serializers.ModelSerializer):
     credit_note_pdf_url = serializers.CharField(
         source="credit_note.pdf_url", read_only=True, default=""
     )
+    # Sale context so the returns list stands on its own, without an extra fetch.
+    sale_id = serializers.UUIDField(source="sale.id", read_only=True)
+    sale_number = serializers.CharField(source="sale.sale_number", read_only=True)
 
     class Meta:
         model = SalesReturn
@@ -72,6 +75,7 @@ class SalesReturnSerializer(serializers.ModelSerializer):
             "id", "return_number", "reason", "status",
             "total_refund_amount", "refund_method",
             "approved_by", "approved_at", "credit_note_number", "credit_note_pdf_url",
+            "sale_id", "sale_number",
             "created_at",
         ]
 

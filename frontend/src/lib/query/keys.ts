@@ -81,6 +81,7 @@ export const qk = {
   // POS
   posSales: listKey('pos-sales'),
   posSale:  (id: string) => ['pos-sale', id] as const,
+  salesReturns: (status?: string) => ['sales-returns', status ?? 'all'] as const,
 
   // AMC
   amcContracts: listKey('amc-contracts'),

@@ -51,14 +51,17 @@ export interface SalePayment {
 export interface SaleReturn {
   id: string;
   sale_id: string;
+  sale_number?: string;
   return_number: string;
   reason: string;
   status: ReturnStatus;
   total_refund_amount: number;
   refund_method: RefundMethod;
   approved_by?: string | null;
+  approved_at?: string | null;
   credit_note_number?: string | null;
   credit_note_pdf_url?: string | null;
+  created_at?: string;
 }
 
 export interface Sale {
@@ -259,6 +262,14 @@ export const posApi = {
       refund_method: RefundMethod;
     },
   ) => apiPost<SaleReturn>(`/pos/sales/${saleId}/return/`, body),
+
+  listReturns: (params?: { sale_id?: string; status?: ReturnStatus }) => {
+    const qs = new URLSearchParams();
+    if (params?.sale_id) qs.set('sale_id', params.sale_id);
+    if (params?.status) qs.set('status', params.status);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return apiGet<SaleReturn[]>(`/pos/sales/returns/${suffix}`);
+  },
 
   reviewReturn: (returnId: string, status: 'approved' | 'rejected') =>
     apiPatch<SaleReturn>(`/pos/sales/returns/${returnId}/`, { action: status === 'approved' ? 'approve' : 'reject' }),
