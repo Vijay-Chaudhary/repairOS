@@ -157,17 +157,17 @@ def admin_user(db):
 
 @pytest.fixture
 def admin_client(db, admin_user):
+    from authentication.tokens import _build_token_claims
     from rest_framework.test import APIClient
     from rest_framework_simplejwt.tokens import RefreshToken
     refresh = RefreshToken.for_user(admin_user)
     access = refresh.access_token
-    access["permissions"] = [
-        "billing.repair_invoices.view",
-        "billing.repair_invoices.create",
-        "billing.payments.record",
-        "billing.outstanding.view",
-        "billing.tally_export",
-    ]
+    # Mirrors apps/repair/tests/test_jobs.py::_make_client — without this, the
+    # token carries no is_tenant_wide/shop_ids claim, so _shop_ids_from_token()
+    # defaults to shop_ids=[] and every shop-scoped queryset 404s regardless of
+    # whether the invoice actually belongs to the caller's shop.
+    for k, v in _build_token_claims(admin_user, "test").items():
+        access[k] = v
     client = APIClient()
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {str(access)}")
     return client
@@ -554,3 +554,82 @@ class TestTallyExport:
         for col in ["invoice_number", "date", "customer_name", "gstin",
                     "subtotal", "cgst", "sgst", "igst", "grand_total"]:
             assert col in header
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TestInvoicePdf — the endpoint returns the PDF itself, never a URL
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class TestInvoicePdf:
+    def _url(self, invoice) -> str:
+        return f"/api/v1/billing/repair-invoices/{invoice.id}/pdf/"
+
+    def test_renders_on_demand_when_pdf_url_is_empty(self, admin_client, repair_invoice):
+        repair_invoice.pdf_url = ""
+        repair_invoice.save(update_fields=["pdf_url"])
+
+        res = admin_client.get(self._url(repair_invoice))
+
+        assert res.status_code == status.HTTP_200_OK
+        assert res["Content-Type"] == "application/pdf"
+        assert res.content[:4] == b"%PDF"
+
+    def test_streams_the_stored_file_when_present(
+        self, admin_client, repair_invoice, settings, tmp_path
+    ):
+        settings.MEDIA_ROOT = tmp_path
+        settings.MEDIA_URL = "/media/"
+        stored = tmp_path / "invoices" / "stored.pdf"
+        stored.parent.mkdir(parents=True)
+        stored.write_bytes(b"%PDF-1.7 stored copy")
+
+        repair_invoice.pdf_url = "/media/invoices/stored.pdf"
+        repair_invoice.save(update_fields=["pdf_url"])
+
+        res = admin_client.get(self._url(repair_invoice))
+
+        assert res.status_code == status.HTTP_200_OK
+        assert res.content == b"%PDF-1.7 stored copy"
+
+    def test_falls_back_to_rendering_when_the_stored_file_is_gone(
+        self, admin_client, repair_invoice, settings, tmp_path
+    ):
+        settings.MEDIA_ROOT = tmp_path
+        settings.MEDIA_URL = "/media/"
+        repair_invoice.pdf_url = "/media/invoices/vanished.pdf"
+        repair_invoice.save(update_fields=["pdf_url"])
+
+        res = admin_client.get(self._url(repair_invoice))
+
+        assert res.status_code == status.HTTP_200_OK
+        assert res.content[:4] == b"%PDF"
+
+    def test_content_disposition_carries_the_invoice_number(self, admin_client, repair_invoice):
+        res = admin_client.get(self._url(repair_invoice))
+
+        assert repair_invoice.invoice_number in res["Content-Disposition"]
+        assert res["Content-Disposition"].startswith("inline;")
+
+    def test_unknown_invoice_returns_404(self, admin_client):
+        import uuid
+
+        res = admin_client.get(f"/api/v1/billing/repair-invoices/{uuid.uuid4()}/pdf/")
+
+        assert res.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_render_failure_returns_the_json_envelope(
+        self, admin_client, repair_invoice, monkeypatch
+    ):
+        """A render crash must produce a readable error, never an empty body."""
+        from billing import views
+
+        def boom(_invoice):
+            raise RuntimeError("weasyprint exploded")
+
+        monkeypatch.setattr(views, "_invoice_pdf_bytes", boom)
+
+        res = admin_client.get(self._url(repair_invoice))
+
+        assert res.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert res.data["code"] == "PDF_RENDER_FAILED"

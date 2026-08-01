@@ -143,14 +143,59 @@ class RepairInvoiceDetailView(APIView):
         return Response(RepairInvoiceDetailSerializer(invoice).data)
 
 
+def _invoice_pdf_bytes(invoice) -> bytes:
+    """
+    The stored file when it exists on disk, otherwise a fresh render.
+
+    No staleness check: a stored file is authoritative. Regeneration stays the
+    job of billing.generate_invoice_pdf; this fallback exists for files that
+    were never produced (e.g. the task failed) or are missing on this host.
+    """
+    from pathlib import Path
+
+    from django.conf import settings
+    from django.utils import timezone
+
+    from core.pdf import render_pdf_bytes
+
+    if invoice.pdf_url:
+        rel_path = invoice.pdf_url.removeprefix(settings.MEDIA_URL)
+        stored = Path(str(settings.MEDIA_ROOT)) / rel_path
+        if stored.is_file():
+            return stored.read_bytes()
+
+    return render_pdf_bytes(
+        "pdf/repair_invoice.html",
+        {
+            "invoice": invoice,
+            "shop": invoice.shop,
+            "items": invoice.items.all(),
+            "generated_at": timezone.now().strftime("%d %b %Y %H:%M"),
+        },
+    )
+
+
 class RepairInvoicePdfView(APIView):
+    """
+    Returns the PDF itself, not a URL.
+
+    The previous {"pdf_url": …} contract meant an empty string reached the
+    browser whenever generation had failed, and window.open('') opens a blank
+    tab. Streaming bytes removes that failure mode: the caller gets a PDF or a
+    readable error.
+
+    HttpResponse (not DRF Response) deliberately bypasses RepairOSRenderer, so
+    the body is raw PDF rather than a JSON envelope. Error paths keep using
+    Response so the frontend still receives the envelope it expects.
+    """
+
     permission_classes = [IsAuthenticated, require_permission("billing.repair_invoices.view")]
 
-    def get(self, request: Request, invoice_id: str) -> Response:
+    def get(self, request: Request, invoice_id: str):
         token = getattr(request, "auth", None)
         shop_ids = _shop_ids_from_token(token)
 
-        qs = RepairInvoice.objects.only("id", "pdf_url", "shop_id")
+        qs = RepairInvoice.objects.select_related("job", "customer", "shop").prefetch_related("items")
         if shop_ids is not None:
             qs = qs.filter(shop_id__in=shop_ids)
 
@@ -159,7 +204,22 @@ class RepairInvoicePdfView(APIView):
         except RepairInvoice.DoesNotExist:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        return Response({"pdf_url": invoice.pdf_url or ""})
+        try:
+            pdf_bytes = _invoice_pdf_bytes(invoice)
+        except Exception:
+            logger.exception("Invoice PDF render failed for %s", invoice_id)
+            return Response(
+                {
+                    "code": "PDF_RENDER_FAILED",
+                    "message": "Could not generate the PDF. Please try again.",
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        filename = f"{invoice.invoice_number.replace('/', '-')}.pdf"
+        response["Content-Disposition"] = f'inline; filename="{filename}"'
+        return response
 
 
 class RepairInvoiceSendWhatsappView(APIView):
