@@ -77,7 +77,11 @@ export const NAV_ITEMS: NavEntry[] = [
     { type: 'leaf', label: 'Segments',  href: '/crm/segments',  icon: Filter,          permission: 'crm.segments.manage' },
     { type: 'leaf', label: 'Campaigns', href: '/crm/campaigns', icon: Send,            permission: 'crm.segments.manage' },
   ]},
-  { type: 'leaf', label: 'POS',   href: '/pos',   icon: ShoppingCart, permission: 'pos.counter_sale.create' },
+  { type: 'group', label: 'POS', icon: ShoppingCart, children: [
+    { type: 'leaf', label: 'Counter',       href: '/pos',            icon: ShoppingCart, permission: 'pos.counter_sale.create' },
+    { type: 'leaf', label: 'Sales',         href: '/sales',          icon: Receipt,      permission: 'billing.sales_invoices.view' },
+    { type: 'leaf', label: 'Sales Returns', href: '/sales/returns',  icon: Undo2,        permission: 'pos.returns.view' },
+  ] },
   { type: 'leaf', label: 'AMC',   href: '/amc',   icon: Building,     permission: 'amc.contracts.view' },
   { type: 'leaf', label: 'Tasks', href: '/tasks', icon: ListChecks,  anyOf: ['tasks.tasks.view', 'crm.tasks.manage'] },
 

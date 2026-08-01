@@ -379,6 +379,7 @@ def _seed_roles_and_permissions() -> None:
         ("pos.counter_sale.create", "pos"), ("pos.wholesale_sale.create", "pos"),
         ("pos.job_sale.create", "pos"), ("pos.discount.apply", "pos"),
         ("pos.returns.create", "pos"), ("pos.returns.approve", "pos"),
+        ("pos.returns.view", "pos"),
         # erp
         ("erp.inventory.view", "erp"), ("erp.inventory.adjust", "erp"),
         ("erp.suppliers.manage", "erp"), ("erp.purchase_orders.create", "erp"),
@@ -465,10 +466,13 @@ def _seed_roles_and_permissions() -> None:
             # POS — full access
             "pos.counter_sale.create", "pos.wholesale_sale.create", "pos.job_sale.create",
             "pos.discount.apply", "pos.returns.create", "pos.returns.approve",
+            "pos.returns.view",
             # ERP — full access
+            "erp.products.view", "erp.products.manage",
             "erp.inventory.view", "erp.inventory.adjust", "erp.suppliers.manage",
             "erp.purchase_orders.create", "erp.grn.receive", "erp.purchase_invoices.record",
-            "erp.purchase_returns.create", "erp.expenses.view", "erp.expenses.create",
+            "erp.purchase_returns.create", "erp.purchase_returns.view",
+            "erp.expenses.view", "erp.expenses.create",
             "erp.budget.manage", "erp.assets.manage",
             # AMC — full access
             "amc.contracts.view", "amc.contracts.create", "amc.contracts.edit",
@@ -495,7 +499,9 @@ def _seed_roles_and_permissions() -> None:
             "repair.jobs.change_status", "repair.warranty.view",
             "repair.spare_parts.request",
             # POS — counter sales only (no billing write)
-            "pos.counter_sale.create", "pos.returns.create",
+            "pos.counter_sale.create", "pos.returns.create", "pos.returns.view",
+            # ERP — read-only catalogue for counter-sale lookups
+            "erp.products.view",
             # AMC — view + schedule visits
             "amc.contracts.view", "amc.visits.schedule", "amc.visits.complete",
         ],
@@ -503,8 +509,8 @@ def _seed_roles_and_permissions() -> None:
             # Repair — own jobs/stages, spare parts
             "repair.jobs.view", "repair.jobs.edit", "repair.jobs.change_status",
             "repair.warranty.view", "repair.spare_parts.request",
-            # ERP — inventory view to check stock
-            "erp.inventory.view",
+            # ERP — inventory + catalogue view to check stock
+            "erp.inventory.view", "erp.products.view",
         ],
         "Billing Staff": [
             # Billing — full access
@@ -513,7 +519,9 @@ def _seed_roles_and_permissions() -> None:
             "billing.outstanding.view", "billing.tally_export",
             # POS — all sale types + returns
             "pos.counter_sale.create", "pos.wholesale_sale.create", "pos.job_sale.create",
-            "pos.returns.create", "pos.returns.approve",
+            "pos.returns.create", "pos.returns.approve", "pos.returns.view",
+            # ERP — read-only catalogue for sale/invoice lookups
+            "erp.products.view",
             # Repair — view jobs to raise invoices
             "repair.jobs.view",
             # Reports — financial
@@ -531,7 +539,7 @@ def _seed_roles_and_permissions() -> None:
             # Read-only across key modules
             "crm.leads.view", "crm.customers.view",
             "repair.jobs.view", "repair.warranty.view",
-            "erp.inventory.view",
+            "erp.inventory.view", "erp.products.view",
             "amc.contracts.view",
             "billing.repair_invoices.view", "billing.outstanding.view",
             "reports.repair.view", "reports.crm.view", "reports.inventory.view",

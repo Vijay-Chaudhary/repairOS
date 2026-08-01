@@ -5,6 +5,7 @@ POST  /sales/                       — create sale
 GET   /sales/{id}/                  — detail
 POST  /sales/{id}/payment/          — add payment to existing sale
 POST  /sales/{id}/return/           — create return
+GET   /sales/returns/               — list returns (shop-scoped)
 PATCH /sales/returns/{id}/          — review return (approve/reject)
 GET   /products/barcode/{barcode}/  — barcode lookup (shop-aware: variant + stock)
 """
@@ -152,18 +153,33 @@ class SaleViewSet(ShopScopedMixin, GenericViewSet):
 
 
 class SalesReturnViewSet(GenericViewSet):
-    http_method_names = ["patch", "head", "options"]
+    http_method_names = ["get", "patch", "head", "options"]
 
     def get_permissions(self):
+        if self.request.method == "GET":
+            return [require_permission("pos.returns.view")()]
         return [require_permission("pos.returns.approve")()]
 
     def get_queryset(self):
-        qs = SalesReturn.objects.select_related("sale__shop")
+        qs = SalesReturn.objects.select_related("sale__shop", "credit_note")
         token = getattr(self.request, "auth", None)
         if token and not token.get("is_tenant_wide") and not token.get("is_platform_admin"):
             shop_ids = token.get("shop_ids", [])
             qs = qs.filter(sale__shop_id__in=shop_ids)
         return qs
+
+    def list(self, request):
+        qs = self.get_queryset().order_by("-created_at")
+
+        sale_id = request.query_params.get("sale_id")
+        if sale_id:
+            qs = qs.filter(sale_id=sale_id)
+
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
+        return Response(SalesReturnSerializer(qs, many=True).data)
 
     def partial_update(self, request, pk=None):
         try:
