@@ -6,10 +6,30 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# libpq-dev/gcc: psycopg2 build. curl: healthchecks.
+# WeasyPrint (v53+; pinned to 69 here) dlopens gobject, pango, pangoft2,
+# harfbuzz and fontconfig directly in text/ffi.py — Cairo and GDK-Pixbuf are
+# no longer loaded (pydyf + Pillow replaced them in the v53 rewrite), so
+# they're deliberately left out; libcairo2 alone would drag in the X11 client
+# stack on a headless container. Every dlopened library is named explicitly
+# rather than relied on as pango's transitive dep — gobject ships in
+# libglib2.0-0t64, there being no package of that name.
+# libharfbuzz-subset0 enables font subsetting so PDFs embed only
+# the glyphs used instead of full font files. Fonts: DejaVu covers Latin,
+# Noto supplies ₹ (U+20B9) and Devanagari, so invoices render glyphs instead
+# of tofu boxes.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpq-dev \
         gcc \
         curl \
+        libglib2.0-0t64 \
+        libpango-1.0-0 \
+        libpangoft2-1.0-0 \
+        libharfbuzz0b \
+        libharfbuzz-subset0 \
+        libfontconfig1 \
+        fonts-dejavu-core \
+        fonts-noto-core \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Dev stage ─────────────────────────────────────────────────────────────────
