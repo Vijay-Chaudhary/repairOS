@@ -59,7 +59,7 @@ Frontend tests do **not** run inside the container — its `node_modules/rolldow
 **Files:**
 - Modify: `backend/Dockerfile:9-13`
 
-- [ ] **Step 1: Reproduce the failure**
+- [x] **Step 1: Reproduce the failure**
 
 Run:
 ```bash
@@ -67,7 +67,7 @@ docker exec repairos-backend-1 python -c "import weasyprint; print(weasyprint.__
 ```
 Expected: `OSError: cannot load library 'libgobject-2.0-0'`. This is the bug — confirm it before changing anything.
 
-- [ ] **Step 2: Add the libraries and fonts**
+- [x] **Step 2: Add the libraries and fonts**
 
 Replace lines 9-13 of `backend/Dockerfile`:
 
@@ -91,7 +91,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 ```
 
-- [ ] **Step 3: Rebuild and restart the Python services**
+- [x] **Step 3: Rebuild and restart the Python services**
 
 Run:
 ```bash
@@ -101,7 +101,7 @@ docker compose up -d --force-recreate backend celery-worker celery-beat
 
 Note: if your host ports collide, add your local port-override file with a second `-f` flag. The build itself is unaffected.
 
-- [ ] **Step 4: Verify the import in both images**
+- [x] **Step 4: Verify the import in both images**
 
 Run:
 ```bash
@@ -110,7 +110,7 @@ docker exec repairos-celery-worker-1 python -c "import weasyprint; print('worker
 ```
 Expected: two `ok` lines with a version number, no traceback.
 
-- [ ] **Step 5: The ten PDF tests that only failed locally should now pass**
+- [x] **Step 5: The ten PDF tests that only failed locally should now pass**
 
 Run:
 ```bash
@@ -119,7 +119,7 @@ docker exec -e DJANGO_SETTINGS_MODULE=config.settings.test repairos-backend-1 \
 ```
 Expected: `0 failed`. Before this task they failed with WeasyPrint import errors.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/Dockerfile
@@ -138,7 +138,7 @@ stages inherit the base image, so this was broken in production too."
 - Create: `backend/apps/core/tests/test_pdf.py`
 - Modify: `backend/apps/core/pdf.py`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `backend/apps/core/tests/test_pdf.py`:
 
@@ -189,7 +189,7 @@ def test_render_and_save_pdf_still_writes_the_file(settings, tmp_path):
 
 Note: `pdf/repair_invoice.html` renders fine with an empty context — Django templates resolve missing variables to the empty string.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 ```bash
@@ -198,7 +198,7 @@ docker exec -e DJANGO_SETTINGS_MODULE=config.settings.test repairos-backend-1 \
 ```
 Expected: FAIL — `ImportError: cannot import name 'render_pdf_bytes' from 'core.pdf'` on the first two tests.
 
-- [ ] **Step 3: Implement the split**
+- [x] **Step 3: Implement the split**
 
 Replace the body of `backend/apps/core/pdf.py` below the imports (keep lines 12-17 as they are):
 
@@ -263,7 +263,7 @@ one place.
 """
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run:
 ```bash
@@ -272,7 +272,7 @@ docker exec -e DJANGO_SETTINGS_MODULE=config.settings.test repairos-backend-1 \
 ```
 Expected: `3 passed`.
 
-- [ ] **Step 5: Confirm the existing PDF consumers still work**
+- [x] **Step 5: Confirm the existing PDF consumers still work**
 
 Run:
 ```bash
@@ -281,7 +281,7 @@ docker exec -e DJANGO_SETTINGS_MODULE=config.settings.test repairos-backend-1 \
 ```
 Expected: `0 failed` — `render_and_save_pdf` kept its signature and return value.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/apps/core/pdf.py backend/apps/core/tests/test_pdf.py
@@ -299,7 +299,7 @@ render_and_save_pdf() keeps its signature and now wraps it."
 - Modify: `backend/apps/billing/views.py:146-162`
 - Modify: `backend/apps/billing/tests/test_billing.py` (append a class at the end)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `backend/apps/billing/tests/test_billing.py`. The fixtures (`admin_client`, `repair_invoice`, `shop`) already exist in this file — that is why the tests live here rather than in a new file.
 
@@ -383,7 +383,7 @@ class TestInvoicePdf:
         assert res.data["code"] == "PDF_RENDER_FAILED"
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run:
 ```bash
@@ -392,7 +392,7 @@ docker exec -e DJANGO_SETTINGS_MODULE=config.settings.test repairos-backend-1 \
 ```
 Expected: FAIL — the current view returns JSON, so `Content-Type` is `application/json` and `res.content` starts with `{"success"`.
 
-- [ ] **Step 3: Replace the view**
+- [x] **Step 3: Replace the view**
 
 In `backend/apps/billing/views.py`, replace the whole `RepairInvoicePdfView` class (lines 146-162) with:
 
@@ -478,7 +478,7 @@ class RepairInvoicePdfView(APIView):
 
 `logging`, `HttpResponse`, `status`, `Response` and `require_permission` are already imported at the top of this file (lines 7-18). Confirm `logger = logging.getLogger(__name__)` exists near the top; if it does not, add it directly below the imports.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run:
 ```bash
@@ -487,7 +487,7 @@ docker exec -e DJANGO_SETTINGS_MODULE=config.settings.test repairos-backend-1 \
 ```
 Expected: `0 failed` — the new `TestInvoicePdf` class passes and no existing billing test regresses.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/apps/billing/views.py backend/apps/billing/tests/test_billing.py
@@ -509,7 +509,7 @@ The other stored-PDF consumers — salary slips, commission payouts, report expo
 
 **No unit test for this step.** `django.conf.urls.static.static()` is evaluated at import time from `settings.DEBUG`; asserting its output would be testing Django's behaviour, not ours. It is verified by request below.
 
-- [ ] **Step 1: Add the route**
+- [x] **Step 1: Add the route**
 
 In `backend/config/urls.py`, append after the existing `if settings.DEBUG and "debug_toolbar" …` block at the end of the file:
 
@@ -541,7 +541,7 @@ Expected: `media probe -> 200`. Adjust the port if your stack publishes the back
 docker exec repairos-backend-1 rm -rf /app/media/probe
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add backend/config/urls.py
@@ -560,7 +560,7 @@ Stored PDF URLs 404'd in development because nothing served /media/."
 
 In production the Celery worker writes PDFs to its **own** container filesystem while nginx serves from a different one, so stored files are unreachable no matter what. A shared volume fixes it.
 
-- [ ] **Step 1: Mount a shared media volume on the writer and the reader**
+- [x] **Step 1: Mount a shared media volume on the writer and the reader**
 
 In `docker-compose.prod.yml`, the `backend` service `volumes:` block currently reads:
 
@@ -584,7 +584,7 @@ The `celery-worker` service has no `volumes:` block. Add one directly after its 
       - media_files:/app/media
 ```
 
-- [ ] **Step 2: Give nginx read-only access**
+- [x] **Step 2: Give nginx read-only access**
 
 In the `nginx` service `volumes:` block, which currently reads:
 
@@ -607,7 +607,7 @@ add the media volume:
       - certbot_webroot:/var/www/certbot
 ```
 
-- [ ] **Step 3: Declare the volume**
+- [x] **Step 3: Declare the volume**
 
 At the bottom of `docker-compose.prod.yml`, the `volumes:` list currently ends:
 
@@ -632,7 +632,7 @@ volumes:
   certbot_webroot:
 ```
 
-- [ ] **Step 4: Add the nginx location**
+- [x] **Step 4: Add the nginx location**
 
 In `infra/nginx/nginx.production.conf`, directly after the `/static/` location block (lines 75-80), add:
 
@@ -656,7 +656,7 @@ docker run --rm -v "$PWD/infra/nginx/nginx.production.conf:/etc/nginx/conf.d/def
 ```
 Expected: `compose ok`, and nginx reporting `syntax is ok` / `test is successful`. The nginx test may warn about missing upstreams — that is fine, syntax is what matters here.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add docker-compose.prod.yml infra/nginx/nginx.production.conf
@@ -1036,7 +1036,7 @@ errors in a toast."
 - Modify: `docs/modules/billing.md`
 - Modify: `docs/modules/core.md`
 
-- [ ] **Step 1: Record the endpoint change in the billing module doc**
+- [x] **Step 1: Record the endpoint change in the billing module doc**
 
 Append to `docs/modules/billing.md`:
 
@@ -1050,7 +1050,7 @@ never-run `generate_invoice_pdf` task no longer produces a blank tab. Render
 failures return 500 `PDF_RENDER_FAILED` in the standard envelope.
 ```
 
-- [ ] **Step 2: Record the helper split in the core module doc**
+- [x] **Step 2: Record the helper split in the core module doc**
 
 Append to `docs/modules/core.md`:
 
@@ -1074,7 +1074,7 @@ docker exec -e DJANGO_SETTINGS_MODULE=config.settings.test repairos-backend-1 \
 ```
 Expected: `0 failed`. The 10 PDF tests that used to fail here now pass — Task 1 fixed their root cause.
 
-- [ ] **Step 4: Run the full frontend suite**
+- [x] **Step 4: Run the full frontend suite**
 
 Run from `frontend/` on the host:
 ```bash
@@ -1090,7 +1090,7 @@ Expected: all test files pass, no `tsc` output.
 3. Expected: a new tab showing the rendered tax invoice — **not** a blank page.
 4. Check the tab's URL starts with `blob:`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add docs/modules/billing.md docs/modules/core.md
