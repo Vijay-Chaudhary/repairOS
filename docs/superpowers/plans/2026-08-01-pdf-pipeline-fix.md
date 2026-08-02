@@ -524,7 +524,7 @@ if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 ```
 
-- [ ] **Step 2: Restart the backend and verify a media file is reachable**
+- [x] **Step 2: Restart the backend and verify a media file is reachable**
 
 Run:
 ```bash
@@ -535,7 +535,7 @@ curl -s -o /dev/null -w "media probe -> %{http_code}\n" http://localhost:8000/me
 ```
 Expected: `media probe -> 200`. Adjust the port if your stack publishes the backend elsewhere.
 
-- [ ] **Step 3: Clean up the probe file**
+- [x] **Step 3: Clean up the probe file**
 
 ```bash
 docker exec repairos-backend-1 rm -rf /app/media/probe
@@ -647,7 +647,7 @@ In `infra/nginx/nginx.production.conf`, directly after the `/static/` location b
     }
 ```
 
-- [ ] **Step 5: Validate the compose file and the nginx config parse**
+- [x] **Step 5: Validate the compose file and the nginx config parse**
 
 Run:
 ```bash
@@ -677,7 +677,7 @@ different one, so stored files were unreachable in production."
 
 `window.open(url)` sends no `Authorization` header and no `X-Tenant-Slug`, so the PDF endpoint cannot be opened directly. Fetch it through the authenticated client and open an object URL instead.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/lib/api/__tests__/apiFetchBlob.test.ts`:
 
@@ -754,7 +754,7 @@ describe('apiFetchBlob', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run from the `frontend/` directory on the host:
 ```bash
@@ -762,7 +762,7 @@ npx vitest run src/lib/api/__tests__/apiFetchBlob.test.ts
 ```
 Expected: FAIL — `apiFetchBlob` is not exported from `../client`.
 
-- [ ] **Step 3: Implement the helper**
+- [x] **Step 3: Implement the helper**
 
 In `frontend/src/lib/api/client.ts`, insert between `apiFetch` (ends line 128) and `apiGet` (line 130):
 
@@ -809,7 +809,7 @@ export async function apiFetchBlob(path: string): Promise<Blob> {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run:
 ```bash
@@ -817,7 +817,7 @@ npx vitest run src/lib/api/__tests__/apiFetchBlob.test.ts
 ```
 Expected: `3 passed`.
 
-- [ ] **Step 5: Replace `getPdfUrl` in the billing client**
+- [x] **Step 5: Replace `getPdfUrl` in the billing client**
 
 In `frontend/src/lib/api/billing.ts`, replace lines 205-206:
 
@@ -835,7 +835,7 @@ with:
 
 Add `apiFetchBlob` to the existing import from `./client` at the top of the file.
 
-- [ ] **Step 6: Typecheck**
+- [x] **Step 6: Typecheck**
 
 Run:
 ```bash
@@ -843,7 +843,7 @@ npx tsc --noEmit
 ```
 Expected: one error in `invoices/[id]/page.tsx` — `getPdfUrl` no longer exists. That is Task 7.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/lib/api/client.ts frontend/src/lib/api/billing.ts frontend/src/lib/api/__tests__/apiFetchBlob.test.ts
@@ -858,7 +858,7 @@ git commit -m "feat(api): add apiFetchBlob for authenticated binary downloads"
 - Modify: `frontend/src/app/(app)/invoices/[id]/page.tsx:54-66`
 - Create: `frontend/src/app/(app)/invoices/__tests__/invoicePdf.test.tsx`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `frontend/src/app/(app)/invoices/__tests__/invoicePdf.test.tsx`:
 
@@ -967,7 +967,7 @@ describe('Invoice PDF button', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run:
 ```bash
@@ -975,7 +975,7 @@ npx vitest run "src/app/(app)/invoices/__tests__/invoicePdf.test.tsx"
 ```
 Expected: FAIL — the page still calls `billingApi.getPdfUrl`, which the mock does not provide.
 
-- [ ] **Step 3: Rewrite the handler**
+- [x] **Step 3: Rewrite the handler**
 
 In `frontend/src/app/(app)/invoices/[id]/page.tsx`, replace `handleDownloadPdf` (lines 54-66):
 
@@ -1000,7 +1000,7 @@ In `frontend/src/app/(app)/invoices/[id]/page.tsx`, replace `handleDownloadPdf` 
 
 `ApiError` and `toast` are already imported in this file.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run:
 ```bash
@@ -1008,7 +1008,7 @@ npx vitest run "src/app/(app)/invoices/__tests__/invoicePdf.test.tsx"
 ```
 Expected: `2 passed`.
 
-- [ ] **Step 5: Typecheck and lint**
+- [x] **Step 5: Typecheck and lint**
 
 Run:
 ```bash
@@ -1017,7 +1017,7 @@ docker exec repairos-frontend-1 npx next lint
 ```
 Expected: no output from `tsc`; `✔ No ESLint warnings or errors`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add "frontend/src/app/(app)/invoices/[id]/page.tsx" "frontend/src/app/(app)/invoices/__tests__/invoicePdf.test.tsx"
@@ -1065,7 +1065,7 @@ Celery tasks). WeasyPrint's native libraries are installed in the base image —
 see `backend/Dockerfile`.
 ```
 
-- [ ] **Step 3: Run the full backend suite**
+- [x] **Step 3: Run the full backend suite**
 
 Run:
 ```bash
@@ -1089,6 +1089,16 @@ Expected: all test files pass, no `tsc` output.
 2. Click the PDF button.
 3. Expected: a new tab showing the rendered tax invoice — **not** a blank page.
 4. Check the tab's URL starts with `blob:`.
+
+> **Left unverified (2026-08-02) — blocked on the local environment, not this branch.**
+> `TENANT_CRED_ENCRYPTION_KEY` in `.env` no longer matches the key that encrypted
+> the `tenant_databases` rows, so `TenantDatabase.decrypt_password()` raises
+> `cryptography.fernet.InvalidToken`: login returns 500 and `seed_demo` fails.
+> `seed_demo --reset` then hits the known `create_tenant` autocommit bug
+> (`set_session cannot be used inside a transaction`). Both tenant DBs are empty
+> shells, so there is no invoice to open and no user to sign in as. Every other
+> verification in this plan passed — including the full backend suite (863
+> passed, 0 failed) against a rebuilt image where `import weasyprint` succeeds.
 
 - [x] **Step 6: Commit**
 
