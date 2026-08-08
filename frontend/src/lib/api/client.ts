@@ -127,6 +127,47 @@ export async function apiFetch<T>(
   return data.data;
 }
 
+/**
+ * Fetch a binary response (PDF) with the same auth as apiFetch.
+ *
+ * Needed because window.open() sends neither Authorization nor X-Tenant-Slug.
+ * On failure the server still replies with the JSON envelope, so the error is
+ * unwrapped into an ApiError the caller can show — rather than a blank tab.
+ */
+export async function apiFetchBlob(path: string): Promise<Blob> {
+  const headers: Record<string, string> = {
+    ...(DEV_TENANT_SLUG ? { 'X-Tenant-Slug': DEV_TENANT_SLUG } : {}),
+  };
+
+  const token = useAuthStore.getState().accessToken;
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const url = path.startsWith('http') ? path : `${BASE_URL}/api/v1${path}`;
+
+  const makeRequest = async (authHeader?: string): Promise<Response> => {
+    if (authHeader) headers['Authorization'] = `Bearer ${authHeader}`;
+    return fetch(url, { method: 'GET', headers, credentials: 'include' });
+  };
+
+  let response = await makeRequest();
+
+  if (response.status === 401) {
+    const newToken = await silentRefresh();
+    if (!newToken) throw new ApiError('NOT_AUTHENTICATED', 'Session expired', 401);
+    response = await makeRequest(newToken);
+  }
+
+  if (!response.ok) {
+    const data: ApiResponse<never> | null = await response.json().catch(() => null);
+    if (data && !data.success) {
+      throw new ApiError(data.error.code, data.error.message, response.status, data.error.fields);
+    }
+    throw new ApiError('DOWNLOAD_FAILED', 'Could not download the file', response.status);
+  }
+
+  return response.blob();
+}
+
 export async function apiGet<T>(path: string, params?: Record<string, string | number | boolean | undefined>): Promise<T> {
   const url = params
     ? `${path}?${new URLSearchParams(

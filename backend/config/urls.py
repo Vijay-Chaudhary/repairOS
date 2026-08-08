@@ -34,3 +34,12 @@ if settings.DEBUG and "debug_toolbar" in settings.INSTALLED_APPS:
     import debug_toolbar
 
     urlpatterns = [path("__debug__/", include(debug_toolbar.urls))] + urlpatterns
+
+if settings.DEBUG:
+    # Stored PDFs (salary slips, commission payouts, report exports) are written
+    # under MEDIA_ROOT and handed to the browser as /media/... URLs. Daphne serves
+    # nothing there by default, so those links 404 in development. Production
+    # serves this path from nginx instead — see infra/nginx/nginx.production.conf.
+    from django.conf.urls.static import static
+
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

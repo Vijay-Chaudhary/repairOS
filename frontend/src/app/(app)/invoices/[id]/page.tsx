@@ -54,13 +54,17 @@ export default function InvoiceDetailPage() {
   async function handleDownloadPdf() {
     if (pdfLoading) return;
     setPdfLoading(true);
+    let objectUrl: string | undefined;
     try {
-      const { pdf_url } = await billingApi.getPdfUrl(id);
-      window.open(pdf_url, '_blank', 'noreferrer');
-    } catch {
-      toast.error('Could not fetch PDF — please try again');
+      const blob = await billingApi.downloadInvoicePdf(id);
+      objectUrl = URL.createObjectURL(blob);
+      window.open(objectUrl, '_blank', 'noreferrer');
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Could not download the PDF — please try again');
     } finally {
       setPdfLoading(false);
+      // Revoke on the next tick so the opened tab has already claimed the blob.
+      if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl!), 60_000);
     }
   }
 

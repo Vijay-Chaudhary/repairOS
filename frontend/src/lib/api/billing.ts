@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPatch, type PageMeta } from './client';
+import { apiGet, apiPost, apiPatch, apiFetchBlob, type PageMeta } from './client';
 import { useAuthStore } from '@/lib/stores/authStore';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -202,8 +202,8 @@ export const billingApi = {
   createInvoice: (body: { job_id: string; discount_amount?: number; due_date?: string }) =>
     apiPost<Invoice>('/billing/repair-invoices/', body),
 
-  getPdfUrl: (id: string) =>
-    apiGet<{ pdf_url: string }>(`/billing/repair-invoices/${id}/pdf/`),
+  downloadInvoicePdf: (id: string) =>
+    apiFetchBlob(`/billing/repair-invoices/${id}/pdf/`),
 
   sendWhatsapp: (id: string) =>
     apiPost<{ queued: boolean }>(`/billing/repair-invoices/${id}/send-whatsapp/`, {}),
