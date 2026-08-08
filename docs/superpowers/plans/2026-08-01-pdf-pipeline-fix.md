@@ -1083,22 +1083,35 @@ npx tsc --noEmit
 ```
 Expected: all test files pass, no `tsc` output.
 
-- [ ] **Step 5: Verify in the browser**
+- [x] **Step 5: Verify in the browser**
 
 1. Open the app, sign in, and go to an invoice detail page (`/invoices`, then any row).
 2. Click the PDF button.
 3. Expected: a new tab showing the rendered tax invoice — **not** a blank page.
 4. Check the tab's URL starts with `blob:`.
 
-> **Left unverified (2026-08-02) — blocked on the local environment, not this branch.**
-> `TENANT_CRED_ENCRYPTION_KEY` in `.env` no longer matches the key that encrypted
-> the `tenant_databases` rows, so `TenantDatabase.decrypt_password()` raises
-> `cryptography.fernet.InvalidToken`: login returns 500 and `seed_demo` fails.
-> `seed_demo --reset` then hits the known `create_tenant` autocommit bug
-> (`set_session cannot be used inside a transaction`). Both tenant DBs are empty
-> shells, so there is no invoice to open and no user to sign in as. Every other
-> verification in this plan passed — including the full backend suite (863
-> passed, 0 failed) against a rebuilt image where `import weasyprint` succeeds.
+> **Verified 2026-08-08** via Playwright against the dev stack, driving the real
+> UI (login form → `/invoices` → row → PDF button) as `billing@demo.com` on the
+> `demo` tenant. Results:
+>
+> - `GET /billing/repair-invoices/<id>/pdf/` → `200 application/pdf`,
+>   `Content-Disposition: inline; filename="SDEL-INV-2026-07-0022.pdf"`.
+> - The click produced one `blob:http://localhost:3000/…` object URL,
+>   `type=application/pdf`, 12222 bytes, starting `%PDF-1.7`, and opened one new tab.
+> - No error toast, no console errors.
+>
+> The tab's own `location` could not be asserted directly: `window.open(url, '_blank',
+> 'noreferrer')` gives the popup an opaque URL in headless Chromium, so the check
+> instruments `URL.createObjectURL` instead — same click, same blob, observable.
+>
+> Rendered output was also inspected as an image (`pdftoppm`): header, PAID badge,
+> billed-by/to, line items, CGST/SGST split and totals all render, and ₹ (U+20B9)
+> appears as a glyph rather than tofu — `pdffonts` shows subsetted
+> `Noto-Sans`/`Noto-Sans-Bold` embedded, confirming the Dockerfile's font choices.
+>
+> The 2026-08-02 blocker (`TENANT_CRED_ENCRYPTION_KEY` mismatch → `InvalidToken`
+> on login, empty tenant DBs) is gone: all three tenants decrypt, and `demo` has
+> 8 users and 22 invoices.
 
 - [x] **Step 6: Commit**
 
