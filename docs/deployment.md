@@ -180,6 +180,20 @@ normal usage is well below. CPU limits intentionally oversubscribe 2 vCPU
 `NEXT_PUBLIC_WS_URL=wss://api.repaiross.app`,
 `NEXT_PUBLIC_MINIO_URL=https://media.repaiross.app`.
 
+**All ten of the above are mandatory.** Because deploys run automatically on
+merge, nobody is watching the run — so the `Check deploy configuration` job runs
+before anything is built or published and fails with the list of unset names.
+Without that gate a missing `NEXT_PUBLIC_*` would silently bake `localhost` into
+the frontend image and still tag it `:latest` (see §16).
+
+Set them with the CLI if you prefer:
+
+```bash
+gh secret set VPS_HOST --body "203.0.113.10"
+gh secret set VPS_SSH_KEY < deploy_key          # the private key file
+gh variable set NEXT_PUBLIC_API_URL --body "https://api.repaiross.app"
+```
+
 ### CI test gate (option b)
 
 The pipeline runs the full suite minus the node IDs in

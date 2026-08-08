@@ -1,8 +1,8 @@
 name: CI/CD
 
-# Test on every push & PR. Build images and deploy to the Hostinger VPS only
-# on a MANUAL run (Actions → "Run workflow"), and only when the test gate is
-# green — there is intentionally no automatic production deploy on push to master.
+# Test on every push & PR. On master — a merged PR or a direct push — a green
+# test gate is followed automatically by build → GHCR → SSH deploy → health gate
+# → auto-rollback. "Run workflow" still deploys the same way on demand.
 on:
   push:
     branches: [master]
@@ -10,9 +10,12 @@ on:
     branches: [master]
   workflow_dispatch:
 
+# PR runs are disposable, so a new push cancels the old one. Master runs are not:
+# cancelling mid-deploy could leave the VPS half-rolled-out, with the health gate
+# and its auto-rollback never reached. Those queue behind each other instead.
 concurrency:
   group: ci-cd-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -87,11 +90,50 @@ jobs:
       - run: npm run test
 
   # ── Build & push images to GHCR ─────────────────────────────────────────────
+  # ── Deploy configuration gate ───────────────────────────────────────────────
+  # Auto-deploy means nobody is watching the run, so check the inputs before
+  # anything is published. A missing NEXT_PUBLIC_* would silently bake localhost
+  # into the frontend image and still tag it :latest (see deployment.md §16);
+  # a missing VPS_* would fail deep inside the SSH step with an opaque error.
+  preflight:
+    name: Check deploy configuration
+    needs: [backend-tests, frontend-tests]
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require deploy secrets and frontend build vars
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_SSH_PORT: ${{ secrets.VPS_SSH_PORT }}
+          VPS_DEPLOY_DIR: ${{ secrets.VPS_DEPLOY_DIR }}
+          GHCR_USER: ${{ secrets.GHCR_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_WS_URL: ${{ vars.NEXT_PUBLIC_WS_URL }}
+          NEXT_PUBLIC_MINIO_URL: ${{ vars.NEXT_PUBLIC_MINIO_URL }}
+        run: |
+          missing=()
+          for name in VPS_HOST VPS_USER VPS_SSH_KEY VPS_SSH_PORT VPS_DEPLOY_DIR \
+                      GHCR_USER GHCR_TOKEN \
+                      NEXT_PUBLIC_API_URL NEXT_PUBLIC_WS_URL NEXT_PUBLIC_MINIO_URL; do
+            [ -n "${!name}" ] || missing+=("$name")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Auto-deploy is enabled but these are unset: ${missing[*]}"
+            echo "Set them under Settings → Secrets and variables → Actions" \
+                 "(NEXT_PUBLIC_* are Variables, the rest are Secrets). See docs/deployment.md §7."
+            exit 1
+          fi
+          echo "All deploy secrets and frontend build vars are present."
+
   build-and-push:
     name: Build & push images
-    needs: [backend-tests, frontend-tests]
-    # Manual only — runs on workflow_dispatch from master, never automatically on push.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
+    needs: [backend-tests, frontend-tests, preflight]
+    # Master only, and only behind the test gate (`needs`). Covers both a merged
+    # PR / direct push and a manual "Run workflow"; PR events never get here.
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     outputs:
       backend_image: ${{ steps.meta.outputs.backend_image }}
@@ -150,10 +192,16 @@ jobs:
   deploy:
     name: Deploy to Hostinger VPS
     needs: build-and-push
-    # Manual only — never deploys automatically on push to master.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master'
+    # Master only. Reached automatically once the test gate and the image build
+    # are green; a manual "Run workflow" takes the same path.
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment: production
+    # One deploy touches the VPS at a time, whatever triggered it. Never cancel a
+    # run that is already SSH'd in — let it finish and reach its health gate.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
